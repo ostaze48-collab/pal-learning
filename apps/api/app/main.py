@@ -11,13 +11,14 @@ from .importer.router import router as importer_router
 from .learning.router import router as learning_router
 from .qa.router import router as qa_router
 from .admin.router import router as admin_router
+from .admin.readiness import router as readiness_router
 from .factory.router import router as factory_router
 from .factory.candidate_qa import router as candidate_qa_router
 from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.5.0'
+VERSION = '1.6.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -63,6 +64,7 @@ def health():
             'safe-registered-source-fetch', 'provider-backed-content-factory',
             'candidate-preflight-qa', 'admin-staging-approval', 'immutable-staged-versions',
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
+            'production-readiness-diagnostics',
         ],
     }
 
@@ -86,6 +88,7 @@ app.include_router(importer_router)
 app.include_router(learning_router)
 app.include_router(qa_router)
 app.include_router(admin_router)
+app.include_router(readiness_router)
 app.include_router(factory_router)
 app.include_router(candidate_qa_router)
 app.include_router(academic_qa_router)

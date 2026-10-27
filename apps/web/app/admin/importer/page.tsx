@@ -6,6 +6,7 @@ const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const adminHeaders=()=>({Authorization:`Bearer ${localStorage.getItem('pal_admin_token')||''}`});
 const sourceTypes = ['OFFICIAL_PACKAGE','STUDENT_BOOK','SOLUTIONS','TEACHER_GUIDE','WORKSHEET','EXAM','REMEDIAL','INTERACTIVE','VIDEO_REFERENCE'];
 const sourceLabels:Record<string,string>={
+  CATALOG_CANDIDATE:'مرشح من كتالوج الوزارة — النطاق غير متحقق',
   OFFICIAL_PACKAGE:'رزمة رسمية حالية من وزارة التربية',
   STUDENT_BOOK:'كتاب الطالب', SOLUTIONS:'الحلول/الإجابات المرجعية', TEACHER_GUIDE:'دليل المعلم',
   WORKSHEET:'ورقة عمل', EXAM:'اختبار', REMEDIAL:'مادة علاجية', INTERACTIVE:'مورد تفاعلي', VIDEO_REFERENCE:'مرجع فيديو'
@@ -42,7 +43,7 @@ export default function ImporterPage(){
       const body=await res.json();
       if(!res.ok) throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message||'فشلت مزامنة الكتالوج الرسمي');
       const first=body.sources?.[0];
-      setMessage(`مزامنة الكتالوج الرسمي ✓ · جديد ${body.created} · موجود مسبقًا ${body.existing}${first?` · ${first.authority}`:''}. هذا يثبت اكتشاف المصدر فقط ولا يثبت الطبعة.`);
+      setMessage(`كتالوج الوزارة ✓ · جديد ${body.created} · موجود ${body.existing} · محجوز للتحقق ${body.quarantined||0}${first?` · ${first.authority}`:''}. لا يدخل Coverage حتى ينجح Verify Scope.`);
       await loadPackage(packageId);
     }catch(err){setMessage(err instanceof Error?err.message:'حدث خطأ أثناء مزامنة المصدر الرسمي');setBusy(false);}
   }
@@ -68,9 +69,24 @@ export default function ImporterPage(){
       const res=await fetch(`${API}/importer/source-files/${sourceId}/fetch-registered`,{method:'POST',headers:adminHeaders()});
       const body=await res.json();
       if(!res.ok) throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message || 'فشل جلب المصدر');
-      setMessage(`تم جلب المصدر #${sourceId}: ${body.page_count} صفحة · Edition Match ${body.edition_match_score}% · Quality ${body.package_quality}%`);
+      setMessage(`تم جلب المصدر #${sourceId}: ${body.page_count} صفحة · Edition Match ${body.edition_match_score}% · Quality ${body.package_quality}%${pkg?.files.find(x=>x.id===sourceId)?.source_type==='CATALOG_CANDIDATE'?' · الخطوة التالية: Verify Scope':''}`);
       await loadPackage(pkg?.id||1);
     }catch(err){setMessage(err instanceof Error?err.message:'حدث خطأ أثناء جلب المصدر');setBusy(false);}
+  }
+
+  async function verifyScope(sourceId:number){
+    setBusy(true); setMessage('');
+    try{
+      const res=await fetch(`${API}/importer/catalog/source-files/${sourceId}/verify-scope`,{method:'POST',headers:adminHeaders()});
+      const body=await res.json();
+      if(!res.ok) throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message||'فشل التحقق من نطاق المصدر');
+      if(body.scope_verified){
+        setMessage(`Scope PASS ✓ · المصدر #${sourceId} يحتوي مؤشرات Book #001 المطلوبة وتمت ترقيته إلى ${body.source_type}. Edition Match يبقى مستقلاً: ${body.edition_match_score}%.`);
+      }else{
+        setMessage(`Scope BLOCKED · المصدر #${sourceId} لا يثبت نطاق Book #001. العبارات المفقودة: ${(body.missing_terms||[]).join('، ')||'—'}. لن يدخل Coverage.`);
+      }
+      await loadPackage(pkg?.id||1);
+    }catch(err){setMessage(err instanceof Error?err.message:'حدث خطأ أثناء تحقق النطاق');setBusy(false);}
   }
 
   async function processPackage(){
@@ -88,14 +104,14 @@ export default function ImporterPage(){
   return <main style={{maxWidth:980,margin:'28px auto',padding:18}}>
     <div style={{fontSize:14,opacity:.6}}>الإدارة ← مصنع المنهاج</div>
     <h1>استيراد الرزمة التعليمية</h1>
-    <p>الرزمة الرسمية الحالية تُسجّل كمصدر مستقل، والكتاب الكامل والحلول ودليل المعلم تبقى مصادر منفصلة. <strong>Coverage</strong> يقيس توفر الأنواع، و<strong>Verified Quality</strong> لا يرتفع إلا عندما يجتمع توثيق المصدر مع تطابق الطبعة.</p>
+    <p>الرابط الرسمي لا يعني تلقائيًا أنه يغطي الفصل والدرس المستهدفين. لذلك نُبقي مصادر الكتالوج كـ<strong>CATALOG_CANDIDATE</strong> حتى ينجح فحص النطاق، وبعدها فقط يمكن أن تصبح <strong>OFFICIAL_PACKAGE</strong>. مطابقة الطبعة تبقى بوابة مستقلة.</p>
     <form onSubmit={upload} style={{background:'white',padding:20,borderRadius:16,border:'1px solid #e8edf5',display:'grid',gap:14}}>
       <label>رقم الرزمة<input name="package_id" defaultValue="1" required style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         <button type="button" onClick={()=>loadPackage(currentPackageId())} disabled={busy} style={{padding:10,borderRadius:10,border:'1px solid #ccd5e3',background:'white'}}>عرض حالة الرزمة</button>
         <button type="button" onClick={syncOfficialCatalog} disabled={busy} style={{padding:10,borderRadius:10,border:'1px solid #b9d4ff',background:'#eef6ff',color:'#124b9b',fontWeight:700}}>مزامنة كتالوج الوزارة</button>
       </div>
-      <div style={{fontSize:12,opacity:.65}}>مزامنة الكتالوج تسجّل الرابط الذي اختارته الوزارة للمبحث فقط؛ لا تمنح أي نقاط لتطابق الطبعة حتى يُجلب الملف ويُحلّل.</div>
+      <div style={{fontSize:12,opacity:.65}}>المزامنة تثبت أن الوزارة تربط الصف/المبحث بهذا الرابط فقط. لا تمنح المصدر أي وزن تعليمي حتى Fetch + Verify Scope.</div>
       <label>نوع المصدر<select name="source_type" defaultValue="OFFICIAL_PACKAGE" style={{display:'block',width:'100%',padding:10,marginTop:5}}>{sourceTypes.map(x=><option key={x} value={x}>{sourceLabels[x]||x} — {x}</option>)}</select></label>
       <label>الطبعة/السنة<input name="edition" defaultValue="2026" style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
       <label>درجة موثوقية المصدر<input name="reliability_score" type="number" min="0" max="100" defaultValue="100" style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
@@ -117,14 +133,15 @@ export default function ImporterPage(){
         <div style={{fontSize:13,opacity:.7,marginTop:5}}>{f.original_filename||'مصدر مسجل بدون ملف مرفوع'}</div>
         <div style={{display:'flex',gap:10,flexWrap:'wrap',alignItems:'center',marginTop:8}}>
           {f.source_url&&<a href={f.source_url} target="_blank" rel="noreferrer">فتح المصدر المسجل</a>}
-          {f.source_url&&(!f.chunk_count||f.status==='DISCOVERED')&&<button disabled={busy} onClick={()=>fetchRegistered(f.id)} style={{padding:'7px 10px',borderRadius:9,border:'1px solid #ccd5e3',background:'#f8fbff'}}>جلب الرابط واستخراجه</button>}
+          {f.source_url&&(!f.chunk_count||f.status==='DISCOVERED'||f.status==='SCOPE_UNVERIFIED')&&<button disabled={busy} onClick={()=>fetchRegistered(f.id)} style={{padding:'7px 10px',borderRadius:9,border:'1px solid #ccd5e3',background:'#f8fbff'}}>جلب الرابط واستخراجه</button>}
+          {f.source_type==='CATALOG_CANDIDATE'&&!!f.chunk_count&&<button disabled={busy} onClick={()=>verifyScope(f.id)} style={{padding:'7px 10px',borderRadius:9,border:'1px solid #f0c36a',background:'#fff8e8',color:'#7a4b00',fontWeight:700}}>Verify Scope</button>}
         </div>
       </article>)}</div>
     </section>}
 
     <section style={{marginTop:22,background:'white',padding:18,borderRadius:16,border:'1px solid #e8edf5'}}>
-      <h2>ما يحدث عند الرفع أو الجلب</h2>
-      <ol style={{lineHeight:2}}><li>تثبيت مصدر الكتالوج الرسمي منفصلًا عن إثبات الطبعة.</li><li>حساب SHA-256 ومنع الملف المكرر فعليًا.</li><li>تقييد جلب الروابط على نطاقات المصادر الموثوقة فقط.</li><li>رفض أي عنوان يتحول إلى IP داخلي/خاص.</li><li>استخراج النص من PDF النصي أو UTF-8.</li><li>تقسيمه إلى Source Chunks مع رقم الصفحة.</li><li>مطابقة السنة والعنوان دون منح نقاط تلقائية لملف قديم.</li><li>إعادة حساب Coverage وVerified Quality.</li></ol>
+      <h2>بوابات المصدر</h2>
+      <ol style={{lineHeight:2}}><li><strong>Catalog:</strong> إثبات أن الرابط صادر من كتالوج الوزارة للصف/المبحث.</li><li><strong>Fetch:</strong> تنزيل آمن + SHA-256 + استخراج النص والصفحات.</li><li><strong>Scope:</strong> إثبات أن المحتوى يغطي الوحدة/الدرس المستهدفين؛ وإلا يبقى بلا وزن.</li><li><strong>Edition:</strong> مطابقة السنة/العنوان مستقلة عن كونه رسميًا.</li><li><strong>Coverage/Quality:</strong> تُحسب فقط من أنواع المصادر المقبولة، لا من مرشح الكتالوج.</li></ol>
     </section>
   </main>
 }

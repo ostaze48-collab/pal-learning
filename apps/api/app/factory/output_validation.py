@@ -16,6 +16,57 @@ def _interaction_requirement(title: str | None) -> set[str]:
     return set()
 
 
+def _validate_visual_assets(packet: dict, payload: GeneratedLessonPayload) -> dict:
+    """Fail closed: AI may only reference visual assets supplied by the server.
+
+    The model is never trusted to invent a textbook image URL, page number, source
+    label, asset kind, or rights decision. An IMAGE block must exactly match a
+    CLEARED asset from packet.visual_assets. Staging/admin tooling may keep
+    REVIEW_REQUIRED assets separately, but they are not generation-authorized.
+    """
+    approved = packet.get('visual_assets') or []
+    approved_keys = {
+        (
+            asset.get('src'),
+            asset.get('source_page'),
+            asset.get('source_label'),
+            asset.get('asset_kind'),
+        )
+        for asset in approved
+        if asset.get('rights_status') == 'CLEARED' and asset.get('src')
+    }
+    checks = []
+    valid = True
+    for section_index, section in enumerate(payload.sections):
+        for block_index, block in enumerate(section.blocks):
+            if block.block_type != 'IMAGE':
+                continue
+            content = block.content or {}
+            key = (
+                content.get('src'),
+                content.get('source_page'),
+                content.get('source_label'),
+                content.get('asset_kind'),
+            )
+            passed = content.get('rights_status') == 'CLEARED' and key in approved_keys
+            valid = valid and passed
+            checks.append({
+                'section_index': section_index,
+                'block_index': block_index,
+                'source_page': content.get('source_page'),
+                'source_label': content.get('source_label'),
+                'asset_kind': content.get('asset_kind'),
+                'rights_status': content.get('rights_status'),
+                'passed': passed,
+            })
+    return {
+        'valid': valid,
+        'image_block_count': len(checks),
+        'approved_visual_asset_count': len(approved_keys),
+        'checks': checks,
+    }
+
+
 def validate_section_blueprint(packet: dict, payload: GeneratedLessonPayload) -> dict:
     """Validate machine-enforceable parts of an approved pedagogical blueprint.
 
@@ -52,11 +103,14 @@ def validate_section_blueprint(packet: dict, payload: GeneratedLessonPayload) ->
             'passed': passed,
         })
 
-    valid = count_matches and interactions_match
+    visual_assets = _validate_visual_assets(packet, payload)
+    valid = count_matches and interactions_match and visual_assets['valid']
     if not count_matches:
         reason = 'SECTION_COUNT_DOES_NOT_MATCH_APPROVED_BLUEPRINT'
     elif not interactions_match:
         reason = 'REQUIRED_BLUEPRINT_INTERACTION_MISSING'
+    elif not visual_assets['valid']:
+        reason = 'IMAGE_BLOCK_NOT_BACKED_BY_APPROVED_VISUAL_ASSET'
     else:
         reason = None
 
@@ -76,6 +130,7 @@ def validate_section_blueprint(packet: dict, payload: GeneratedLessonPayload) ->
         'actual_titles': [section.title for section in actual_sections],
         'interaction_requirements': interaction_checks,
         'interaction_requirements_pass': interactions_match,
+        'visual_assets': visual_assets,
         'reason': reason,
         'semantic_title_alignment_requires_qa': enforced,
     }

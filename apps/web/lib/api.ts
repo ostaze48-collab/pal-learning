@@ -18,19 +18,27 @@ export async function apiJson<T>(path:string, init:RequestInit = {}, auth = fals
   }
   const response = await fetch(`${API}${path}`, {...init, headers});
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const detail = body?.detail;
+    const message = typeof detail === 'string' ? detail : detail?.message || `HTTP ${response.status}`;
+    throw new Error(message);
+  }
   return body as T;
 }
 
 export async function findFirstPublishedLesson(){
-  const books = await apiJson<any[]>('/curriculum/books');
-  const book = books.find(x => x.book_code === 'PS.G05.SCI.S2') || books[0];
-  if (!book) return null;
-  const units = await apiJson<any[]>(`/curriculum/books/${book.id}/units`);
-  for (const unit of units) {
-    const lessons = await apiJson<any[]>(`/curriculum/units/${unit.id}/lessons`);
-    const lesson = lessons.find(x => x.status === 'PUBLISHED') || lessons[0];
-    if (lesson) return {book, unit, lesson};
+  const books = await apiJson<any[]>('/curriculum/books',{},true);
+  const ordered = [
+    ...books.filter(x => x.book_code === 'PS.G05.SCI.S2'),
+    ...books.filter(x => x.book_code !== 'PS.G05.SCI.S2'),
+  ];
+  for (const book of ordered) {
+    const units = await apiJson<any[]>(`/curriculum/books/${book.id}/units`,{},true);
+    for (const unit of units) {
+      const lessons = await apiJson<any[]>(`/curriculum/units/${unit.id}/lessons`,{},true);
+      const lesson = lessons.find(x => x.status === 'PUBLISHED');
+      if (lesson) return {book, unit, lesson};
+    }
   }
   return null;
 }

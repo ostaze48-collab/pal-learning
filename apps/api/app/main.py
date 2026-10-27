@@ -5,11 +5,14 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from .db.base import Base, engine
+from .db.base import Base, SessionLocal, engine
 from .db.migration_status import get_migration_status
 from .curriculum.router import router as curriculum_router
 from .importer.router import router as importer_router
-from .importer.official_catalog import router as official_catalog_router
+from .importer.official_catalog import (
+    quarantine_unverified_catalog_sources,
+    router as official_catalog_router,
+)
 from .learning.router import router as learning_router
 from .qa.router import router as qa_router
 from .admin.router import router as admin_router
@@ -20,7 +23,7 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.8.0'
+VERSION = '1.8.1'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -31,6 +34,10 @@ async def lifespan(app: FastAPI):
     # migration-managed and must be prepared with `alembic upgrade head` first.
     if engine.url.get_backend_name() == 'sqlite':
         Base.metadata.create_all(bind=engine)
+        # Repair legacy demo seed rows that treated a grade/subject ministry link
+        # as semester-specific before its extracted content proved that scope.
+        with SessionLocal() as db:
+            quarantine_unverified_catalog_sources(db)
     yield
 
 
@@ -70,7 +77,7 @@ def health():
             'candidate-preflight-qa', 'admin-staging-approval', 'immutable-staged-versions',
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
             'production-readiness-diagnostics', 'alembic-migration-gate',
-            'official-source-catalog',
+            'official-source-catalog', 'catalog-scope-quarantine',
         ],
     }
 

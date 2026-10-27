@@ -11,6 +11,7 @@ from ..db.deps import get_db
 from ..db.models import (
     DiagnosticSession,
     LearningEvent,
+    Lesson,
     Question,
     QuestionAttempt,
     QuestionSkill,
@@ -27,11 +28,49 @@ from ..services.mastery import MasteryState, update_mastery
 router = APIRouter(prefix='/learning', tags=['learning'])
 
 
+VISIBLE_QUESTION_STATUSES = {'PUBLISHED', 'APPROVED'}
+
+
 def is_answer_correct(question: Question, answer) -> bool:
     expected = question.correct_answer_json
     if isinstance(expected, dict) and 'value' in expected:
         expected = expected['value']
     return answer == expected
+
+
+def _published_lesson_or_404(db: Session, lesson_id: int | None) -> Lesson:
+    if not lesson_id:
+        raise HTTPException(404, 'Lesson not found')
+    lesson = db.query(Lesson).filter(
+        Lesson.id == lesson_id,
+        Lesson.status == 'PUBLISHED',
+    ).first()
+    if not lesson:
+        raise HTTPException(404, 'Lesson not found')
+    return lesson
+
+
+def _published_question_or_404(db: Session, question_id: int) -> Question:
+    question = db.query(Question).filter(Question.id == question_id).first()
+    if not question or question.status not in VISIBLE_QUESTION_STATUSES:
+        raise HTTPException(404, 'Question not found')
+    _published_lesson_or_404(db, question.lesson_id)
+    return question
+
+
+def _validate_learning_event_references(
+    db: Session,
+    *,
+    lesson_id: int | None,
+    question_id: int | None,
+) -> None:
+    question = None
+    if question_id is not None:
+        question = _published_question_or_404(db, question_id)
+    if lesson_id is not None:
+        lesson = _published_lesson_or_404(db, lesson_id)
+        if question is not None and question.lesson_id != lesson.id:
+            raise HTTPException(422, 'Question does not belong to the referenced lesson')
 
 
 @router.get('/skills')
@@ -78,9 +117,7 @@ def submit_attempt(
     profile: StudentProfile = Depends(require_student_profile),
     db: Session = Depends(get_db),
 ):
-    question = db.query(Question).filter(Question.id == question_id).first()
-    if not question:
-        raise HTTPException(404, 'Question not found')
+    question = _published_question_or_404(db, question_id)
     correct = is_answer_correct(question, payload.answer)
     attempts_count = db.query(QuestionAttempt).filter(
         QuestionAttempt.student_id == profile.id,
@@ -221,6 +258,11 @@ def record_event(
         if existing.student_id != profile.id:
             raise HTTPException(409, 'Event UUID already belongs to another student')
         return {'id': existing.id, 'duplicate': True}
+    _validate_learning_event_references(
+        db,
+        lesson_id=payload.lesson_id,
+        question_id=payload.question_id,
+    )
     row = LearningEvent(
         event_uuid=payload.event_uuid,
         student_id=profile.id,
@@ -253,6 +295,18 @@ def sync_events(
                 duplicates += 1
             else:
                 errors.append({'event_uuid': item.event_uuid, 'error': 'UUID belongs to another student'})
+            continue
+        try:
+            _validate_learning_event_references(
+                db,
+                lesson_id=item.lesson_id,
+                question_id=item.question_id,
+            )
+        except HTTPException as exc:
+            errors.append({
+                'event_uuid': item.event_uuid,
+                'error': exc.detail if isinstance(exc.detail, str) else 'Invalid curriculum reference',
+            })
             continue
         db.add(LearningEvent(
             event_uuid=item.event_uuid,

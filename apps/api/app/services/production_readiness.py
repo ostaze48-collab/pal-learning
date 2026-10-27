@@ -12,7 +12,14 @@ class ProductionReadiness:
     details: dict
 
 
-def evaluate_production_readiness(*, database_backend: str, allowed_origins: list[str]) -> ProductionReadiness:
+def evaluate_production_readiness(
+    *,
+    database_backend: str,
+    allowed_origins: list[str],
+    migration_current: bool = False,
+    migration_revision: str | None = None,
+    migration_head: str | None = None,
+) -> ProductionReadiness:
     provider = os.getenv('AI_PROVIDER', 'LOCAL_MOCK').upper()
     ai_key = bool(os.getenv('OPENAI_API_KEY')) if provider == 'OPENAI' else False
     ai_model = bool(os.getenv('OPENAI_MODEL') or os.getenv('OPENAI_MODEL_BALANCED')) if provider == 'OPENAI' else False
@@ -24,6 +31,7 @@ def evaluate_production_readiness(*, database_backend: str, allowed_origins: lis
 
     checks = {
         'persistent_database': database_backend in {'postgresql', 'postgres'},
+        'database_migration_current': migration_current,
         'jwt_secret_configured': len(jwt_secret) >= 32 and jwt_secret.lower() not in {'change-me', 'changeme'},
         'cors_has_production_origin': bool(production_origins),
         'cors_has_no_wildcard': not wildcard_origin,
@@ -31,7 +39,6 @@ def evaluate_production_readiness(*, database_backend: str, allowed_origins: lis
         'ai_provider_is_real': provider != 'LOCAL_MOCK',
         'ai_provider_configured': provider == 'OPENAI' and ai_key and ai_model,
     }
-    # AI is required for the curriculum factory Beta, but not for basic lesson playback.
     ready = all(checks.values())
     blockers = [name for name, passed in checks.items() if not passed]
     return ProductionReadiness(
@@ -40,6 +47,8 @@ def evaluate_production_readiness(*, database_backend: str, allowed_origins: lis
         blockers=blockers,
         details={
             'database_backend': database_backend,
+            'migration_revision': migration_revision,
+            'migration_head': migration_head,
             'ai_provider': provider,
             'production_origins': production_origins,
             'bootstrap_password_present': bool(bootstrap_password),

@@ -25,6 +25,36 @@ SEMESTER1_STRUCTURE = [
     ]),
 ]
 
+SUPPORTING_S1_SOURCES = [
+    {
+        'source_type': 'STUDENT_BOOK',
+        'source_url': 'https://www.sh-pal.com/2018/12/2018-2019_74.html',
+        'original_filename': 'grade5-science-sem1-student-book-2020-discovery-page',
+        'edition': 'third edition 2020 historical factual reference',
+        'reliability_score': 80,
+        'status': 'DISCOVERED',
+        'role_note': 'Historical factual textbook reference only; current-edition match is not assumed.',
+    },
+    {
+        'source_type': 'SOLUTIONS',
+        'source_url': 'https://www.sh-pal.com/2017/10/blog-post_325.html',
+        'original_filename': 'grade5-science-sem1-solutions-discovery-page',
+        'edition': 'historical solutions edition-to-match',
+        'reliability_score': 80,
+        'status': 'DISCOVERED',
+        'role_note': 'Answer validation only after edition/question alignment.',
+    },
+    {
+        'source_type': 'REMEDIAL',
+        'source_url': 'https://www.sh-pal.com/2020/12/blog-post_72.html',
+        'original_filename': 'grade5-science-sem1-self-learning-cards-discovery-page',
+        'edition': '2020 historical self-learning cards',
+        'reliability_score': 75,
+        'status': 'DISCOVERED',
+        'role_note': 'Recovery/remediation reference only; never factual grounding authority.',
+    },
+]
+
 
 def ensure_current_semester_registry(db: Session) -> dict:
     """Idempotently register the current Grade 5 Science semester-1 production track.
@@ -33,6 +63,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
     Ministry Grade-5 Science Gaza package is associated with semester 1 because its
     indexed topics align with cell/materials/energy. It still starts as a
     CATALOG_CANDIDATE and must pass scope/edition verification before factual use.
+    Historical S1 sources improve package coverage but start with edition_match=0.
     """
     cv = db.query(CurriculumVersion).filter(CurriculumVersion.academic_year == '2026').first()
     grade = db.query(Grade).filter(Grade.code == 'G05').first()
@@ -125,6 +156,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
             extraction_meta={
                 'catalog_scope': 'GRADE5_SCIENCE_CURRENT',
                 'semester_priority': 1,
+                'observed_content_length_bytes': 22870471,
                 'note': 'Current-semester candidate; factual use requires scope and edition verification.',
             },
         )
@@ -136,6 +168,37 @@ def ensure_current_semester_registry(db: Session) -> dict:
         if not source.extracted_text:
             source.edition_match_score = 0
             source.status = 'SCOPE_UNVERIFIED'
+        meta = dict(source.extraction_meta or {})
+        meta.setdefault('catalog_scope', 'GRADE5_SCIENCE_CURRENT')
+        meta['semester_priority'] = 1
+        meta.setdefault('observed_content_length_bytes', 22870471)
+        source.extraction_meta = meta
+
+    created_supporting_sources = 0
+    for item in SUPPORTING_S1_SOURCES:
+        existing = db.query(SourceFile).filter(
+            SourceFile.package_id == package.id,
+            SourceFile.source_type == item['source_type'],
+            SourceFile.source_url == item['source_url'],
+        ).first()
+        if existing:
+            continue
+        db.add(SourceFile(
+            package_id=package.id,
+            source_type=item['source_type'],
+            source_url=item['source_url'],
+            original_filename=item['original_filename'],
+            edition=item['edition'],
+            reliability_score=item['reliability_score'],
+            edition_match_score=0,
+            status=item['status'],
+            extraction_meta={
+                'discovery_page_only': True,
+                'semester_priority': 1,
+                'role_note': item['role_note'],
+            },
+        ))
+        created_supporting_sources += 1
 
     # The same broad Ministry catalog URL was previously attached to the S2 prototype.
     # Keep the historical row for auditability, but ensure it contributes no semester-2 authority.
@@ -165,6 +228,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
         'created_book': created_book,
         'created_package': created_package,
         'created_source': created_source,
+        'created_supporting_sources': created_supporting_sources,
         'created_units': created_units,
         'created_lessons': created_lessons,
         'reassigned_s2_catalog_rows': reassigned_s2_rows,

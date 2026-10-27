@@ -17,7 +17,12 @@ from app.db.models import (
     SourcePackage,
     Unit,
 )
-from app.factory.router import execute_factory_job, ingest_generated_output, queue_lesson_generation
+from app.factory.router import (
+    execute_factory_job,
+    ingest_generated_output,
+    ingest_provider_output,
+    queue_lesson_generation,
+)
 from app.schemas.factory import GeneratedLessonPayload
 
 
@@ -167,5 +172,59 @@ def test_ingest_rejects_output_if_source_link_was_revoked_after_queue():
 
         db.refresh(job)
         assert job.status == 'STALE_INPUT'
+    finally:
+        db.close()
+
+
+def test_completed_or_validated_job_cannot_be_executed_again(monkeypatch):
+    monkeypatch.setenv('AI_PROVIDER', 'LOCAL_MOCK')
+    db, lesson, link, chunk, skill = _prepared_db()
+    try:
+        queued = queue_lesson_generation(lesson.id, db)
+        job = db.query(AIJob).filter(AIJob.id == queued['job_id']).one()
+
+        for state in ('COMPLETED', 'OUTPUT_VALIDATED'):
+            job.status = state
+            db.commit()
+            with pytest.raises(HTTPException) as exc:
+                execute_factory_job(job.id, db)
+            assert exc.value.status_code == 409
+            assert exc.value.detail['status'] == state
+            assert exc.value.detail['allowed_statuses'] == ['QUEUED', 'WAITING_PROVIDER']
+            assert exc.value.detail['next_action'] == 'USE_CURRENT_OUTPUT'
+    finally:
+        db.close()
+
+
+def test_waiting_provider_job_can_be_retried_without_creating_fake_output(monkeypatch):
+    monkeypatch.setenv('AI_PROVIDER', 'LOCAL_MOCK')
+    db, lesson, link, chunk, skill = _prepared_db()
+    try:
+        queued = queue_lesson_generation(lesson.id, db)
+        first = execute_factory_job(queued['job_id'], db)
+        assert first['status'] == 'WAITING_PROVIDER'
+
+        second = execute_factory_job(queued['job_id'], db)
+        assert second['status'] == 'WAITING_PROVIDER'
+        job = db.query(AIJob).filter(AIJob.id == queued['job_id']).one()
+        assert job.completed_at is None
+        assert job.progress == 25
+    finally:
+        db.close()
+
+
+def test_provider_output_ingest_requires_completed_job():
+    db, lesson, link, chunk, skill = _prepared_db()
+    try:
+        queued = queue_lesson_generation(lesson.id, db)
+        job = db.query(AIJob).filter(AIJob.id == queued['job_id']).one()
+        assert job.status == 'QUEUED'
+
+        with pytest.raises(HTTPException) as exc:
+            ingest_provider_output(job.id, db)
+        assert exc.value.status_code == 409
+        assert exc.value.detail['required_status'] == 'COMPLETED'
+        assert exc.value.detail['status'] == 'QUEUED'
+        assert db.query(ContentCandidate).count() == 0
     finally:
         db.close()

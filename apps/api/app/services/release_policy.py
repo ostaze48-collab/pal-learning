@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-# Publication remains intentionally fail-closed. Staging, academic QA and the
-# final release gate can assess readiness, but no code path is allowed to mutate
-# live curriculum state until an audited, transactional release mechanism exists.
+# Direct/legacy publication remains disabled. Publication is only possible through
+# the audited release transaction, which re-runs the final gate, validates live
+# provenance, requires PostgreSQL, and commits the new live version atomically.
 DIRECT_LEGACY_PUBLISH_ENABLED = False
-AUDITED_RELEASE_TRANSACTION_IMPLEMENTED = False
+AUDITED_RELEASE_TRANSACTION_IMPLEMENTED = True
 
 
 def release_policy_status() -> dict:
@@ -12,5 +12,8 @@ def release_policy_status() -> dict:
         'direct_legacy_publish_enabled': DIRECT_LEGACY_PUBLISH_ENABLED,
         'direct_legacy_publish_disabled': not DIRECT_LEGACY_PUBLISH_ENABLED,
         'audited_release_transaction_implemented': AUDITED_RELEASE_TRANSACTION_IMPLEMENTED,
-        'publication_authorized': AUDITED_RELEASE_TRANSACTION_IMPLEMENTED,
+        # Availability of the mechanism is not blanket authorization. Each release
+        # must independently pass its transaction-time final gate.
+        'publication_authorized': False,
+        'publication_path': 'AUDITED_RELEASE_TRANSACTION_ONLY',
     }

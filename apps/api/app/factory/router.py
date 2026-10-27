@@ -16,6 +16,27 @@ from ..schemas.factory import GeneratedLessonPayload
 router = APIRouter(prefix='/factory', tags=['content-factory'], dependencies=[Depends(require_admin)])
 
 
+@router.get('/status')
+def factory_status():
+    """Return non-secret provider readiness information for the admin UI."""
+    provider = os.getenv('AI_PROVIDER', 'LOCAL_MOCK').upper()
+    if provider == 'OPENAI':
+        model_configured = bool(os.getenv('OPENAI_MODEL') or os.getenv('OPENAI_MODEL_BALANCED'))
+        key_configured = bool(os.getenv('OPENAI_API_KEY'))
+        generation_ready = model_configured and key_configured
+    else:
+        model_configured = False
+        key_configured = False
+        generation_ready = False
+    return {
+        'provider': provider,
+        'generation_ready': generation_ready,
+        'model_configured': model_configured,
+        'key_configured': key_configured,
+        'mode': 'REAL_PROVIDER' if generation_ready else 'LOCAL_MOCK' if provider == 'LOCAL_MOCK' else 'MISCONFIGURED',
+    }
+
+
 @router.post('/lessons/{lesson_id}/generate')
 def queue_lesson_generation(lesson_id: int, db: Session = Depends(get_db)):
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
@@ -46,6 +67,33 @@ def queue_lesson_generation(lesson_id: int, db: Session = Depends(get_db)):
         'source_chunks': len(packet['source_context']),
         'skills': len(packet['skills']),
     }
+
+
+@router.get('/lessons/{lesson_id}/jobs')
+def list_lesson_jobs(lesson_id: int, db: Session = Depends(get_db)):
+    lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(404, 'Lesson not found')
+    rows = db.query(AIJob).filter(
+        AIJob.source_type == 'LESSON',
+        AIJob.source_id == lesson_id,
+    ).order_by(AIJob.id.desc()).limit(30).all()
+    return [
+        {
+            'id': row.id,
+            'job_type': row.job_type,
+            'status': row.status,
+            'progress': row.progress,
+            'model_route': row.model_route,
+            'prompt_version': row.prompt_version,
+            'error': row.error,
+            'created_at': row.created_at,
+            'started_at': row.started_at,
+            'completed_at': row.completed_at,
+            'provider': ((row.result_json or {}).get('provider')),
+        }
+        for row in rows
+    ]
 
 
 @router.get('/jobs/{job_id}')
@@ -199,6 +247,25 @@ def ingest_provider_output(job_id: int, db: Session = Depends(get_db)):
         ) from exc
 
     return _store_candidate(job, payload, db)
+
+
+@router.get('/candidates/{candidate_id}')
+def get_candidate(candidate_id: int, db: Session = Depends(get_db)):
+    row = db.query(ContentCandidate).filter(ContentCandidate.id == candidate_id).first()
+    if not row:
+        raise HTTPException(404, 'Content candidate not found')
+    return {
+        'id': row.id,
+        'lesson_id': row.lesson_id,
+        'ai_job_id': row.ai_job_id,
+        'version_label': row.version_label,
+        'status': row.status,
+        'schema_valid': row.schema_valid,
+        'provenance_score': row.provenance_score,
+        'validation': row.validation_json,
+        'output': row.output_json,
+        'created_at': row.created_at,
+    }
 
 
 @router.get('/lessons/{lesson_id}/candidates')

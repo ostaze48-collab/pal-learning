@@ -126,6 +126,23 @@ def test_session_state_restores_saved_question_attempts():
     assert saved[0]['latest_attempt']['correct'] is True
 
 
+def test_beta_feedback_is_visible_to_admin():
+    submitted = client.post('/demo/feedback', json={
+        'category': 'UNCLEAR_EXPLANATION',
+        'message': 'شرح تجربة المجهر يحتاج مثالًا بصريًا أوضح.',
+        'context': 'lesson:PS.G05.SCI.S1.U01.L01',
+    }, headers=STUDENT)
+    assert submitted.status_code == 200
+    assert submitted.json()['submitted'] is True
+
+    dashboard = client.get('/demo/admin/dashboard', headers=ADMIN)
+    assert dashboard.status_code == 200
+    feedback = dashboard.json()['feedback']
+    assert feedback['total'] >= 1
+    assert feedback['by_category']['UNCLEAR_EXPLANATION'] >= 1
+    assert any('المجهر' in (row['message'] or '') for row in feedback['recent'])
+
+
 def test_completed_demo_has_result_summary_and_next_action():
     questions = client.get('/demo/questions', headers=STUDENT)
     assert questions.status_code == 200

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 
 from ..auth.deps import require_admin
 from ..db.base import engine
+from ..db.migration_status import get_migration_status
 from ..db.models import User
 from ..services.production_readiness import evaluate_production_readiness
 
@@ -21,13 +22,20 @@ def _allowed_origins() -> list[str]:
 
 @router.get('/production-readiness')
 def production_readiness(admin: User = Depends(require_admin)):
+    migration = get_migration_status(engine)
     result = evaluate_production_readiness(
         database_backend=engine.url.get_backend_name(),
         allowed_origins=_allowed_origins(),
+        migration_current=migration['is_current'],
+        migration_revision=migration['current'],
+        migration_head=migration['head'],
     )
     return {
         'ready': result.ready,
         'checks': result.checks,
         'blockers': result.blockers,
-        'details': result.details,
+        'details': {
+            **result.details,
+            'migration_reason': migration['reason'],
+        },
     }

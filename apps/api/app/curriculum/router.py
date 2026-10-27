@@ -28,7 +28,6 @@ def _visible_lesson_or_404(lesson_id: int, user: User, db: Session) -> Lesson:
     if not lesson:
         raise HTTPException(404, 'Lesson not found')
     if not _is_admin(user) and lesson.status != 'PUBLISHED':
-        # Do not disclose the existence/state of draft curriculum to students.
         raise HTTPException(404, 'Lesson not found')
     return lesson
 
@@ -193,10 +192,18 @@ def get_source_package(package_id: int, db: Session = Depends(get_db), admin=Dep
         'completeness_score': coverage, 'quality_score': quality,
         'files': [
             {
-                'id': x.id, 'source_type': x.source_type, 'original_filename': x.original_filename,
-                'source_url': x.source_url, 'reliability_score': x.reliability_score,
-                'edition_match_score': x.edition_match_score, 'status': x.status,
-                'page_count': x.page_count, 'checksum': x.checksum,
+                'id': x.id,
+                'source_type': x.source_type,
+                'original_filename': x.original_filename,
+                'source_url': x.source_url,
+                'file_key': x.file_key,
+                'storage_backend': (x.extraction_meta or {}).get('storage_backend'),
+                'durable_storage': bool((x.extraction_meta or {}).get('durable_storage')) or bool(x.file_key and x.file_key.startswith('s3://')),
+                'reliability_score': x.reliability_score,
+                'edition_match_score': x.edition_match_score,
+                'status': x.status,
+                'page_count': x.page_count,
+                'checksum': x.checksum,
                 'extraction_meta': x.extraction_meta,
                 'chunk_count': db.query(SourceChunk).filter(SourceChunk.source_file_id == x.id).count(),
             } for x in files

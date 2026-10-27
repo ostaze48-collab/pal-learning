@@ -59,7 +59,7 @@ def test_verified_candidate_is_excluded_until_admin_verifies_teaching_link():
         db.add(link); db.commit()
 
         packet = build_lesson_generation_packet(db, lesson.id)
-        assert packet['contract_version'] == 'lesson-generation-packet/v5'
+        assert packet['contract_version'] == 'lesson-generation-packet/v6'
         assert packet['source_context'] == []
         assert packet['authority_gate']['admin_verified_teaching_source_required'] is True
         assert packet['authority_gate']['verified_teaching_source_count'] == 0

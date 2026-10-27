@@ -29,6 +29,23 @@ assert _student_login.status_code == 200, _student_login.text
 STUDENT_HEADERS = {'Authorization': f"Bearer {_student_login.json()['access_token']}"}
 
 
+def _verify_teaching_links(lesson_id: int = 1):
+    response = client.get(f'/importer/lessons/{lesson_id}/source-links', headers=ADMIN_HEADERS)
+    assert response.status_code == 200, response.text
+    verified = 0
+    for link in response.json()['links']:
+        if not link['factual_grounding_authorized']:
+            continue
+        if link['status'] == 'VERIFIED':
+            verified += 1
+            continue
+        result = client.post(f"/importer/lesson-source-links/{link['id']}/verify", headers=ADMIN_HEADERS)
+        assert result.status_code == 200, result.text
+        assert result.json()['status'] == 'VERIFIED'
+        verified += 1
+    assert verified >= 1
+
+
 def test_diagnostic_and_recovery_flow():
     skills = client.get('/learning/skills').json()
     target = next(x for x in skills if x['skill_code'] == 'SK.MATH.FRACTION.ADDITION')
@@ -108,6 +125,7 @@ def test_import_text_source_analyze_and_link_lesson():
     assert structure['lesson_count'] == 2
     linked = client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS).json()
     assert any(x.get('lesson_title') == 'الجهاز الهيكلي' and x.get('linked') for x in linked['candidates'])
+    _verify_teaching_links(1)
 
 
 def test_solution_upload_and_alignment():
@@ -131,9 +149,8 @@ def test_solution_upload_and_alignment():
 
 
 def test_generation_packet_requires_and_uses_provenance():
-    # Prior import/link test established a source link; if test isolation/order changes,
-    # establish it again with an idempotent linker call.
     client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS)
+    _verify_teaching_links(1)
     r = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS)
     assert r.status_code == 200
     data = r.json()
@@ -183,7 +200,10 @@ def _valid_generated_payload(chunk_id: int, skill_code: str):
 
 def test_structured_output_candidate_accepts_only_packet_provenance():
     client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS)
-    queued = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS).json()
+    _verify_teaching_links(1)
+    queued_response = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS)
+    assert queued_response.status_code == 200, queued_response.text
+    queued = queued_response.json()
     job = client.get(f"/factory/jobs/{queued['job_id']}", headers=ADMIN_HEADERS).json()
     chunk_id = job['input']['source_context'][0]['source_chunk_id']
     skill_code = job['input']['skills'][0]['skill_code']
@@ -197,7 +217,10 @@ def test_structured_output_candidate_accepts_only_packet_provenance():
 
 def test_structured_output_rejects_out_of_packet_source():
     client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS)
-    queued = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS).json()
+    _verify_teaching_links(1)
+    queued_response = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS)
+    assert queued_response.status_code == 200, queued_response.text
+    queued = queued_response.json()
     job = client.get(f"/factory/jobs/{queued['job_id']}", headers=ADMIN_HEADERS).json()
     skill_code = job['input']['skills'][0]['skill_code']
     payload = _valid_generated_payload(999999, skill_code)
@@ -210,7 +233,10 @@ def test_structured_output_rejects_out_of_packet_source():
 
 def test_structured_output_rejects_out_of_packet_flashcard_source():
     client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS)
-    queued = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS).json()
+    _verify_teaching_links(1)
+    queued_response = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS)
+    assert queued_response.status_code == 200, queued_response.text
+    queued = queued_response.json()
     job = client.get(f"/factory/jobs/{queued['job_id']}", headers=ADMIN_HEADERS).json()
     chunk_id = job['input']['source_context'][0]['source_chunk_id']
     skill_code = job['input']['skills'][0]['skill_code']
@@ -237,7 +263,6 @@ def test_retention_review_and_daily_plan():
     assert data['allocated_minutes'] <= 20
     assert any(x['type'] == 'RECOVERY' for x in data['plan'])
     recovery = next(x for x in data['plan'] if x['type'] == 'RECOVERY')
-    # Root gap should be equivalent fractions, not a global grade downgrade.
     skills = client.get('/learning/skills').json()
     eq = next(x for x in skills if x['skill_code'] == 'SK.MATH.FRACTION.EQUIVALENCE')
     assert recovery['skill_id'] == eq['id']

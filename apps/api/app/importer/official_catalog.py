@@ -75,6 +75,12 @@ def _scope_term_report(text: str, entry: OfficialSourceCatalogEntry) -> dict:
     }
 
 
+def _recalculate_package(db: Session, package: SourcePackage) -> None:
+    # Lazy import avoids making the catalog registry depend on router initialization.
+    from .router import update_package_completeness
+    update_package_completeness(db, package)
+
+
 def quarantine_unverified_catalog_sources(db: Session) -> dict:
     """Remove unverified catalog links from weighted teaching-source types.
 
@@ -86,6 +92,7 @@ def quarantine_unverified_catalog_sources(db: Session) -> dict:
     checked = 0
     quarantined = 0
     already_verified = 0
+    touched_packages: dict[int, SourcePackage] = {}
     for entry in OFFICIAL_SOURCE_CATALOG:
         package = db.query(SourcePackage).filter(SourcePackage.package_code == entry.package_code).first()
         if not package:
@@ -105,7 +112,10 @@ def quarantine_unverified_catalog_sources(db: Session) -> dict:
             row.source_type = 'CATALOG_CANDIDATE'
             row.status = 'SCOPE_REJECTED' if row.extracted_text else 'SCOPE_UNVERIFIED'
             row.edition_match_score = 0.0
+            touched_packages[package.id] = package
             quarantined += 1
+    for package in touched_packages.values():
+        _recalculate_package(db, package)
     if quarantined:
         db.commit()
     return {
@@ -218,6 +228,7 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
             'status': row.status,
         })
 
+    _recalculate_package(db, package)
     db.commit()
     return {
         'package_id': package.id,
@@ -225,6 +236,8 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
         'created': created,
         'existing': existing_count,
         'quarantined': quarantined,
+        'package_completeness': package.completeness_score,
+        'package_quality': package.quality_score,
         'sources': sources,
         'note': 'Catalog sync proves discovery/authority only. Sources remain unweighted CATALOG_CANDIDATE records until extracted content verifies target scope.',
     }
@@ -241,6 +254,10 @@ def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_d
     if not row.extracted_text:
         raise HTTPException(409, 'Source must be fetched/extracted before scope verification')
 
+    package = db.query(SourcePackage).filter(SourcePackage.id == row.package_id).first()
+    if not package:
+        raise HTTPException(404, 'Source package not found')
+
     report = _scope_term_report(row.extracted_text, entry)
     if report['scope_verified']:
         row.source_type = entry.promoted_source_type
@@ -250,6 +267,7 @@ def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_d
         row.source_type = 'CATALOG_CANDIDATE'
         row.status = 'SCOPE_REJECTED'
 
+    _recalculate_package(db, package)
     db.commit()
     return {
         'source_file_id': row.id,
@@ -260,5 +278,7 @@ def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_d
         'source_type': row.source_type,
         'status': row.status,
         'edition_match_score': float(row.edition_match_score or 0),
+        'package_completeness': package.completeness_score,
+        'package_quality': package.quality_score,
         'note': 'Scope verification does not prove edition match; edition quality remains a separate gate.',
     }

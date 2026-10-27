@@ -8,7 +8,7 @@ from app.main import app
 
 
 def test_published_lesson_runtime_routes_are_registered():
-    paths = {route.path for route in app.routes if hasattr(route, 'path')}
+    paths = set(app.openapi()['paths'])
     assert '/learning/lessons/{lesson_id}/runtime' in paths
     assert '/learning/lessons/{lesson_id}/questions' in paths
     assert '/learning/lessons/{lesson_id}/progress' in paths

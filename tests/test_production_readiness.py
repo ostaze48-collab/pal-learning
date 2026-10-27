@@ -22,7 +22,7 @@ def test_sqlite_local_storage_and_local_mock_block_production(monkeypatch):
         allowed_origins=['http://localhost:3000', 'https://pal-learning-web.onrender.com'],
         migration_current=False,
         migration_revision=None,
-        migration_head='20261027_01',
+        migration_head='20261027_02',
     )
     assert result.ready is False
     assert 'persistent_database' in result.blockers
@@ -32,13 +32,15 @@ def test_sqlite_local_storage_and_local_mock_block_production(monkeypatch):
     assert 'jwt_secret_configured' in result.blockers
     assert 'ai_provider_is_real' in result.blockers
     assert 'ai_provider_configured' in result.blockers
-    assert 'audited_release_transaction_available' in result.blockers
+    assert 'audited_release_transaction_available' not in result.blockers
     assert result.details['storage_backend'] == 'LOCAL'
     assert result.checks['source_authority_policy_fail_closed'] is True
     assert result.checks['legacy_direct_publish_disabled'] is True
+    assert result.checks['audited_release_transaction_available'] is True
+    assert result.details['release_policy']['audited_release_transaction_implemented'] is True
 
 
-def test_hardened_runtime_with_r2_still_blocks_without_audited_release_transaction(monkeypatch):
+def test_hardened_runtime_with_postgres_r2_and_real_ai_is_production_ready(monkeypatch):
     monkeypatch.setenv('AI_PROVIDER', 'OPENAI')
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key-present-only')
     monkeypatch.setenv('OPENAI_MODEL', 'configured-model')
@@ -54,18 +56,18 @@ def test_hardened_runtime_with_r2_still_blocks_without_audited_release_transacti
         database_backend='postgresql',
         allowed_origins=['https://pal-learning-web.onrender.com'],
         migration_current=True,
-        migration_revision='20261027_01',
-        migration_head='20261027_01',
+        migration_revision='20261027_02',
+        migration_head='20261027_02',
     )
-    assert result.ready is False
-    assert result.blockers == ['audited_release_transaction_available']
+    assert result.ready is True
+    assert result.blockers == []
     assert result.checks['persistent_database'] is True
     assert result.checks['database_migration_current'] is True
     assert result.checks['durable_source_storage'] is True
     assert result.checks['source_storage_configured'] is True
     assert result.checks['source_authority_policy_fail_closed'] is True
     assert result.checks['legacy_direct_publish_disabled'] is True
-    assert result.checks['audited_release_transaction_available'] is False
+    assert result.checks['audited_release_transaction_available'] is True
     assert result.details['storage_backend'] == 'R2'
     assert result.details['storage_configured'] is True
-    assert result.details['release_policy']['audited_release_transaction_implemented'] is False
+    assert result.details['release_policy']['audited_release_transaction_implemented'] is True

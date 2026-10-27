@@ -1,73 +1,65 @@
 'use client';
 
 import {useEffect,useState} from 'react';
+import {ActionLink,AdminShell,ButtonRow,Card,MetricCard,Notice,SectionHeader,StatusPill} from './_components/AdminUI';
 
 const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
-type Health={version:string;database:{backend:string;persistent:boolean;production_recommended:boolean};current_semester?:{semester:number;priority_book_code:string;priority_package_code:string}};
+type Health={version:string;database:{backend:string;persistent:boolean;production_recommended:boolean};experimental_demo?:{enabled:boolean;book_code:string;lesson_code:string;student_scope:string};current_semester?:{semester:number;priority_book_code:string;priority_package_code:string}};
 type LearningHealth={students:number;books:number;lessons:number;source_packages:number;ai_jobs:number;question_attempts:number;correct_rate_percent:number;root_gaps_found:number;skills_needing_support_rows:number};
-type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;migration_revision?:string|null;migration_head?:string|null;migration_reason?:string|null;ai_provider?:string;production_origins?:string[];bootstrap_password_present?:boolean;storage_backend?:string;storage_durable?:boolean;storage_configured?:boolean;storage_bucket?:string|null;storage_missing?:string[];release_policy?:{direct_legacy_publish_enabled?:boolean;audited_release_transaction_implemented?:boolean}}};
+type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;migration_revision?:string|null;migration_head?:string|null;ai_provider?:string;storage_backend?:string;storage_durable?:boolean;storage_configured?:boolean;storage_bucket?:string|null;storage_missing?:string[];release_policy?:{direct_legacy_publish_enabled?:boolean;audited_release_transaction_implemented?:boolean}}};
 
-const readinessLabels:Record<string,string>={
-  persistent_database:'قاعدة بيانات PostgreSQL دائمة',
-  database_migration_current:'قاعدة البيانات على Alembic migration head الحالي',
-  durable_source_storage:'تخزين دائم لملفات المنهاج (R2/S3)',
-  source_storage_configured:'إعدادات تخزين الملفات كاملة',
-  jwt_secret_configured:'JWT_SECRET قوي ومُعد',
-  cors_has_production_origin:'CORS يحتوي نطاق الإنتاج',
-  cors_has_no_wildcard:'CORS بدون wildcard',
-  admin_bootstrap_password_configured:'كلمة مرور Bootstrap Admin مُعدة',
-  ai_provider_is_real:'مزود AI حقيقي بدل LOCAL_MOCK',
-  ai_provider_configured:'مفتاح ونموذج AI مُعدان',
-  source_authority_policy_fail_closed:'Source Authority Policy تعمل بنمط fail-closed',
-  legacy_direct_publish_disabled:'مسار النشر المباشر القديم معطّل',
-  audited_release_transaction_available:'Audited Release Transaction متاح',
-};
+const readinessLabels:Record<string,string>={persistent_database:'قاعدة بيانات PostgreSQL دائمة',database_migration_current:'قاعدة البيانات على Alembic head الحالي',durable_source_storage:'تخزين دائم لملفات المنهاج',source_storage_configured:'إعدادات التخزين كاملة',jwt_secret_configured:'JWT_SECRET قوي',cors_has_production_origin:'CORS يحتوي نطاق الإنتاج',cors_has_no_wildcard:'CORS بلا wildcard',admin_bootstrap_password_configured:'Bootstrap Admin مُعد',ai_provider_is_real:'مزود AI حقيقي',ai_provider_configured:'مفتاح ونموذج AI مُعدان',source_authority_policy_fail_closed:'Source Authority fail-closed',legacy_direct_publish_disabled:'النشر القديم المباشر معطّل',audited_release_transaction_available:'Audited Release Transaction متاح'};
 
 export default function Admin(){
-  const [health,setHealth]=useState<Health|null>(null);
-  const [learning,setLearning]=useState<LearningHealth|null>(null);
-  const [readiness,setReadiness]=useState<ProductionReadiness|null>(null);
-  const [error,setError]=useState('');
+  const [health,setHealth]=useState<Health|null>(null);const [learning,setLearning]=useState<LearningHealth|null>(null);const [readiness,setReadiness]=useState<ProductionReadiness|null>(null);const [error,setError]=useState('');
   useEffect(()=>{
-    const token=localStorage.getItem('pal_admin_token')||'';
-    const auth={headers:{Authorization:`Bearer ${token}`}};
+    const token=localStorage.getItem('pal_admin_token')||'';const auth={headers:{Authorization:`Bearer ${token}`}};
     Promise.all([
       fetch(`${API}/health`).then(r=>r.json()),
       fetch(`${API}/admin/learning-health`,auth).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.detail||'تعذر تحميل Learning Health');return b;}),
       fetch(`${API}/admin/production-readiness`,auth).then(async r=>{const b=await r.json();if(!r.ok)throw new Error(b.detail||'تعذر تحميل Production Readiness');return b;}),
     ]).then(([h,l,p])=>{setHealth(h);setLearning(l);setReadiness(p)}).catch(e=>setError(e.message||'تعذر تحميل لوحة الإدارة'));
   },[]);
-  const stats=[
-    ['الطلاب',learning?.students],['الكتب',learning?.books],['الدروس',learning?.lessons],
-    ['الرزم التعليمية',learning?.source_packages],['AI Jobs',learning?.ai_jobs],['محاولات الأسئلة',learning?.question_attempts],
-    ['Root gaps',learning?.root_gaps_found],['تحتاج دعمًا',learning?.skills_needing_support_rows]
-  ];
   const currentPackage=health?.current_semester?.priority_package_code||'PS-G05-SCI-S1-2026';
-  return <main style={{maxWidth:1100,margin:'32px auto',padding:20}}>
-    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:12,flexWrap:'wrap'}}><h1>لوحة الإدارة</h1><span style={{padding:'7px 11px',borderRadius:99,background:health?.database?.persistent?'#e8fff1':'#fff4e5'}}>{health?`API ${health.version} · ${health.database.backend}`:'جارٍ فحص النظام…'}</span></div>
-    {readiness&&<section style={{padding:16,borderRadius:14,background:readiness.ready?'#ecfdf3':'#fff4e5',border:`1px solid ${readiness.ready?'#b8e7ca':'#ffd59a'}`,marginBottom:16}}>
-      <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap'}}>
-        <strong>{readiness.ready?'Production Ready ✓':'Beta Readiness: BLOCKED'}</strong>
-        <span>{readiness.details.database_backend||'—'} · {readiness.details.storage_backend||'LOCAL'} · {readiness.details.ai_provider||'—'}</span>
-      </div>
-      <div style={{fontSize:12,opacity:.7,marginTop:6}}>Migration: {readiness.details.migration_revision||'none'} / head {readiness.details.migration_head||'—'} · Storage bucket: {readiness.details.storage_bucket||'—'}</div>
-      {!readiness.ready&&<p style={{margin:'8px 0 10px'}}>لن نعتبر المنصة جاهزة للـBeta حتى تُغلق العقبات التالية:</p>}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:8}}>
-        {Object.entries(readiness.checks).map(([key,ok])=><div key={key} style={{padding:'9px 10px',borderRadius:9,background:'rgba(255,255,255,.7)'}}>{ok?'✓':'✗'} {readinessLabels[key]||key}</div>)}
-      </div>
-      {!!readiness.details.storage_missing?.length&&<div style={{marginTop:10,fontSize:13}}>Storage missing: {readiness.details.storage_missing.join(' · ')}</div>}
-      {readiness.details.release_policy&&!readiness.details.release_policy.audited_release_transaction_implemented&&<div style={{marginTop:10,fontSize:13}}>النشر الحقيقي ما زال مغلقًا عمدًا: Final Release Gate يقيس الجاهزية فقط، ولا يوجد حتى الآن transaction مدقق ينقل Staging إلى Live.</div>}
-    </section>}
-    {!health?.database?.persistent&&health&&!readiness&&<div style={{padding:15,borderRadius:14,background:'#fff4e5',border:'1px solid #ffd59a',marginBottom:16}}><strong>تنبيه جاهزية:</strong> الـAPI يعمل حاليًا على SQLite. هذا مناسب للعرض التجريبي فقط؛ قبل Beta يجب ربط DATABASE_URL بقاعدة PostgreSQL الموجودة على Render.</div>}
-    {error&&<div style={{padding:14,borderRadius:12,background:'#ffecec',marginBottom:14}}>{error} <a href="/admin/login">تسجيل دخول الإدارة</a></div>}
-    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(145px,1fr))',gap:12}}>{stats.map(([k,v])=><div key={String(k)} style={{background:'white',padding:18,borderRadius:14,border:'1px solid #e8edf5'}}><div>{k}</div><strong style={{fontSize:24}}>{v??'—'}</strong></div>)}</div>
-    <section style={{marginTop:24,background:'white',padding:20,borderRadius:14,border:'1px solid #e8edf5'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}}><h2 style={{margin:0}}>{currentPackage}</h2><span style={{padding:'6px 10px',borderRadius:99,background:'#e8fff1',color:'#176b3a',fontWeight:700}}>الفصل الأول · المسار الحالي</span></div>
-      <p>الأولوية الحالية هي علوم الصف الخامس — الفصل الأول: الخلية، خصائص المادة، والطاقة في حياتنا. رابط وزارة التربية الحالي يُسجل أولًا كـCatalog Candidate ويحتاج Scope/Edition verification قبل استخدامه كمصدر حقائق.</p>
-      <div style={{padding:10,borderRadius:10,background:'#f7f8fa',marginBottom:12,fontSize:13}}>S2 / الجهاز الهيكلي محفوظ كـPrototype/Backlog ولا يُعامل كمسار الإنتاج الحالي.</div>
-      <div style={{display:'flex',gap:10,flexWrap:'wrap'}}><a href="/admin/current-semester" style={{padding:'10px 14px',borderRadius:10,background:'#176b3a',color:'white',textDecoration:'none',fontWeight:700}}>فتح الفصل الحالي</a><a href="/admin/current-semester/matrix" style={{padding:'10px 14px',borderRadius:10,background:'#0f766e',color:'white',textDecoration:'none',fontWeight:700}}>مصفوفة إنتاج الدروس</a><a href="/admin/importer" style={{padding:'10px 14px',borderRadius:10,background:'#1f6feb',color:'white',textDecoration:'none'}}>مستورد المصادر المتقدم</a><a href="/admin/source-policy" style={{padding:'10px 14px',borderRadius:10,background:'#f4f0ff',color:'#5a3a9b',textDecoration:'none'}}>صلاحيات المصادر</a><a href="/admin/curriculum" style={{padding:'10px 14px',borderRadius:10,background:'#eef4ff',color:'#124b9b',textDecoration:'none'}}>مصنع المنهاج</a><a href="/admin/staging" style={{padding:'10px 14px',borderRadius:10,background:'#eefbf3',color:'#176b3a',textDecoration:'none'}}>Candidate QA / Staging</a><a href="/admin/release" style={{padding:'10px 14px',borderRadius:10,background:'#fff4e5',color:'#8a4b00',textDecoration:'none'}}>Final Release Gate</a><a href="/admin/quality">بوابة الجودة</a><a href="/admin/analytics">Learning Health</a><a href="/admin/improvement">قائمة تطوير المحتوى</a><a href="/student/lesson">معاينة الطالب</a></div>
-    </section>
-    {learning&&<section style={{marginTop:16,background:'white',padding:18,borderRadius:14,border:'1px solid #e8edf5'}}><h2>Learning snapshot</h2><p>معدل الإجابات الصحيحة: <strong>{learning.correct_rate_percent}%</strong></p></section>}
-  </main>;
+  const passed=readiness?Object.values(readiness.checks).filter(Boolean).length:0;const total=readiness?Object.keys(readiness.checks).length:0;
+
+  return <AdminShell eyebrow="Palestinian Learning OS" title="لوحة الإدارة" description="نسخة تجريبية كاملة وظيفيًا بمحتوى طالب واحد: علوم الصف الخامس — الدرس الأول «المجهر واكتشاف الخلية». البنية الإنتاجية تبقى منفصلة ومحكومة ببوابات QA والإصدار.">
+    <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap',marginBottom:14}}>
+      <div style={{display:'flex',gap:7,flexWrap:'wrap'}}><StatusPill tone="warn">EXPERIMENTAL BETA</StatusPill><StatusPill tone={health?.database?.persistent?'good':'warn'}>{health?`API ${health.version}`:'API…'}</StatusPill><StatusPill tone={health?.database?.persistent?'good':'warn'}>{health?.database?.backend||'DB…'}</StatusPill></div>
+      <ActionLink href="/admin/current-semester">فتح Control Center ←</ActionLink>
+    </div>
+
+    {error&&<div style={{marginBottom:14}}><Notice tone="bad">{error} · <a href="/admin/login">تسجيل دخول الإدارة</a></Notice></div>}
+
+    <Card style={{marginBottom:14,background:'linear-gradient(135deg,#f3fbf5,#f3f7ff)',borderColor:'#cfe4d6'}}>
+      <SectionHeader title="نطاق النسخة التجريبية" description="كل واجهات المنصة تعمل، لكن الطالب يرى درسًا واحدًا فقط. لا نستخدم حالة PUBLISHED لهذا المحتوى؛ التجربة تعمل عبر Demo API معزولة." aside={<StatusPill tone="good">Single Lesson Beta</StatusPill>}/>
+      <div style={{fontSize:22,fontWeight:900}}>المجهر واكتشاف الخلية</div><div style={{color:'#667085',marginTop:4}}>الصف الخامس · العلوم والحياة · الفصل الأول · الوحدة الأولى: الخلية</div>
+      <div style={{marginTop:13}}><ButtonRow><ActionLink href="/admin/current-semester">إدارة الدرس والمصادر</ActionLink><ActionLink href="/student" tone="secondary">فتح تجربة الطالب</ActionLink><ActionLink href="/student/register" tone="secondary">إنشاء طالب تجريبي</ActionLink></ButtonRow></div>
+    </Card>
+
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:14}}>
+      <MetricCard label="الطلاب" value={learning?.students??'—'}/><MetricCard label="الكتب" value={learning?.books??'—'}/><MetricCard label="الدروس" value={learning?.lessons??'—'}/><MetricCard label="الرزم" value={learning?.source_packages??'—'}/><MetricCard label="AI Jobs" value={learning?.ai_jobs??'—'}/><MetricCard label="محاولات الأسئلة" value={learning?.question_attempts??'—'}/><MetricCard label="Root gaps" value={learning?.root_gaps_found??'—'} tone={learning?.root_gaps_found?'warn':'neutral'}/><MetricCard label="تحتاج دعمًا" value={learning?.skills_needing_support_rows??'—'} tone={learning?.skills_needing_support_rows?'warn':'neutral'}/>
+    </div>
+
+    <Card style={{marginBottom:14}}>
+      <SectionHeader title="مسار صناعة المحتوى" description={currentPackage}/>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:9}}>{[
+        ['1','المصدر','/admin/current-semester'],['2','Source Review','/admin/source-link-review'],['3','Skill Mapping','/admin/skill-mapping'],['4','Generation','/admin/lesson-generation'],['5','QA / Staging','/admin/staging'],['6','Release Gate','/admin/release'],
+      ].map(([n,label,href])=><a key={n} href={href} style={{padding:13,border:'1px solid #e6ebf2',borderRadius:13,textDecoration:'none',color:'#14213d',background:'#fafbfc'}}><div style={{fontSize:11,color:'#176b3a',fontWeight:900}}>المرحلة {n}</div><strong style={{display:'block',marginTop:4}}>{label}</strong></a>)}</div>
+    </Card>
+
+    {readiness&&<Card style={{marginBottom:14,background:readiness.ready?'#f3fcf6':'#fffaf0',borderColor:readiness.ready?'#bfe4cb':'#f0d89b'}}>
+      <SectionHeader title="Production Readiness" description="هذه لا تمنع الـBeta المعزول، لكنها تمنع تحويله إلى إطلاق إنتاجي قبل تجهيز البيئة." aside={<StatusPill tone={readiness.ready?'good':'warn'}>{passed}/{total} checks</StatusPill>}/>
+      <div style={{height:9,background:'#edf0f4',borderRadius:99,overflow:'hidden',marginBottom:12}}><div style={{height:'100%',width:`${total?Math.round(passed/total*100):0}%`,background:readiness.ready?'#176b3a':'#d28a00'}}/></div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:8}}>{Object.entries(readiness.checks).map(([key,ok])=><div key={key} style={{padding:'10px 11px',borderRadius:10,background:'#fff',border:'1px solid #edf0f4',display:'flex',gap:8}}><strong style={{color:ok?'#067647':'#b42318'}}>{ok?'✓':'✗'}</strong><span style={{fontSize:13}}>{readinessLabels[key]||key}</span></div>)}</div>
+      {!!readiness.blockers?.length&&<div style={{marginTop:11}}><Notice tone="warn"><strong>Production blockers:</strong> {readiness.blockers.join(' · ')}</Notice></div>}
+    </Card>}
+
+    <Card>
+      <SectionHeader title="أدوات إضافية" description="للفحص والتطوير والتحليلات."/>
+      <ButtonRow><ActionLink href="/admin/current-semester/matrix" tone="secondary">مصفوفة الفصل</ActionLink><ActionLink href="/admin/source-discovery" tone="secondary">اكتشاف المصادر</ActionLink><ActionLink href="/admin/source-policy" tone="secondary">صلاحيات المصادر</ActionLink><ActionLink href="/admin/importer" tone="secondary">المستورد</ActionLink><ActionLink href="/admin/analytics" tone="secondary">Learning Health</ActionLink><ActionLink href="/admin/improvement" tone="secondary">تحسين المحتوى</ActionLink></ButtonRow>
+      {learning&&<div style={{marginTop:13}}><Notice tone="info">معدل الإجابات الصحيحة الحالي: <strong>{learning.correct_rate_percent}%</strong></Notice></div>}
+    </Card>
+  </AdminShell>;
 }

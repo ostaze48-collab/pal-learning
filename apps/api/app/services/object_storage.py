@@ -35,21 +35,32 @@ def storage_configuration() -> StorageConfiguration:
             missing=('SUPPORTED_STORAGE_BACKEND',),
         )
 
-    bucket = os.getenv('S3_BUCKET') or os.getenv('R2_BUCKET')
-    endpoint = os.getenv('S3_ENDPOINT_URL') or os.getenv('R2_ENDPOINT_URL')
-    access_key = os.getenv('S3_ACCESS_KEY_ID') or os.getenv('R2_ACCESS_KEY_ID')
-    secret_key = os.getenv('S3_SECRET_ACCESS_KEY') or os.getenv('R2_SECRET_ACCESS_KEY')
-    public_base = os.getenv('S3_PUBLIC_BASE_URL') or os.getenv('R2_PUBLIC_BASE_URL')
+    is_r2 = backend == 'R2'
+    bucket = os.getenv('R2_BUCKET') if is_r2 else os.getenv('S3_BUCKET')
+    endpoint = os.getenv('R2_ENDPOINT_URL') if is_r2 else os.getenv('S3_ENDPOINT_URL')
+    access_key = os.getenv('R2_ACCESS_KEY_ID') if is_r2 else os.getenv('S3_ACCESS_KEY_ID')
+    secret_key = os.getenv('R2_SECRET_ACCESS_KEY') if is_r2 else os.getenv('S3_SECRET_ACCESS_KEY')
+    public_base = os.getenv('R2_PUBLIC_BASE_URL') if is_r2 else os.getenv('S3_PUBLIC_BASE_URL')
 
+    # Compatibility fallback lets an S3-compatible provider use the generic S3 names,
+    # while diagnostics still report the names that match the selected backend.
+    if is_r2:
+        bucket = bucket or os.getenv('S3_BUCKET')
+        endpoint = endpoint or os.getenv('S3_ENDPOINT_URL')
+        access_key = access_key or os.getenv('S3_ACCESS_KEY_ID')
+        secret_key = secret_key or os.getenv('S3_SECRET_ACCESS_KEY')
+        public_base = public_base or os.getenv('S3_PUBLIC_BASE_URL')
+
+    prefix = 'R2' if is_r2 else 'S3'
     missing = []
     if not bucket:
-        missing.append('S3_BUCKET')
+        missing.append(f'{prefix}_BUCKET')
     if not endpoint:
-        missing.append('S3_ENDPOINT_URL')
+        missing.append(f'{prefix}_ENDPOINT_URL')
     if not access_key:
-        missing.append('S3_ACCESS_KEY_ID')
+        missing.append(f'{prefix}_ACCESS_KEY_ID')
     if not secret_key:
-        missing.append('S3_SECRET_ACCESS_KEY')
+        missing.append(f'{prefix}_SECRET_ACCESS_KEY')
 
     return StorageConfiguration(
         backend=backend,
@@ -96,8 +107,12 @@ def persist_source_bytes(
     except ImportError as exc:  # pragma: no cover - dependency is present in production requirements
         raise RuntimeError('boto3 is required for S3-compatible source storage') from exc
 
-    access_key = os.getenv('S3_ACCESS_KEY_ID') or os.getenv('R2_ACCESS_KEY_ID')
-    secret_key = os.getenv('S3_SECRET_ACCESS_KEY') or os.getenv('R2_SECRET_ACCESS_KEY')
+    if config.backend == 'R2':
+        access_key = os.getenv('R2_ACCESS_KEY_ID') or os.getenv('S3_ACCESS_KEY_ID')
+        secret_key = os.getenv('R2_SECRET_ACCESS_KEY') or os.getenv('S3_SECRET_ACCESS_KEY')
+    else:
+        access_key = os.getenv('S3_ACCESS_KEY_ID')
+        secret_key = os.getenv('S3_SECRET_ACCESS_KEY')
     region = os.getenv('S3_REGION', 'auto')
     key = f"curriculum/{checksum[:2]}/{checksum}-{_safe_filename(filename)}"
 

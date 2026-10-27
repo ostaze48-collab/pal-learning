@@ -223,9 +223,16 @@ def run():
                 source_url='https://moe.edu.ps/m/4070',
                 original_filename='moe-current-grade5-science-learning-package',
                 edition='current official Gaza learning package',
-                reliability_score=100, edition_match_score=95, status='DISCOVERED'
+                reliability_score=100, edition_match_score=0, status='DISCOVERED'
             )
             db.add(official_package); db.flush()
+        # Authority and edition evidence are separate. Until the file itself is
+        # imported and analyzed, edition match remains unknown (0), even for an
+        # authoritative Ministry source. Normalize existing seeded databases too.
+        official_package.source_url = 'https://moe.edu.ps/m/4070'
+        official_package.edition = 'current official Gaza learning package'
+        official_package.reliability_score = 100
+        official_package.edition_match_score = 0
 
         # Historical full student book remains only a structure/reference fallback.
         source_file = db.query(SourceFile).filter_by(package_id=package.id, source_type='STUDENT_BOOK').first()

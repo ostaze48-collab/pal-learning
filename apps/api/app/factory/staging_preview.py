@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import base64
+import binascii
+import hmac
 import os
 from datetime import UTC, datetime, timedelta
 
@@ -42,6 +45,23 @@ def _ttl_seconds() -> int:
     return max(60, min(MAX_PREVIEW_TTL_SECONDS, value))
 
 
+def _is_canonical_base64url_segment(segment: str) -> bool:
+    if not segment or '=' in segment:
+        return False
+    try:
+        padding = '=' * ((4 - len(segment) % 4) % 4)
+        decoded = base64.urlsafe_b64decode((segment + padding).encode('ascii'))
+    except (binascii.Error, UnicodeEncodeError, ValueError):
+        return False
+    canonical = base64.urlsafe_b64encode(decoded).rstrip(b'=').decode('ascii')
+    return hmac.compare_digest(canonical, segment)
+
+
+def _is_canonical_compact_jwt(token: str) -> bool:
+    segments = token.split('.')
+    return len(segments) == 3 and all(_is_canonical_base64url_segment(segment) for segment in segments)
+
+
 def create_preview_token(staged_version_id: int, approved_by_user_id: int) -> tuple[str, datetime]:
     now = datetime.now(UTC)
     expires_at = now + timedelta(seconds=_ttl_seconds())
@@ -59,6 +79,8 @@ def create_preview_token(staged_version_id: int, approved_by_user_id: int) -> tu
 
 
 def decode_preview_token(token: str) -> dict:
+    if not _is_canonical_compact_jwt(token):
+        raise HTTPException(401, 'Invalid or expired staging preview token')
     try:
         claims = jwt.decode(
             token,

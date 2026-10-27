@@ -6,7 +6,7 @@ const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
 type Health={version:string;database:{backend:string;persistent:boolean;production_recommended:boolean}};
 type LearningHealth={students:number;books:number;lessons:number;source_packages:number;ai_jobs:number;question_attempts:number;correct_rate_percent:number;root_gaps_found:number;skills_needing_support_rows:number};
-type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;migration_revision?:string|null;migration_head?:string|null;migration_reason?:string|null;ai_provider?:string;production_origins?:string[];bootstrap_password_present?:boolean}};
+type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;migration_revision?:string|null;migration_head?:string|null;migration_reason?:string|null;ai_provider?:string;production_origins?:string[];bootstrap_password_present?:boolean;release_policy?:{direct_legacy_publish_enabled?:boolean;audited_release_transaction_implemented?:boolean}}};
 
 const readinessLabels:Record<string,string>={
   persistent_database:'قاعدة بيانات PostgreSQL دائمة',
@@ -17,6 +17,9 @@ const readinessLabels:Record<string,string>={
   admin_bootstrap_password_configured:'كلمة مرور Bootstrap Admin مُعدة',
   ai_provider_is_real:'مزود AI حقيقي بدل LOCAL_MOCK',
   ai_provider_configured:'مفتاح ونموذج AI مُعدان',
+  source_authority_policy_fail_closed:'Source Authority Policy تعمل بنمط fail-closed',
+  legacy_direct_publish_disabled:'مسار النشر المباشر القديم معطّل',
+  audited_release_transaction_available:'Audited Release Transaction متاح',
 };
 
 export default function Admin(){
@@ -50,6 +53,7 @@ export default function Admin(){
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:8}}>
         {Object.entries(readiness.checks).map(([key,ok])=><div key={key} style={{padding:'9px 10px',borderRadius:9,background:'rgba(255,255,255,.7)'}}>{ok?'✓':'✗'} {readinessLabels[key]||key}</div>)}
       </div>
+      {readiness.details.release_policy&&!readiness.details.release_policy.audited_release_transaction_implemented&&<div style={{marginTop:10,fontSize:13}}>النشر الحقيقي ما زال مغلقًا عمدًا: Final Release Gate يقيس الجاهزية فقط، ولا يوجد حتى الآن transaction مدقق ينقل Staging إلى Live.</div>}
     </section>}
     {!health?.database?.persistent&&health&&!readiness&&<div style={{padding:15,borderRadius:14,background:'#fff4e5',border:'1px solid #ffd59a',marginBottom:16}}><strong>تنبيه جاهزية:</strong> الـAPI يعمل حاليًا على SQLite. هذا مناسب للعرض التجريبي فقط؛ قبل Beta يجب ربط DATABASE_URL بقاعدة PostgreSQL الموجودة على Render.</div>}
     {error&&<div style={{padding:14,borderRadius:12,background:'#ffecec',marginBottom:14}}>{error} <a href="/admin/login">تسجيل دخول الإدارة</a></div>}

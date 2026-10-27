@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..auth.deps import require_admin
 from ..db.deps import get_db
 from ..db.models import ContentCandidate, SourceChunk, SourceFile, User
+from ..db.staging_models import StagedLessonVersion
 
 router = APIRouter(prefix='/factory', tags=['content-factory-candidate-qa'])
 
@@ -158,16 +159,46 @@ def approve_candidate_for_staging(
             'candidate_qa': result,
         })
 
-    validation = dict(candidate.validation_json or {})
-    validation['candidate_qa'] = {
+    existing_stage = db.query(StagedLessonVersion).filter(
+        StagedLessonVersion.candidate_id == candidate.id
+    ).first()
+    if existing_stage:
+        candidate.status = 'APPROVED_FOR_STAGING'
+        db.commit()
+        return {
+            'candidate_id': candidate.id,
+            'staged_version_id': existing_stage.id,
+            'status': candidate.status,
+            'release_readiness': existing_stage.release_readiness,
+            'publication_authorized': False,
+            'duplicate_approval': True,
+        }
+
+    qa_snapshot = {
         **result,
         'checked_at': datetime.now(UTC).isoformat(),
         'checked_by_user_id': admin.id,
     }
+    staged = StagedLessonVersion(
+        lesson_id=candidate.lesson_id,
+        candidate_id=candidate.id,
+        version_label=candidate.version_label,
+        status='STAGING',
+        snapshot_json=candidate.output_json or {},
+        qa_snapshot_json=qa_snapshot,
+        release_readiness=result['release_readiness'],
+        approved_by_user_id=admin.id,
+    )
+    db.add(staged)
+    db.flush()
+
+    validation = dict(candidate.validation_json or {})
+    validation['candidate_qa'] = qa_snapshot
     validation['staging_approval'] = {
         'approved_at': datetime.now(UTC).isoformat(),
         'approved_by_user_id': admin.id,
         'release_readiness': result['release_readiness'],
+        'staged_version_id': staged.id,
         'note': 'Staging approval does not authorize publication.',
     }
     candidate.validation_json = validation
@@ -175,7 +206,56 @@ def approve_candidate_for_staging(
     db.commit()
     return {
         'candidate_id': candidate.id,
+        'staged_version_id': staged.id,
         'status': candidate.status,
         'release_readiness': result['release_readiness'],
         'publication_authorized': False,
+        'duplicate_approval': False,
+    }
+
+
+@router.get('/lessons/{lesson_id}/staged-versions')
+def list_staged_versions(
+    lesson_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    rows = db.query(StagedLessonVersion).filter(
+        StagedLessonVersion.lesson_id == lesson_id
+    ).order_by(StagedLessonVersion.id.desc()).all()
+    return [
+        {
+            'id': row.id,
+            'lesson_id': row.lesson_id,
+            'candidate_id': row.candidate_id,
+            'version_label': row.version_label,
+            'status': row.status,
+            'release_readiness': row.release_readiness,
+            'approved_by_user_id': row.approved_by_user_id,
+            'created_at': row.created_at,
+        }
+        for row in rows
+    ]
+
+
+@router.get('/staged-versions/{staged_version_id}')
+def get_staged_version(
+    staged_version_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    row = db.query(StagedLessonVersion).filter(StagedLessonVersion.id == staged_version_id).first()
+    if not row:
+        raise HTTPException(404, 'Staged lesson version not found')
+    return {
+        'id': row.id,
+        'lesson_id': row.lesson_id,
+        'candidate_id': row.candidate_id,
+        'version_label': row.version_label,
+        'status': row.status,
+        'release_readiness': row.release_readiness,
+        'snapshot': row.snapshot_json,
+        'qa_snapshot': row.qa_snapshot_json,
+        'approved_by_user_id': row.approved_by_user_id,
+        'created_at': row.created_at,
     }

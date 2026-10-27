@@ -150,26 +150,34 @@ def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -
     unknown_skills = []
     cited = 0
     total_citable = 0
-    for section in output.get('sections', []):
-        for block in section.get('blocks', []):
-            total_citable += 1
-            refs = block.get('source_chunk_ids', [])
-            if refs:
-                cited += 1
-            for ref in refs:
-                if ref not in allowed_chunks:
-                    invalid_chunks.append({'where': 'block', 'ref': ref})
-    for question in output.get('questions', []):
+
+    def validate_artifact(item: dict, where: str, *, check_skills: bool = False) -> None:
+        nonlocal cited, total_citable
         total_citable += 1
-        refs = question.get('source_chunk_ids', [])
+        refs = item.get('source_chunk_ids', [])
         if refs:
             cited += 1
         for ref in refs:
             if ref not in allowed_chunks:
-                invalid_chunks.append({'where': 'question', 'ref': ref})
-        for code in question.get('skill_codes', []):
-            if code not in allowed_skills:
-                unknown_skills.append(code)
+                invalid_chunks.append({'where': where, 'ref': ref})
+        if check_skills:
+            for code in item.get('skill_codes', []):
+                if code not in allowed_skills:
+                    unknown_skills.append(code)
+
+    for section in output.get('sections', []):
+        for block in section.get('blocks', []):
+            validate_artifact(block, 'block')
+    for question in output.get('questions', []):
+        validate_artifact(question, 'question', check_skills=True)
+    for item in output.get('summary', []):
+        validate_artifact(item, 'summary')
+    for item in output.get('flashcards', []):
+        validate_artifact(item, 'flashcard')
+    for item in output.get('misconceptions', []):
+        validate_artifact(item, 'misconception', check_skills=True)
+    for item in output.get('remediation_candidates', []):
+        validate_artifact(item, 'remediation', check_skills=True)
 
     provenance_score = round(100 * cited / total_citable, 1) if total_citable else 0.0
     valid = not invalid_chunks and not unknown_skills and provenance_score == 100.0
@@ -182,6 +190,8 @@ def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -
             'allowed_chunk_ids': sorted(allowed_chunks),
             'invalid_chunk_refs': invalid_chunks,
             'unknown_skill_codes': sorted(set(unknown_skills)),
+            'citable_items': total_citable,
+            'cited_items': cited,
             'all_citable_items_have_refs': provenance_score == 100.0,
         },
     )

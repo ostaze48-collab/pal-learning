@@ -36,8 +36,8 @@ class OfficialSourceCatalogEntry:
 
 OFFICIAL_SOURCE_CATALOG: tuple[OfficialSourceCatalogEntry, ...] = (
     OfficialSourceCatalogEntry(
-        source_code='PS.G05.SCI.GAZA.CURRENT',
-        package_code='PS-G05-SCI-S2-2026',
+        source_code='PS.G05.SCI.GAZA.CURRENT.S1',
+        package_code='PS-G05-SCI-S1-2026',
         grade_code='G05',
         subject_code='SCI',
         promoted_source_type='OFFICIAL_PACKAGE',
@@ -47,8 +47,8 @@ OFFICIAL_SOURCE_CATALOG: tuple[OfficialSourceCatalogEntry, ...] = (
         reliability_score=100.0,
         edition_claim='CURRENT_GAZA_LEARNING_PACKAGE_EDITION_TO_VERIFY',
         verification_status='CATALOG_LINK_CONFIRMED',
-        scope_verification_status='TARGET_SEMESTER_SCOPE_UNVERIFIED',
-        required_scope_terms=('الجهاز الهيكلي', 'أجهزة جسم الإنسان'),
+        scope_verification_status='SEMESTER_1_SCOPE_UNVERIFIED',
+        required_scope_terms=('الخلية', 'خصائص المادة', 'الطاقة في حياتنا'),
         verified_on='2026-10-27',
     ),
 )
@@ -76,7 +76,6 @@ def _scope_term_report(text: str, entry: OfficialSourceCatalogEntry) -> dict:
 
 
 def _recalculate_package(db: Session, package: SourcePackage) -> None:
-    # Lazy import avoids making the catalog registry depend on router initialization.
     from .router import update_package_completeness
     update_package_completeness(db, package)
 
@@ -84,10 +83,10 @@ def _recalculate_package(db: Session, package: SourcePackage) -> None:
 def quarantine_unverified_catalog_sources(db: Session) -> dict:
     """Remove unverified catalog links from weighted teaching-source types.
 
-    This also repairs older seed data that registered a ministry grade/subject link
-    directly as OFFICIAL_PACKAGE before the target semester/lesson scope was proven.
-    Extracted content is checked before quarantine so a previously verified-in-text
-    source is not downgraded unnecessarily.
+    The current Grade-5 Science Ministry link belongs to the semester-1 production
+    track. It remains CATALOG_CANDIDATE until extracted text confirms all three
+    semester-1 unit markers. Semester-2 prototype rows are handled separately by
+    the current-semester registry and carry no current authority.
     """
     checked = 0
     quarantined = 0
@@ -239,7 +238,7 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
         'package_completeness': package.completeness_score,
         'package_quality': package.quality_score,
         'sources': sources,
-        'note': 'Catalog sync proves discovery/authority only. Sources remain unweighted CATALOG_CANDIDATE records until extracted content verifies target scope.',
+        'note': 'Catalog sync proves discovery/authority only. Sources remain unweighted CATALOG_CANDIDATE records until extracted content verifies semester-1 scope.',
     }
 
 
@@ -257,6 +256,8 @@ def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_d
     package = db.query(SourcePackage).filter(SourcePackage.id == row.package_id).first()
     if not package:
         raise HTTPException(404, 'Source package not found')
+    if package.package_code != entry.package_code:
+        raise HTTPException(409, 'Catalog source is attached to the wrong semester/package')
 
     report = _scope_term_report(row.extracted_text, entry)
     if report['scope_verified']:
@@ -280,5 +281,5 @@ def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_d
         'edition_match_score': float(row.edition_match_score or 0),
         'package_completeness': package.completeness_score,
         'package_quality': package.quality_score,
-        'note': 'Scope verification does not prove edition match; edition quality remains a separate gate.',
+        'note': 'Scope verification confirms semester 1 only. Edition match remains a separate quality gate.',
     }

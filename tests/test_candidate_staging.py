@@ -103,6 +103,23 @@ def test_candidate_preflight_and_staging_do_not_publish():
     assert data['status'] == 'APPROVED_FOR_STAGING'
     assert data['release_readiness'] == qa_data['release_readiness']
     assert data['publication_authorized'] is False
+    assert data['staged_version_id'] >= 1
+
+    staged_list = client.get('/factory/lessons/1/staged-versions', headers=HEADERS)
+    assert staged_list.status_code == 200, staged_list.text
+    assert any(x['id'] == data['staged_version_id'] for x in staged_list.json())
+
+    staged = client.get(f"/factory/staged-versions/{data['staged_version_id']}", headers=HEADERS)
+    assert staged.status_code == 200, staged.text
+    staged_data = staged.json()
+    assert staged_data['candidate_id'] == candidate_id
+    assert staged_data['snapshot']['sections'][0]['title'] == 'لماذا نحتاج إلى الهيكل؟'
+    assert staged_data['qa_snapshot']['preflight_status'] == 'PASS'
+
+    second_approval = client.post(f'/factory/candidates/{candidate_id}/approve-staging', headers=HEADERS)
+    assert second_approval.status_code == 200
+    assert second_approval.json()['staged_version_id'] == data['staged_version_id']
+    assert second_approval.json()['duplicate_approval'] is True
 
     lesson = client.get('/curriculum/lessons/1').json()
     # Staging approval is intentionally separate from the live lesson state.

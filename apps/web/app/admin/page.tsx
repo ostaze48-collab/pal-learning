@@ -35,7 +35,7 @@ export default function Admin(){
     <Card style={{marginBottom:14,background:'linear-gradient(135deg,#f3fbf5,#f3f7ff)',borderColor:'#cfe4d6'}}>
       <SectionHeader title="نطاق النسخة التجريبية" description="كل واجهات المنصة تعمل، لكن الطالب يرى درسًا واحدًا فقط. لا نستخدم حالة PUBLISHED لهذا المحتوى؛ التجربة تعمل عبر Demo API معزولة." aside={<StatusPill tone="good">Single Lesson Beta</StatusPill>}/>
       <div style={{fontSize:22,fontWeight:900}}>المجهر واكتشاف الخلية</div><div style={{color:'#667085',marginTop:4}}>الصف الخامس · العلوم والحياة · الفصل الأول · الوحدة الأولى: الخلية</div>
-      <div style={{marginTop:13}}><ButtonRow><ActionLink href="/admin/current-semester">إدارة الدرس والمصادر</ActionLink><ActionLink href="/student" tone="secondary">فتح تجربة الطالب</ActionLink><ActionLink href="/student/register" tone="secondary">إنشاء طالب تجريبي</ActionLink></ButtonRow></div>
+      <div style={{marginTop:13}}><ButtonRow><ActionLink href="/admin/beta">Beta Operations</ActionLink><ActionLink href="/admin/current-semester" tone="secondary">إدارة الدرس والمصادر</ActionLink><ActionLink href="/student" tone="secondary">فتح تجربة الطالب</ActionLink><ActionLink href="/student/register" tone="secondary">إنشاء طالب تجريبي</ActionLink></ButtonRow></div>
     </Card>
 
     <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:14}}>
@@ -58,7 +58,7 @@ export default function Admin(){
 
     <Card>
       <SectionHeader title="أدوات إضافية" description="للفحص والتطوير والتحليلات."/>
-      <ButtonRow><ActionLink href="/admin/current-semester/matrix" tone="secondary">مصفوفة الفصل</ActionLink><ActionLink href="/admin/source-discovery" tone="secondary">اكتشاف المصادر</ActionLink><ActionLink href="/admin/source-policy" tone="secondary">صلاحيات المصادر</ActionLink><ActionLink href="/admin/importer" tone="secondary">المستورد</ActionLink><ActionLink href="/admin/analytics" tone="secondary">Learning Health</ActionLink><ActionLink href="/admin/improvement" tone="secondary">تحسين المحتوى</ActionLink></ButtonRow>
+      <ButtonRow><ActionLink href="/admin/beta" tone="secondary">Beta Operations</ActionLink><ActionLink href="/admin/current-semester/matrix" tone="secondary">مصفوفة الفصل</ActionLink><ActionLink href="/admin/source-discovery" tone="secondary">اكتشاف المصادر</ActionLink><ActionLink href="/admin/source-policy" tone="secondary">صلاحيات المصادر</ActionLink><ActionLink href="/admin/importer" tone="secondary">المستورد</ActionLink><ActionLink href="/admin/analytics" tone="secondary">Learning Health</ActionLink><ActionLink href="/admin/improvement" tone="secondary">تحسين المحتوى</ActionLink></ButtonRow>
       {learning&&<div style={{marginTop:13}}><Notice tone="info">معدل الإجابات الصحيحة الحالي: <strong>{learning.correct_rate_percent}%</strong></Notice></div>}
     </Card>
   </AdminShell>;

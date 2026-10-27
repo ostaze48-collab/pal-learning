@@ -36,11 +36,34 @@ SOURCE_WEIGHTS = {
     'VIDEO_REFERENCE': 2,
 }
 
+PRIMARY_TEACHING_SOURCE_ORDER = ('OFFICIAL_PACKAGE', 'STUDENT_BOOK')
+
+
+def select_primary_teaching_source(files: list[SourceFile]) -> SourceFile | None:
+    """Prefer current official material and never silently mix editions.
+
+    A text-extractable OFFICIAL_PACKAGE is the first teaching source. If none is
+    available, a text-extractable STUDENT_BOOK is used. Other source types can
+    validate or enrich content but are not treated as the teaching backbone.
+    """
+    for source_type in PRIMARY_TEACHING_SOURCE_ORDER:
+        candidates = [x for x in files if x.source_type == source_type and x.extracted_text]
+        if candidates:
+            return max(
+                candidates,
+                key=lambda x: (
+                    float(x.reliability_score or 0),
+                    float(x.edition_match_score or 0),
+                    int(x.id or 0),
+                ),
+            )
+    return None
+
 
 def update_package_completeness(db: Session, package: SourcePackage) -> None:
     types = {x.source_type for x in db.query(SourceFile).filter(SourceFile.package_id == package.id).all()}
     package.completeness_score = float(sum(weight for key, weight in SOURCE_WEIGHTS.items() if key in types))
-    if 'STUDENT_BOOK' in types:
+    if 'STUDENT_BOOK' in types or 'OFFICIAL_PACKAGE' in types:
         package.status = 'INGESTING' if package.completeness_score < 100 else 'READY_FOR_PROCESSING'
 
 
@@ -124,13 +147,13 @@ def process_package(package_id: int, db: Session = Depends(get_db)):
     if not package:
         raise HTTPException(404, 'Package not found')
     files = db.query(SourceFile).filter(SourceFile.package_id == package_id).order_by(SourceFile.id).all()
-    if not any(x.source_type == 'STUDENT_BOOK' and x.extracted_text for x in files):
-        raise HTTPException(409, 'A text-extractable STUDENT_BOOK is required before processing')
+    primary_source = select_primary_teaching_source(files)
+    if not primary_source:
+        raise HTTPException(409, 'A text-extractable OFFICIAL_PACKAGE or STUDENT_BOOK is required before processing')
 
-    student_book = next(x for x in files if x.source_type == 'STUDENT_BOOK' and x.extracted_text)
-    structure = detect_curriculum_structure(student_book.extracted_text or '')
+    structure = detect_curriculum_structure(primary_source.extracted_text or '')
     gateway = AIGateway()
-    ai_result = gateway.run('EXTRACT_STRUCTURE', {'text': student_book.extracted_text or ''}, 'FAST')
+    ai_result = gateway.run('EXTRACT_STRUCTURE', {'text': primary_source.extracted_text or ''}, 'FAST')
     job = AIJob(
         job_type='PROCESS_PACKAGE',
         source_type='SOURCE_PACKAGE',
@@ -144,6 +167,9 @@ def process_package(package_id: int, db: Session = Depends(get_db)):
             'structure': structure,
             'ai_gateway': ai_result.output,
             'files_processed': len(files),
+            'primary_source_file_id': primary_source.id,
+            'primary_source_type': primary_source.source_type,
+            'primary_source_edition': primary_source.edition,
         },
         started_at=datetime.utcnow(),
         completed_at=datetime.utcnow(),
@@ -176,10 +202,11 @@ def link_lessons_to_sources(package_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, 'Package not found')
     unit_ids = [x.id for x in db.query(Unit).filter(Unit.book_id == package.book_id).all()]
     lessons = db.query(Lesson).filter(Lesson.unit_id.in_(unit_ids)).all() if unit_ids else []
-    source_ids = [x.id for x in db.query(SourceFile).filter(
-        SourceFile.package_id == package_id, SourceFile.source_type == 'STUDENT_BOOK'
-    ).all()]
-    chunks = db.query(SourceChunk).filter(SourceChunk.source_file_id.in_(source_ids)).all() if source_ids else []
+    files = db.query(SourceFile).filter(SourceFile.package_id == package_id).order_by(SourceFile.id).all()
+    primary_source = select_primary_teaching_source(files)
+    if not primary_source:
+        raise HTTPException(409, 'No text-extractable official package or student book is available for lesson linking')
+    chunks = db.query(SourceChunk).filter(SourceChunk.source_file_id == primary_source.id).all()
     created = 0
     candidates = []
     for lesson in lessons:
@@ -188,7 +215,12 @@ def link_lessons_to_sources(package_id: int, db: Session = Depends(get_db)):
             key=lambda x: x[0], reverse=True
         )
         if not scored or scored[0][0] < 0.5:
-            candidates.append({'lesson_id': lesson.id, 'lesson_title': lesson.title, 'linked': False})
+            candidates.append({
+                'lesson_id': lesson.id,
+                'lesson_title': lesson.title,
+                'linked': False,
+                'primary_source_type': primary_source.source_type,
+            })
             continue
         best_score = scored[0][0]
         # Keep all chunks tied with the strongest high-confidence match, capped for safety.
@@ -200,14 +232,25 @@ def link_lessons_to_sources(package_id: int, db: Session = Depends(get_db)):
             if not existing:
                 db.add(LessonSourceLink(
                     lesson_id=lesson.id, source_chunk_id=chunk.id, relation='TEACHING_SOURCE',
-                    confidence=score, source_method='TITLE_MATCH_V1',
+                    confidence=score, source_method='PRIMARY_SOURCE_TITLE_MATCH_V1',
                     status='VERIFIED_CANDIDATE' if score >= 0.9 else 'CANDIDATE'
                 ))
                 created += 1
             candidates.append({
-                'lesson_id': lesson.id, 'lesson_title': lesson.title, 'linked': True,
-                'source_chunk_id': chunk.id, 'page_number': chunk.page_number,
+                'lesson_id': lesson.id,
+                'lesson_title': lesson.title,
+                'linked': True,
+                'source_file_id': primary_source.id,
+                'source_type': primary_source.source_type,
+                'source_chunk_id': chunk.id,
+                'page_number': chunk.page_number,
                 'confidence': score,
             })
     db.commit()
-    return {'package_id': package_id, 'created_links': created, 'candidates': candidates}
+    return {
+        'package_id': package_id,
+        'primary_source_file_id': primary_source.id,
+        'primary_source_type': primary_source.source_type,
+        'created_links': created,
+        'candidates': candidates,
+    }

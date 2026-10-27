@@ -8,13 +8,14 @@ from sqlalchemy import text
 from .db.base import Base, engine
 from .curriculum.router import router as curriculum_router
 from .importer.router import router as importer_router
+from .importer.url_router import router as importer_url_router
 from .learning.router import router as learning_router
 from .qa.router import router as qa_router
 from .admin.router import router as admin_router
 from .factory.router import router as factory_router
 from .auth.router import router as auth_router
 
-VERSION = '1.1.0'
+VERSION = '1.2.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -57,6 +58,7 @@ def health():
             'structured-ai-output', 'content-candidates', 'retention', 'daily-plan',
             'improvement-queue', 'admin-auth', 'revocable-sessions',
             'student-session-binding', 'official-package-priority', 'readiness-check',
+            'safe-registered-source-fetch', 'provider-backed-content-factory',
         ],
     }
 
@@ -77,6 +79,7 @@ def ready():
 
 app.include_router(curriculum_router)
 app.include_router(importer_router)
+app.include_router(importer_url_router)
 app.include_router(learning_router)
 app.include_router(qa_router)
 app.include_router(admin_router)

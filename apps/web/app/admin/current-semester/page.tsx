@@ -121,6 +121,7 @@ export default function CurrentSemesterPage(){
         <h2 style={{marginTop:0}}>أول درس إنتاجي: {firstLesson.title}</h2>
         <p>الهيكل التعليمي موجود كـDraft فقط. لا يتم توليد محتوى factual قبل أن يمر المصدر والمهارات عبر بوابات الجاهزية.</p>
         <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <a href="/admin/skill-mapping" style={{padding:'9px 12px',borderRadius:9,background:'#f4f0ff',color:'#5a3a9b',textDecoration:'none',fontWeight:700}}>مراجعة Skill Mapping</a>
           <button disabled={busy===firstLesson.id} onClick={checkReadiness} style={{padding:'9px 12px',borderRadius:9,border:'1px solid #b49c48',background:'white'}}>فحص Generation Readiness</button>
           <button disabled={busy===firstLesson.id||!readiness?.queue_ready} onClick={queueGeneration} style={{padding:'9px 12px',borderRadius:9,border:0,background:readiness?.queue_ready?'#176b3a':'#9aa3ad',color:'white'}}>إنشاء Generation Job</button>
         </div>

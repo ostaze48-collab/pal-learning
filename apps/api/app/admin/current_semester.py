@@ -7,6 +7,7 @@ from ..auth.deps import require_admin
 from ..db.current_semester import CURRENT_BOOK_CODE, CURRENT_PACKAGE_CODE, MINISTRY_G5_SCIENCE_URL
 from ..db.deps import get_db
 from ..db.models import AIJob, Book, Lesson, LessonSkill, LessonSourceLink, SourceFile, SourcePackage, Unit
+from ..db.visual_models import VisualAsset
 from ..factory.generation_readiness import calculate_generation_readiness
 from ..services.object_storage import storage_configuration
 
@@ -168,6 +169,10 @@ def current_semester_pipeline(
     candidate_links = 0
     verified_links = 0
     linked_skills = 0
+    visual_assets = 0
+    visual_pending = 0
+    visual_cleared = 0
+    visual_redraw = 0
     latest_skill_job = None
     latest_generation_job = None
     readiness = None
@@ -183,6 +188,13 @@ def current_semester_pipeline(
             LessonSourceLink.status == 'VERIFIED',
         ).count()
         linked_skills = db.query(LessonSkill).filter(LessonSkill.lesson_id == lesson.id).count()
+        visual_query = db.query(VisualAsset).filter(VisualAsset.lesson_id == lesson.id)
+        visual_assets = visual_query.count()
+        visual_pending = visual_query.filter(VisualAsset.rights_status == 'REVIEW_REQUIRED').count()
+        visual_cleared = visual_query.filter(
+            VisualAsset.rights_status == 'CLEARED', VisualAsset.status == 'APPROVED'
+        ).count()
+        visual_redraw = visual_query.filter(VisualAsset.rights_status == 'REDRAW_REQUIRED').count()
         latest_skill_job = db.query(AIJob).filter(
             AIJob.source_type == 'LESSON', AIJob.source_id == lesson.id, AIJob.job_type == 'EXTRACT_SKILLS'
         ).order_by(AIJob.id.desc()).first()
@@ -208,21 +220,53 @@ def current_semester_pipeline(
         action=None if verified_links > 0 else ('REVIEW_SOURCE_LINKS' if candidate_links > 0 else None),
     ))
 
+    if verified_links <= 0:
+        visual_stage = _stage(
+            'VISUAL_ASSETS', 'صور الكتاب والمراجعة البصرية', 'BLOCKED',
+            detail='اعتمد Source Chunk واحدًا على الأقل قبل استخراج صفحات الكتاب.',
+        )
+    elif visual_assets == 0:
+        visual_stage = _stage(
+            'VISUAL_ASSETS', 'صور الكتاب والمراجعة البصرية', 'READY',
+            detail='لم تُستخرج صفحات الكتاب المرتبطة بالدرس بعد.',
+            action='OPEN_VISUAL_ASSETS',
+        )
+    elif visual_pending > 0:
+        visual_stage = _stage(
+            'VISUAL_ASSETS', 'صور الكتاب والمراجعة البصرية', 'READY',
+            detail=f'{visual_assets} أصل بصري · {visual_pending} ينتظر مراجعة الحقوق · {visual_cleared} CLEARED.',
+            action='OPEN_VISUAL_ASSETS',
+        )
+    elif visual_cleared > 0:
+        visual_stage = _stage(
+            'VISUAL_ASSETS', 'صور الكتاب والمراجعة البصرية', 'DONE',
+            detail=f'{visual_cleared} أصل بصري CLEARED وجاهز للدرس · {visual_redraw} يحتاج إعادة رسم.',
+        )
+    else:
+        visual_stage = _stage(
+            'VISUAL_ASSETS', 'صور الكتاب والمراجعة البصرية', 'READY',
+            detail=f'تمت مراجعة {visual_assets} أصل، لكن لا يوجد أصل CLEARED بعد. REDRAW_REQUIRED={visual_redraw}.',
+            action='OPEN_VISUAL_ASSETS',
+        )
+    stages.append(visual_stage)
+
     skill_ready = linked_skills > 0
+    visual_review_passed = visual_stage['status'] == 'DONE'
     stages.append(_stage(
         'SKILL_MAPPING', 'استخراج واعتماد المهارات',
-        'DONE' if skill_ready else ('READY' if verified_links > 0 else 'BLOCKED'),
+        'DONE' if skill_ready else ('READY' if verified_links > 0 and visual_review_passed else 'BLOCKED'),
         detail=(
             f'{linked_skills} مهارة مرتبطة بالدرس.' if skill_ready else
             f'آخر Skill Mapping Job: {latest_skill_job.status}' if latest_skill_job else
-            'لا توجد مهارات معتمدة للدرس بعد.'
+            'لا توجد مهارات معتمدة للدرس بعد.' if visual_review_passed else
+            'أكمل مراجعة الأصول البصرية قبل Skill Mapping في المسار الإنتاجي.'
         ),
-        action=None if skill_ready else ('OPEN_SKILL_MAPPING' if verified_links > 0 else None),
+        action=None if skill_ready else ('OPEN_SKILL_MAPPING' if verified_links > 0 and visual_review_passed else None),
     ))
 
     if lesson:
         readiness = calculate_generation_readiness(db, lesson.id)
-    generation_ready = bool(readiness and readiness['queue_ready'])
+    generation_ready = bool(readiness and readiness['queue_ready']) and visual_review_passed
     generation_status = latest_generation_job.status if latest_generation_job else None
 
     if generation_status == 'OUTPUT_VALIDATED':
@@ -254,7 +298,7 @@ def current_semester_pipeline(
     else:
         generation_stage = _stage(
             'LESSON_GENERATION', 'توليد حزمة الدرس', 'READY' if generation_ready else 'BLOCKED',
-            detail=('كل بوابات Queue جاهزة.' if generation_ready else ' · '.join((readiness or {}).get('blockers') or ['غير جاهز'])),
+            detail=('كل بوابات Queue + Visual Review جاهزة.' if generation_ready else ' · '.join((readiness or {}).get('blockers') or ['غير جاهز بصريًا أو أكاديميًا'])),
             action='QUEUE_GENERATION' if generation_ready else None,
         )
     stages.append(generation_stage)
@@ -275,7 +319,15 @@ def current_semester_pipeline(
             'page_count': source.page_count, 'edition_match_score': source.edition_match_score,
             'durable': _source_is_durable(source),
         } if source else None,
-        'counts': {'candidate_source_links': candidate_links, 'verified_source_links': verified_links, 'linked_skills': linked_skills},
+        'counts': {
+            'candidate_source_links': candidate_links,
+            'verified_source_links': verified_links,
+            'linked_skills': linked_skills,
+            'visual_assets': visual_assets,
+            'visual_pending': visual_pending,
+            'visual_cleared': visual_cleared,
+            'visual_redraw': visual_redraw,
+        },
         'stages': stages,
         'next_stage': next_stage,
         'generation_readiness': readiness,

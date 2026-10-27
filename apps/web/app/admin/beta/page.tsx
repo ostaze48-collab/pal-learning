@@ -20,7 +20,7 @@ type Dashboard={
 type DemoHealth={ready:boolean;scope:string;lesson_code:string;checks:Record<string,boolean>;counts:{sections:number;blocks:number;questions:number;skills:number};status:string|null};
 
 const checkLabels:Record<string,string>={
-  experimental_demo_enabled:'وضع Beta مفعّل',single_target_lesson_exists:'الدرس التجريبي موجود',target_lesson_is_beta:'حالة الدرس BETA',seven_learning_sections:'7 محطات تعلم',interactive_blocks_present:'البلوكات التفاعلية موجودة',five_demo_questions:'5 أسئلة تجريبية',four_demo_skills:'4 مهارات مرتبطة بالدرس',
+  experimental_demo_enabled:'وضع Beta مفعّل',single_target_lesson_exists:'الدرس التجريبي موجود',target_lesson_is_beta:'حالة الدرس BETA',seven_learning_sections:'7 محطات تعلم',interactive_blocks_present:'البلوكات التفاعلية موجودة',microscope_zoom_activity_present:'نشاط تكبير الفلين التفاعلي موجود',five_demo_questions:'5 أسئلة تجريبية',four_demo_skills:'4 مهارات مرتبطة بالدرس',
 };
 const categoryLabels:Record<string,string>={WRONG_INFORMATION:'معلومة خاطئة',WRONG_ANSWER:'إجابة خاطئة',UNCLEAR_EXPLANATION:'شرح غير واضح',TOO_DIFFICULT:'صعب جدًا',LANGUAGE_ERROR:'خطأ لغوي',TECHNICAL_ISSUE:'مشكلة تقنية',OTHER:'أخرى'};
 

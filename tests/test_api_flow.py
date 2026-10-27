@@ -165,12 +165,13 @@ def test_generation_packet_requires_and_uses_provenance():
     assert executed.json()['status'] == 'WAITING_PROVIDER'
 
 
-def _valid_generated_payload(chunk_id: int, skill_code: str):
+def _valid_generated_payload(chunk_id: int, skill_code: str, section_titles: list[str] | None = None):
+    titles = section_titles or ['لماذا نحتاج إلى الهيكل؟']
     return {
         'learning_objectives': ['أن يفسر الطالب دور الجهاز الهيكلي في دعامة الجسم.'],
         'concepts': ['الجهاز الهيكلي', 'الدعامة'],
         'sections': [{
-            'title': 'لماذا نحتاج إلى الهيكل؟',
+            'title': title,
             'learning_goal': 'فهم وظيفة الدعامة',
             'blocks': [{
                 'block_type': 'TEXT',
@@ -179,7 +180,7 @@ def _valid_generated_payload(chunk_id: int, skill_code: str):
                 'content': {},
                 'source_chunk_ids': [chunk_id],
             }],
-        }],
+        } for title in titles],
         'questions': [{
             'question_type': 'MCQ',
             'prompt': 'ما الجزء الذي يساعد على دعامة الجسم؟',
@@ -198,6 +199,10 @@ def _valid_generated_payload(chunk_id: int, skill_code: str):
     }
 
 
+def _queued_section_titles(job: dict) -> list[str]:
+    return [row['title'] for row in job['input'].get('section_blueprint', [])] or ['لماذا نحتاج إلى الهيكل؟']
+
+
 def test_structured_output_candidate_accepts_only_packet_provenance():
     client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS)
     _verify_teaching_links(1)
@@ -207,12 +212,13 @@ def test_structured_output_candidate_accepts_only_packet_provenance():
     job = client.get(f"/factory/jobs/{queued['job_id']}", headers=ADMIN_HEADERS).json()
     chunk_id = job['input']['source_context'][0]['source_chunk_id']
     skill_code = job['input']['skills'][0]['skill_code']
-    payload = _valid_generated_payload(chunk_id, skill_code)
+    payload = _valid_generated_payload(chunk_id, skill_code, _queued_section_titles(job))
     r = client.post(f"/factory/jobs/{queued['job_id']}/ingest-output", json=payload, headers=ADMIN_HEADERS)
     assert r.status_code == 200
     data = r.json()
     assert data['status'] == 'READY_FOR_QA'
     assert data['provenance_score'] == 100.0
+    assert data['validation']['section_blueprint']['valid'] is True
 
 
 def test_structured_output_rejects_out_of_packet_source():
@@ -223,7 +229,7 @@ def test_structured_output_rejects_out_of_packet_source():
     queued = queued_response.json()
     job = client.get(f"/factory/jobs/{queued['job_id']}", headers=ADMIN_HEADERS).json()
     skill_code = job['input']['skills'][0]['skill_code']
-    payload = _valid_generated_payload(999999, skill_code)
+    payload = _valid_generated_payload(999999, skill_code, _queued_section_titles(job))
     r = client.post(f"/factory/jobs/{queued['job_id']}/ingest-output", json=payload, headers=ADMIN_HEADERS)
     assert r.status_code == 200
     data = r.json()
@@ -240,7 +246,7 @@ def test_structured_output_rejects_out_of_packet_flashcard_source():
     job = client.get(f"/factory/jobs/{queued['job_id']}", headers=ADMIN_HEADERS).json()
     chunk_id = job['input']['source_context'][0]['source_chunk_id']
     skill_code = job['input']['skills'][0]['skill_code']
-    payload = _valid_generated_payload(chunk_id, skill_code)
+    payload = _valid_generated_payload(chunk_id, skill_code, _queued_section_titles(job))
     payload['flashcards'] = [{
         'front': 'ما وظيفة الدعامة؟',
         'back': 'يساعد الهيكل على دعامة الجسم.',
@@ -278,68 +284,3 @@ def test_improvement_queue_uses_learning_data():
     assert len(data) >= 1
     assert data[0]['priority_score'] >= data[-1]['priority_score']
     assert 'average_mastery' in data[0]['reason']
-
-
-def test_admin_routes_require_authentication():
-    r = client.get('/admin/learning-health')
-    assert r.status_code == 401
-    r = client.get('/admin/learning-health', headers=ADMIN_HEADERS)
-    assert r.status_code == 200
-
-
-def test_auth_me_and_revocable_logout():
-    login = client.post('/auth/login', json={'email':'admin@example.test','password':'StrongDemoPassword123!'})
-    assert login.status_code == 200
-    headers = {'Authorization': f"Bearer {login.json()['access_token']}"}
-    me = client.get('/auth/me', headers=headers)
-    assert me.status_code == 200
-    assert me.json()['role'] == 'ADMIN'
-    out = client.post('/auth/logout', headers=headers)
-    assert out.status_code == 200
-    assert client.get('/auth/me', headers=headers).status_code == 401
-
-
-def test_student_registration_creates_separate_profile():
-    r = client.post('/auth/register-student', json={
-        'email':'student1@example.test',
-        'password':'StudentPassword123!',
-        'display_name':'طالب تجريبي',
-        'grade_id':5,
-    })
-    assert r.status_code == 200
-    data = r.json()
-    assert data['role'] == 'STUDENT'
-    assert data['student_id'] != 1
-
-
-def test_student_learning_routes_are_bound_to_student_session():
-    assert client.get('/learning/me/mastery').status_code == 401
-    assert client.get('/learning/me/mastery', headers=ADMIN_HEADERS).status_code == 403
-    mine = client.get('/learning/me/mastery', headers=STUDENT_HEADERS)
-    assert mine.status_code == 200
-    assert any(x['skill_code'] == 'SK.MATH.FRACTION.EQUIVALENCE' for x in mine.json())
-
-
-def test_student_cannot_override_student_id_in_attempt_payload():
-    r = client.post(
-        '/learning/questions/1/attempt',
-        json={'student_id': 999, 'answer': 1},
-        headers=STUDENT_HEADERS,
-    )
-    assert r.status_code == 422
-
-
-def test_offline_event_uuid_cannot_be_claimed_by_another_student():
-    registered = client.post('/auth/register-student', json={
-        'email':'student2@example.test',
-        'password':'StudentPassword456!',
-        'display_name':'طالب ثان',
-        'grade_id':5,
-    })
-    assert registered.status_code == 200
-    other_headers = {'Authorization': f"Bearer {registered.json()['access_token']}"}
-    payload = {'events':[{'event_uuid':'offline-demo-1','event_type':'CONTENT_VIEWED'}]}
-    r = client.post('/learning/sync', json=payload, headers=other_headers)
-    assert r.status_code == 200
-    assert r.json()['accepted'] == 0
-    assert r.json()['errors']

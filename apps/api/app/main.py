@@ -31,10 +31,11 @@ from .factory.skill_mapping import router as skill_mapping_router
 from .factory.candidate_qa import router as candidate_qa_router
 from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
+from .factory.release_transaction import router as release_transaction_router
 from .factory.staging_preview import router as staging_preview_router
 from .auth.router import router as auth_router
 
-VERSION = '1.15.0'
+VERSION = '1.16.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -100,6 +101,7 @@ def health():
             'short-lived-staging-preview-links',
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
             'release-manifest-sha256', 'direct-legacy-publish-disabled',
+            'audited-atomic-release-transaction',
             'production-readiness-diagnostics', 'alembic-migration-gate',
             'official-source-catalog', 'source-discovery-catalog', 'catalog-scope-quarantine',
             'unreleased-demo-publication-quarantine', 'current-curriculum-plan-scope-evidence',
@@ -155,5 +157,6 @@ app.include_router(skill_mapping_router)
 app.include_router(candidate_qa_router)
 app.include_router(academic_qa_router)
 app.include_router(release_gate_router)
+app.include_router(release_transaction_router)
 app.include_router(staging_preview_router)
 app.include_router(auth_router)

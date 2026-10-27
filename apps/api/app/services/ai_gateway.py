@@ -67,11 +67,32 @@ class AIGateway:
         except json.JSONDecodeError:
             return {'text': raw, 'parse_status': 'NON_JSON_OUTPUT'}
 
+    @staticmethod
+    def _visual_instruction(packet: dict) -> str:
+        visual_assets = packet.get('visual_assets') or []
+        if not visual_assets:
+            return (
+                ' No server-approved visual_assets are available for this generation job. '
+                'Do not emit IMAGE blocks and do not invent image URLs, textbook figures, page crops, '
+                'hotspot coordinates, source pages, or rights decisions. Use supported non-image interactions instead.'
+            )
+        return (
+            ' Treat the lesson as visual-first when a supplied visual asset directly supports the current concept. '
+            'The only visual assets authorized for IMAGE blocks are the following server-approved visual_assets: '
+            + json.dumps(visual_assets, ensure_ascii=False)
+            + '. For every IMAGE block, copy src, low_data_src when present, source_label, source_page, asset_kind, '
+              'rights_status, and hotspots exactly from one supplied asset. Never invent, move, rename, or add hotspots. '
+              'Never change rights_status and never claim CLEARED unless the supplied asset is already CLEARED. '
+              'Use IMAGE only for CLEARED assets. You may write an age-appropriate observe_question, concise explanation, '
+              'and caption grounded by the block source_chunk_ids. Structure visual teaching as Observe -> Inspect -> '
+              'Explain briefly -> Apply. Prefer the visual surface over long lecture text when it teaches the concept better.'
+        )
+
     def _instructions_for_task(self, task: str, payload: dict) -> str:
         common = (
             'You are a curriculum-grounded education content processor. '
             'Use only the source context supplied in the input. Do not invent facts, '
-            'citations, source chunk IDs, skill codes, or curriculum claims. '
+            'citations, source chunk IDs, skill codes, curriculum claims, visual assets, or rights decisions. '
             'Return one valid JSON object only.'
         )
         if task == 'EXTRACT_SKILLS':
@@ -103,48 +124,41 @@ class AIGateway:
                   'do not merge, delete, reorder, or invent stages. Fill the approved stages with source-grounded content only.'
                 if section_blueprint else ''
             )
-            return common + blueprint_instruction + (
+            return common + blueprint_instruction + self._visual_instruction(packet) + (
                 ' Produce exactly one Arabic digital lesson object with only these top-level keys: '
                 'learning_objectives, concepts, sections, questions, summary, flashcards, '
                 'misconceptions, remediation_candidates. Do not add any other top-level key. '
-                'Use these exact shapes: '
-                'learning_objectives is an array of strings; concepts is an array of strings; '
+                'Use these exact shapes: learning_objectives is an array of strings; concepts is an array of strings; '
                 'sections is an array of objects {title, learning_goal, blocks}; each blocks item is '
-                '{block_type, title, body, content, source_chunk_ids}; '
+                '{block_type, title, body, content, source_chunk_ids}. '
                 'Allowed block_type values are TEXT, INFO_CARD, IMAGE, AUDIO, VIDEO, MATCHING, DRAG_DROP, '
                 'QUESTION, FLASHCARD, SUMMARY, ACTIVITY, CLASSIFY, COMPARE_GRID. '
-                'For CLASSIFY, content must be exactly the interaction data needed for categorization: '
-                '{categories:[{id,label,description?}], items:[{id,label,category_id,detail?}], prompt?, success_message?, retry_message?}. '
+                'For IMAGE, content must include alt_text, source_label, source_page, asset_kind, rights_status, hotspots, '
+                'and src unless the server contract explicitly allows a redraw placeholder. IMAGE metadata must come from visual_assets only. '
+                'For CLASSIFY, content must use {categories:[{id,label,description?}], items:[{id,label,category_id,detail?}], prompt?, success_message?, retry_message?}. '
                 'Category and item ids must be unique strings, and every item.category_id must reference a declared category. '
                 'Use CLASSIFY only when the verified source supports the grouping/classification. '
                 'For COMPARE_GRID, content must use {columns:[{id,label}], rows:[{label,values:{column_id:string}}], prompt?}; '
                 'include at least two columns and every row.values object must contain exactly all declared column ids. '
                 'Use COMPARE_GRID only when the verified source explicitly supports the compared attributes. '
                 'Do not hide unsupported claims inside interactive content: every factual statement in content must still be grounded '
-                'by the block source_chunk_ids. '
-                'questions is an array of objects {question_type, prompt, options, correct_answer, '
-                'explanation, purpose, difficulty, skill_codes, source_chunk_ids}; '
-                'summary is an array of objects {text, source_chunk_ids}; '
-                'flashcards is an array of objects {front, back, source_chunk_ids}; '
-                'misconceptions is an array of objects {title, incorrect_idea, correction, skill_codes, source_chunk_ids}; '
-                'remediation_candidates is an array of objects {title, trigger, explanation, practice_prompt, '
-                'mastery_check, skill_codes, source_chunk_ids}. '
+                'by the block source_chunk_ids. questions is an array of objects {question_type, prompt, options, correct_answer, '
+                'explanation, purpose, difficulty, skill_codes, source_chunk_ids}; summary is an array of objects {text, source_chunk_ids}; '
+                'flashcards is an array of objects {front, back, source_chunk_ids}; misconceptions is an array of objects '
+                '{title, incorrect_idea, correction, skill_codes, source_chunk_ids}; remediation_candidates is an array of objects '
+                '{title, trigger, explanation, practice_prompt, mastery_check, skill_codes, source_chunk_ids}. '
                 'Every source_chunk_ids array must contain one or more IDs and may only use IDs from '
                 f'{allowed_chunks}. Every skill_codes array may only use codes from {allowed_skills}. '
-                'If the sources do not support a flashcard, misconception, remediation candidate, comparison, or classification, '
-                'return an empty array for optional categories and choose a simpler supported block rather than inventing evidence. '
-                'Design the lesson as short mobile-friendly learning blocks following '
-                'Explain -> Interact -> Check -> Adapt. Use an age-appropriate hook, concise explanation, '
-                'guided interaction, quick checks, mastery questions, summary, and remediation only where '
-                'the evidence supports it. Keep language Arabic-first, clear, non-stigmatizing, and '
-                'appropriate for the learner age. Do not add provider metadata, model names, task names, '
-                'confidence wrappers, Markdown, comments, or prose outside the JSON object.'
+                'If the sources do not support an optional artifact, return an empty array or choose a simpler supported block rather than inventing evidence. '
+                'Design the lesson as short mobile-friendly learning units. Prefer Observe -> Explain briefly -> Interact -> Check -> Adapt '
+                'instead of long lecture-like paragraphs. For a concept that has a cleared visual asset, let the learner observe the visual before '
+                'giving the explanation. Keep each explanatory block concise, Arabic-first, age-appropriate, clear, and non-stigmatizing. '
+                'Do not add provider metadata, model names, task names, confidence wrappers, Markdown, comments, or prose outside the JSON object.'
             )
         if task == 'EXTRACT_STRUCTURE':
             return common + (
                 ' Return an object with units and lessons detected from the source. '
-                'Include only headings actually supported by the supplied text and add a '
-                'confidence value from 0 to 1.'
+                'Include only headings actually supported by the supplied text and add a confidence value from 0 to 1.'
             )
         if task == 'GENERATE_QUESTIONS':
             return common + ' Return a JSON object containing source-grounded assessment items and explanations.'
@@ -152,19 +166,16 @@ class AIGateway:
             return common + ' Return a short source-grounded remediation sequence followed by a mastery check.'
         if task == 'QA_CONTENT':
             return common + (
-                ' Act as an independent academic reviewer. Audit the staged lesson against the supplied '
-                'source_context. Return exactly these top-level keys and no others: errors, conflicts, '
-                'unsupported_claims, question_issues, age_appropriateness_issues, confidence, '
-                'recommendation, summary. Every issue object must contain exactly code, severity, '
-                'category, message, source_chunk_ids. severity must be one of INFO, WARNING, ERROR, '
-                'CRITICAL. recommendation must be PASS, REVIEW, or BLOCK. confidence must be 0 through 100. '
-                'Use source_chunk_ids only from the supplied source_context; use an empty list only when '
-                'the issue is structural and cannot reasonably be tied to a source chunk. Check factual '
-                'accuracy, source support, contradictions, curriculum alignment, question answers and '
-                'explanations, age-appropriate language, and whether assessment items test the intended '
-                'learning. Mark every unsupported curriculum claim explicitly. PASS only when no ERROR or '
-                'CRITICAL issue and no unsupported curriculum claim remains. Do not rewrite the lesson; '
-                'report findings only.'
+                ' Act as an independent academic reviewer. Audit the staged lesson against the supplied source_context. '
+                'Return exactly these top-level keys and no others: errors, conflicts, unsupported_claims, question_issues, '
+                'age_appropriateness_issues, confidence, recommendation, summary. Every issue object must contain exactly '
+                'code, severity, category, message, source_chunk_ids. severity must be one of INFO, WARNING, ERROR, CRITICAL. '
+                'recommendation must be PASS, REVIEW, or BLOCK. confidence must be 0 through 100. Use source_chunk_ids only '
+                'from the supplied source_context; use an empty list only when the issue is structural and cannot reasonably '
+                'be tied to a source chunk. Check factual accuracy, source support, contradictions, curriculum alignment, '
+                'question answers and explanations, age-appropriate language, and whether assessment items test intended learning. '
+                'Mark every unsupported curriculum claim explicitly. PASS only when no ERROR or CRITICAL issue and no unsupported '
+                'curriculum claim remains. Do not rewrite the lesson; report findings only.'
             )
         return common + f' Perform task {task} and return a JSON object.'
 
@@ -172,7 +183,6 @@ class AIGateway:
         api_key = os.getenv('OPENAI_API_KEY')
         if not api_key:
             raise RuntimeError('OPENAI_API_KEY is not configured')
-
         try:
             from openai import OpenAI
         except ImportError as exc:
@@ -202,5 +212,4 @@ class AIGateway:
         usage = dict(usage)
         usage.setdefault('model', model)
         usage.setdefault('task', task)
-
         return AIResponse('OPENAI', model_route, output, usage)

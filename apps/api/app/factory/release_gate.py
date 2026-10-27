@@ -16,6 +16,34 @@ from ..services.release_policy import release_policy_status
 router = APIRouter(prefix='/factory', tags=['content-factory-release-gate'])
 
 
+def _visual_rights_check(snapshot: dict | None) -> dict:
+    unresolved = []
+    image_count = 0
+    for section_index, section in enumerate((snapshot or {}).get('sections') or []):
+        for block_index, block in enumerate(section.get('blocks') or []):
+            if block.get('block_type') != 'IMAGE':
+                continue
+            image_count += 1
+            content = block.get('content') or {}
+            status = content.get('rights_status')
+            if status != 'CLEARED':
+                unresolved.append({
+                    'section_index': section_index,
+                    'block_index': block_index,
+                    'title': block.get('title') or content.get('title'),
+                    'rights_status': status or 'MISSING',
+                    'asset_kind': content.get('asset_kind'),
+                    'source_label': content.get('source_label'),
+                    'source_page': content.get('source_page'),
+                })
+    return {
+        'image_count': image_count,
+        'unresolved_count': len(unresolved),
+        'all_visual_rights_cleared': not unresolved,
+        'unresolved': unresolved,
+    }
+
+
 def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: str) -> dict:
     qa = staged.qa_snapshot_json or {}
     academic = qa.get('academic_qa') or {}
@@ -24,6 +52,7 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
     recommendation = academic.get('effective_recommendation')
     release_policy = release_policy_status()
     release_manifest = build_release_manifest(staged)
+    visual_rights = _visual_rights_check(staged.snapshot_json)
 
     # This gate answers only whether the immutable staged snapshot is ready to be
     # handed to a future audited release transaction. Transaction availability is
@@ -37,6 +66,7 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
         'academic_confidence_at_least_85': confidence >= 85,
         'no_critical_findings': int(academic.get('critical_count') or 0) == 0,
         'no_unsupported_claims': int(academic.get('unsupported_claim_count') or 0) == 0,
+        'all_visual_rights_cleared': visual_rights['all_visual_rights_cleared'],
         'persistent_production_database': database_backend in {'postgresql', 'postgres'},
         'immutable_staging_snapshot_present': bool(staged.snapshot_json),
         'release_manifest_present': bool(release_manifest.get('snapshot_sha256')) and bool(release_manifest.get('manifest_sha256')),
@@ -52,6 +82,7 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
         'release_readiness': staged.release_readiness,
         'academic_recommendation': recommendation,
         'academic_confidence': confidence,
+        'visual_rights': visual_rights,
         'release_manifest': release_manifest,
         'release_policy': release_policy,
         'release_transaction_available': bool(release_policy['audited_release_transaction_implemented']),

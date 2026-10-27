@@ -2,6 +2,7 @@
 
 import {useMemo,useState} from 'react';
 import {Notice,Pill,PrimaryButton} from '../_components/StudentUI';
+import TextbookFigure from './TextbookFigure';
 
 export type LessonBlockData={id:number;block_type:string;content:any;order_no:number};
 
@@ -15,6 +16,7 @@ export function lessonBlockText(block:LessonBlockData){
   if(block.block_type==='MICROSCOPE_ZOOM')return [c.title,c.prompt,...(c.levels||[]).flatMap((x:any)=>[x.label,x.caption])].filter(Boolean).join('. ');
   if(block.block_type==='CLASSIFY')return [c.title,c.prompt,...(c.categories||[]).flatMap((x:any)=>[x.label,x.description]),...(c.items||[]).map((x:any)=>x.label)].filter(Boolean).join('. ');
   if(block.block_type==='COMPARE_GRID')return [c.title,c.prompt,...(c.columns||[]).map((x:any)=>x.label),...(c.rows||[]).flatMap((x:any)=>[x.label,...Object.values(x.values||{})])].filter(Boolean).join('. ');
+  if(block.block_type==='IMAGE')return [c.title,c.observe_question,c.explanation,c.caption,...(c.hotspots||[]).flatMap((x:any)=>[x.label,x.description])].filter(Boolean).join('. ');
   return [c.label,c.title,c.body].filter(Boolean).join('. ');
 }
 
@@ -79,6 +81,7 @@ function CompareGrid({content}:{content:any}){
 export function LessonBlock({block,lowData}:{block:LessonBlockData;lowData:boolean}){
   const c=block.content||{};
   if(block.block_type==='INFO_CARD')return <div style={{padding:14,borderRadius:15,background:'#f4f9ff',border:'1px solid #d8e8fb'}}><div style={{display:'flex',gap:9,alignItems:'center'}}><span style={{fontSize:27}}>{c.icon||'💡'}</span><div><div style={{fontSize:11,color:'#667085',fontWeight:900}}>{c.label||'معلومة'}</div><strong style={{fontSize:18}}>{c.title||''}</strong></div></div>{c.body&&<p style={{margin:'9px 0 0',lineHeight:1.9}}>{c.body}</p>}</div>;
+  if(block.block_type==='IMAGE')return <TextbookFigure content={c} lowData={lowData}/>;
   if(block.block_type==='MICROSCOPE_ZOOM')return <VirtualMicroscope content={c} lowData={lowData}/>;
   if(block.block_type==='TIMELINE')return <div><h3 style={{margin:'0 0 10px'}}>{c.title||'خط زمني'}</h3><Timeline items={c.items||[]}/></div>;
   if(block.block_type==='MATCHING')return <DragMatching content={c}/>;

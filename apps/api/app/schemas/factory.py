@@ -22,6 +22,49 @@ class GeneratedBlock(StrictGeneratedModel):
 
     @model_validator(mode='after')
     def validate_interactive_content(self):
+        if self.block_type == 'IMAGE':
+            alt_text = self.content.get('alt_text')
+            asset_kind = self.content.get('asset_kind')
+            rights_status = self.content.get('rights_status')
+            source_page = self.content.get('source_page')
+            source_label = self.content.get('source_label')
+            src = self.content.get('src')
+            hotspots = self.content.get('hotspots', [])
+
+            if not isinstance(alt_text, str) or not alt_text.strip():
+                raise ValueError('IMAGE content.alt_text must be a non-empty string')
+            if asset_kind not in {'TEXTBOOK_FIGURE','TEXTBOOK_PAGE_CROP','REDRAWN_DIAGRAM','PLATFORM_ILLUSTRATION'}:
+                raise ValueError('IMAGE content.asset_kind is invalid')
+            if rights_status not in {'CLEARED','REVIEW_REQUIRED','REDRAW_REQUIRED'}:
+                raise ValueError('IMAGE content.rights_status is invalid')
+            if not isinstance(source_label, str) or not source_label.strip():
+                raise ValueError('IMAGE content.source_label must identify the source')
+            if not isinstance(source_page, int) or source_page < 1:
+                raise ValueError('IMAGE content.source_page must be a positive integer')
+            if rights_status != 'REDRAW_REQUIRED' and (not isinstance(src, str) or not src.strip()):
+                raise ValueError('IMAGE content.src is required unless the original must be redrawn')
+            if not isinstance(hotspots, list):
+                raise ValueError('IMAGE content.hotspots must be an array')
+            hotspot_ids: list[str] = []
+            for hotspot in hotspots:
+                if not isinstance(hotspot, dict):
+                    raise ValueError('IMAGE hotspots must be objects')
+                hotspot_id = hotspot.get('id')
+                label = hotspot.get('label')
+                x = hotspot.get('x')
+                y = hotspot.get('y')
+                if not isinstance(hotspot_id, str) or not hotspot_id.strip():
+                    raise ValueError('IMAGE hotspot.id must be a non-empty string')
+                if not isinstance(label, str) or not label.strip():
+                    raise ValueError('IMAGE hotspot.label must be a non-empty string')
+                if not isinstance(x, (int, float)) or not 0 <= x <= 100:
+                    raise ValueError('IMAGE hotspot.x must be between 0 and 100')
+                if not isinstance(y, (int, float)) or not 0 <= y <= 100:
+                    raise ValueError('IMAGE hotspot.y must be between 0 and 100')
+                hotspot_ids.append(hotspot_id)
+            if len(set(hotspot_ids)) != len(hotspot_ids):
+                raise ValueError('IMAGE hotspot ids must be unique')
+
         if self.block_type == 'CLASSIFY':
             categories = self.content.get('categories')
             items = self.content.get('items')

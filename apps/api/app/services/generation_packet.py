@@ -13,10 +13,18 @@ def _source_payload(db: Session, link: LessonSourceLink) -> dict | None:
     if not chunk:
         return None
     source = db.query(SourceFile).filter(SourceFile.id == chunk.source_file_id).first()
+    extraction_meta = dict(source.extraction_meta or {}) if source else {}
+    file_key = source.file_key if source else None
+    durable_storage = bool(
+        extraction_meta.get('durable_storage')
+        or (isinstance(file_key, str) and file_key.startswith('s3://'))
+    )
     return {
         'source_file_id': source.id if source else None,
         'source_type': source.source_type if source else None,
         'source_edition': source.edition if source else None,
+        'source_file_key': file_key,
+        'durable_storage': durable_storage,
         'source_chunk_id': chunk.id,
         'page_number': chunk.page_number,
         'confidence': link.confidence,
@@ -98,6 +106,8 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
             'source_file_id': item['source_file_id'],
             'source_type': item['source_type'],
             'source_edition': item['source_edition'],
+            'source_file_key': item['source_file_key'],
+            'durable_storage': item['durable_storage'],
             'source_chunk_id': item['source_chunk_id'],
             'page_number': item['page_number'],
             'confidence': item['confidence'],
@@ -118,7 +128,7 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
 
     existing_questions = db.query(Question).filter(Question.lesson_id == lesson_id).all()
     return {
-        'contract_version': 'lesson-generation-packet/v3',
+        'contract_version': 'lesson-generation-packet/v4',
         'lesson': {
             'id': lesson.id,
             'lesson_code': lesson.lesson_code,
@@ -141,6 +151,12 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
             'blocked': bool(scope_block_reason),
             'blocking_reason': scope_block_reason,
         },
+        'storage_gate': {
+            'all_factual_sources_durable': all(item.get('durable_storage') for item in effective_source_context) if effective_source_context else False,
+            'non_durable_factual_source_file_ids': [
+                item.get('source_file_id') for item in effective_source_context if not item.get('durable_storage')
+            ],
+        },
         'existing_questions': [
             {
                 'question_code': q.question_code,
@@ -157,6 +173,7 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
             'provenance_field': 'source_chunk_ids',
             'scope_evidence_is_non_factual': True,
             'source_authority_enforced': True,
+            'durable_source_storage_tracked': True,
             'lesson_loop': ['EXPLORE', 'UNDERSTAND', 'TRY', 'CHECK', 'DEEPEN', 'MASTERY', 'SUMMARY'],
             'avoid': [
                 'invented curriculum facts',

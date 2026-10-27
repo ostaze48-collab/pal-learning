@@ -29,8 +29,8 @@ export async function apiJson<T>(path:string, init:RequestInit = {}, auth = fals
 export async function findFirstPublishedLesson(){
   const books = await apiJson<any[]>('/curriculum/books',{},true);
   const ordered = [
-    ...books.filter(x => x.book_code === 'PS.G05.SCI.S2'),
-    ...books.filter(x => x.book_code !== 'PS.G05.SCI.S2'),
+    ...books.filter(x => x.book_code === 'PS.G05.SCI.S1'),
+    ...books.filter(x => x.book_code !== 'PS.G05.SCI.S1'),
   ];
   for (const book of ordered) {
     const units = await apiJson<any[]>(`/curriculum/books/${book.id}/units`,{},true);

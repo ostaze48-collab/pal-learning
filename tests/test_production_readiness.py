@@ -21,9 +21,12 @@ def test_sqlite_and_local_mock_block_production(monkeypatch):
     assert 'jwt_secret_configured' in result.blockers
     assert 'ai_provider_is_real' in result.blockers
     assert 'ai_provider_configured' in result.blockers
+    assert 'audited_release_transaction_available' in result.blockers
+    assert result.checks['source_authority_policy_fail_closed'] is True
+    assert result.checks['legacy_direct_publish_disabled'] is True
 
 
-def test_postgres_openai_and_hardened_runtime_can_be_ready(monkeypatch):
+def test_hardened_runtime_still_blocks_without_audited_release_transaction(monkeypatch):
     monkeypatch.setenv('AI_PROVIDER', 'OPENAI')
     monkeypatch.setenv('OPENAI_API_KEY', 'test-key-present-only')
     monkeypatch.setenv('OPENAI_MODEL', 'configured-model')
@@ -37,6 +40,11 @@ def test_postgres_openai_and_hardened_runtime_can_be_ready(monkeypatch):
         migration_revision='20261027_01',
         migration_head='20261027_01',
     )
-    assert result.ready is True
-    assert result.blockers == []
-    assert all(result.checks.values())
+    assert result.ready is False
+    assert result.blockers == ['audited_release_transaction_available']
+    assert result.checks['persistent_database'] is True
+    assert result.checks['database_migration_current'] is True
+    assert result.checks['source_authority_policy_fail_closed'] is True
+    assert result.checks['legacy_direct_publish_disabled'] is True
+    assert result.checks['audited_release_transaction_available'] is False
+    assert result.details['release_policy']['audited_release_transaction_implemented'] is False

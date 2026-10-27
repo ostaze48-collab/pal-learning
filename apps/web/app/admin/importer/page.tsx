@@ -48,7 +48,7 @@ export default function ImporterPage(){
   async function fetchRegistered(sourceId:number){
     setBusy(true); setMessage('');
     try{
-      const res=await fetch(`${API}/importer/source-files/${sourceId}/fetch-url`,{method:'POST',headers:adminHeaders()});
+      const res=await fetch(`${API}/importer/source-files/${sourceId}/fetch-registered`,{method:'POST',headers:adminHeaders()});
       const body=await res.json();
       if(!res.ok) throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message || 'فشل جلب المصدر');
       setMessage(`تم جلب المصدر #${sourceId}: ${body.page_count} صفحة · Edition Match ${body.edition_match_score}% · Quality ${body.package_quality}%`);
@@ -103,7 +103,7 @@ export default function ImporterPage(){
 
     <section style={{marginTop:22,background:'white',padding:18,borderRadius:16,border:'1px solid #e8edf5'}}>
       <h2>ما يحدث عند الرفع أو الجلب</h2>
-      <ol style={{lineHeight:2}}><li>حساب SHA-256 ومنع الملف المكرر فعليًا.</li><li>تقييد جلب الروابط على نطاقات المصادر الموثوقة فقط.</li><li>استخراج النص من PDF النصي أو UTF-8.</li><li>تقسيمه إلى Source Chunks مع رقم الصفحة.</li><li>مطابقة السنة والعنوان دون منح نقاط تلقائية لملف قديم.</li><li>إعادة حساب Coverage وVerified Quality.</li><li>اكتشاف مرشح للوحدات والدروس ثم AI Gateway للمراجعة الدلالية.</li></ol>
+      <ol style={{lineHeight:2}}><li>حساب SHA-256 ومنع الملف المكرر فعليًا.</li><li>تقييد جلب الروابط على نطاقات المصادر الموثوقة فقط.</li><li>رفض أي عنوان يتحول إلى IP داخلي/خاص.</li><li>استخراج النص من PDF النصي أو UTF-8.</li><li>تقسيمه إلى Source Chunks مع رقم الصفحة.</li><li>مطابقة السنة والعنوان دون منح نقاط تلقائية لملف قديم.</li><li>إعادة حساب Coverage وVerified Quality.</li></ol>
     </section>
   </main>
 }

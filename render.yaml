@@ -5,6 +5,7 @@ services:
     rootDir: apps/api
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /ready
     envVars:
       - key: DATABASE_URL
         fromDatabase:
@@ -12,12 +13,25 @@ services:
           property: connectionString
       - key: JWT_SECRET
         generateValue: true
+      - key: ALLOWED_ORIGINS
+        value: https://pal-learning-web.onrender.com
+      - key: AI_PROVIDER
+        value: LOCAL_MOCK
+      - key: MAX_SOURCE_BYTES
+        value: "73400320"
+      - key: SOURCE_FETCH_TIMEOUT_SECONDS
+        value: "45"
+      - key: CURRICULUM_SOURCE_HOSTS
+        value: moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com
+      # OPENAI_API_KEY and OPENAI_MODEL stay secret/dashboard-managed when real AI is enabled.
+
   - type: web
     name: pal-learning-web
     runtime: node
     rootDir: apps/web
     buildCommand: npm install && npm run build
     startCommand: npm run start -- -p $PORT
+    healthCheckPath: /
     envVars:
       - key: NEXT_PUBLIC_API_URL
         sync: false

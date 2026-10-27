@@ -1,18 +1,27 @@
 'use client';
 import {useEffect,useState} from 'react';
 import {apiJson} from '../../../lib/api';
+import {BottomNav,Notice,Pill,PrimaryLink,StudentCard,StudentShell} from '../_components/StudentUI';
 
-export default function Recovery(){
-  const [data,setData]=useState<any>(null);const [error,setError]=useState('');
-  useEffect(()=>{(async()=>{
-    try{
-      const skills=await apiJson<any[]>('/learning/skills');
-      const target=skills.find(x=>x.skill_code==='SK.MATH.FRACTION.ADDITION');
-      if(!target) throw new Error('مهارة جمع الكسور غير موجودة بعد');
-      const result=await apiJson<any>('/learning/diagnostics/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_skill_id:target.id})},true);
-      setData(result);
-    }catch(e:any){setError(e.message||'تعذر تشغيل التشخيص')}
-  })()},[]);
-  const blocks=data?.remediation?.content?.blocks||[];
-  return <main style={{maxWidth:820,margin:'28px auto',padding:18}}><div style={{fontSize:14,opacity:.65}}>مسار تعلم شخصي</div><h1>{data?.remediation?.title||'Learning Recovery'}</h1><p>نبحث عن المهارة السابقة التي تمنع التقدم، ثم نعالجها باختصار ونعود إلى درس الصف الحالي.</p>{error&&<div style={{padding:14,background:'#ffecec',borderRadius:12}}>{error}</div>}{!data&&!error&&<p>جارٍ تحليل مسار المهارات…</p>}{data&&<><section style={{background:'white',padding:20,borderRadius:16,border:'1px solid #e8edf5'}}><strong>نتيجة التشخيص</strong><h2>{data.status==='ROOT_GAP_FOUND'?'تم العثور على فجوة جذرية':'جاهز للمهارة المستهدفة'}</h2><p>Root skill ID: {data.root_gap_skill_id||'—'} · Target skill ID: {data.target_skill_id}</p></section>{data.remediation&&<section style={{marginTop:12,background:'#eef6ff',padding:20,borderRadius:16}}><strong>{data.remediation.estimated_minutes} دقائق</strong>{blocks.map((b:any,i:number)=><div key={i} style={{marginTop:12,padding:12,background:'white',borderRadius:12}}><div style={{fontSize:12,opacity:.6}}>{b.type}</div><p>{b.body||b.prompt||((b.items||[]).join(' · '))}</p></div>)}</section>}</>}</main>
+type Recovery={status:string;title:string;estimated_minutes?:number;message:string;skill?:{skill_code:string;name_ar:string;mastery_score:number;status:string};blocks:Array<{type:string;body:string}>};
+
+export default function RecoveryPage(){
+  const [data,setData]=useState<Recovery|null>(null);const [error,setError]=useState('');
+  useEffect(()=>{apiJson<Recovery>('/demo/recovery',{},true).then(setData).catch(e=>setError(e.message||'تعذر إعداد المراجعة'))},[]);
+  return <StudentShell title="مراجعة ذكية" subtitle="مراجعة قصيرة مبنية على أضعف مهارة ظهرت في إجاباتك داخل الدرس الأول." backHref="/student">
+    {error&&<Notice tone="bad">{error}</Notice>}
+    {!data&&!error&&<Notice>جارٍ تحليل إجاباتك…</Notice>}
+    {data&&<>
+      <StudentCard style={{background:data.status==='REVIEW_RECOMMENDED'?'#fffaf0':'#f4f9ff',borderColor:data.status==='REVIEW_RECOMMENDED'?'#f0d89b':'#d8e8fb',marginBottom:14}}>
+        <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'flex-start',flexWrap:'wrap'}}><div><Pill tone={data.status==='REVIEW_RECOMMENDED'?'warn':'info'}>{data.status}</Pill><h2 style={{fontSize:24,margin:'10px 0 6px'}}>{data.title}</h2><p style={{margin:0,lineHeight:1.7,color:'#526071'}}>{data.message}</p></div>{data.estimated_minutes&&<div style={{fontSize:28,fontWeight:900}}>{data.estimated_minutes} د</div>}</div>
+      </StudentCard>
+
+      {data.skill&&<StudentCard style={{marginBottom:14}}><div style={{fontSize:12,color:'#667085',fontWeight:900}}>المهارة المستهدفة</div><h3 style={{margin:'6px 0'}}>{data.skill.name_ar}</h3><div style={{display:'flex',gap:7,flexWrap:'wrap'}}><Pill tone="warn">Mastery {Math.round((data.skill.mastery_score||0)*100)}%</Pill><Pill>{data.skill.status}</Pill></div></StudentCard>}
+
+      {!!data.blocks.length&&<div style={{display:'grid',gap:11}}>{data.blocks.map((block,i)=><StudentCard key={i}><Pill tone={block.type==='EXPLAIN'?'info':'good'}>{block.type==='EXPLAIN'?'شرح سريع':'تحقق بنفسك'}</Pill><p style={{lineHeight:1.85,fontSize:16,margin:'10px 0 0'}}>{block.body}</p></StudentCard>)}</div>}
+
+      <StudentCard style={{marginTop:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/lesson">ارجع إلى الدرس وحاول مجددًا</PrimaryLink><PrimaryLink href="/student/progress" secondary>عرض تقدمي</PrimaryLink></div></StudentCard>
+      <BottomNav active="review"/>
+    </>}
+  </StudentShell>;
 }

@@ -51,10 +51,12 @@ def test_generation_packet_contains_ordered_approved_section_blueprint():
     db, lesson, titles = _lesson_with_blueprint()
     packet = build_lesson_generation_packet(db, lesson.id)
 
-    assert packet['contract_version'] == 'lesson-generation-packet/v6'
+    assert packet['contract_version'] == 'lesson-generation-packet/v7'
     assert [row['section_number'] for row in packet['section_blueprint']] == list(range(1, 8))
     assert [row['title'] for row in packet['section_blueprint']] == titles
     assert packet['generation_rules']['section_blueprint_enforced'] is True
+    assert packet['generation_rules']['visual_first_when_cleared_asset_exists'] is True
+    assert packet['visual_assets'] == []
     assert 'Do not merge' in packet['generation_rules']['section_blueprint_rule']
 
 

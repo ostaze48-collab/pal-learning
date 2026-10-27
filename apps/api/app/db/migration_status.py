@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
 
-MIGRATION_HEAD = '20261027_01'
+MIGRATION_HEAD = '20261027_02'
 
 
 def get_migration_status(engine: Engine) -> dict:

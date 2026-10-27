@@ -15,11 +15,23 @@ router = APIRouter(prefix='/factory', tags=['content-factory-candidate-qa'])
 
 def _candidate_source_ids(output: dict) -> set[int]:
     refs: set[int] = set()
+
+    def collect(item: dict) -> None:
+        refs.update(int(x) for x in (item.get('source_chunk_ids') or []) if x is not None)
+
     for section in output.get('sections', []) or []:
         for block in section.get('blocks', []) or []:
-            refs.update(int(x) for x in (block.get('source_chunk_ids') or []) if x is not None)
-    for question in output.get('questions', []) or []:
-        refs.update(int(x) for x in (question.get('source_chunk_ids') or []) if x is not None)
+            collect(block)
+    for item in output.get('questions', []) or []:
+        collect(item)
+    for item in output.get('summary', []) or []:
+        collect(item)
+    for item in output.get('flashcards', []) or []:
+        collect(item)
+    for item in output.get('misconceptions', []) or []:
+        collect(item)
+    for item in output.get('remediation_candidates', []) or []:
+        collect(item)
     return refs
 
 
@@ -69,7 +81,6 @@ def _source_evidence(db: Session, chunk_ids: set[int]) -> dict:
             'verified_evidence_score': factor,
             'status': source.status,
         })
-    # Conservative: the weakest cited source controls release readiness.
     score = min(factors) if factors and not missing else 0.0
     return {'score': round(score, 1), 'files': details, 'missing_chunk_ids': missing}
 

@@ -9,6 +9,7 @@ from ..auth.deps import require_admin
 from ..db.deps import get_db
 from ..db.models import ContentCandidate, SourceChunk, SourceFile, User
 from ..db.staging_models import StagedLessonVersion
+from ..importer.source_policy import can_ground_facts
 
 router = APIRouter(prefix='/factory', tags=['content-factory-candidate-qa'])
 
@@ -59,7 +60,12 @@ def _structure_metrics(output: dict) -> dict:
 
 def _source_evidence(db: Session, chunk_ids: set[int]) -> dict:
     if not chunk_ids:
-        return {'score': 0.0, 'files': [], 'missing_chunk_ids': []}
+        return {
+            'score': 0.0,
+            'files': [],
+            'missing_chunk_ids': [],
+            'authority_violations': [],
+        }
 
     chunks = db.query(SourceChunk).filter(SourceChunk.id.in_(sorted(chunk_ids))).all()
     found = {row.id for row in chunks}
@@ -68,21 +74,35 @@ def _source_evidence(db: Session, chunk_ids: set[int]) -> dict:
     files = db.query(SourceFile).filter(SourceFile.id.in_(file_ids)).all() if file_ids else []
     details = []
     factors = []
+    authority_violations = []
     for source in files:
         reliability = max(0.0, min(100.0, float(source.reliability_score or 0)))
         edition = max(0.0, min(100.0, float(source.edition_match_score or 0)))
-        factor = round(reliability * edition / 100.0, 1)
+        factual_authorized = can_ground_facts(source.source_type)
+        factor = round(reliability * edition / 100.0, 1) if factual_authorized else 0.0
         factors.append(factor)
+        if not factual_authorized:
+            authority_violations.append({
+                'source_file_id': source.id,
+                'source_type': source.source_type,
+                'reason': 'SOURCE_TYPE_NOT_AUTHORIZED_FOR_FACTUAL_GROUNDING',
+            })
         details.append({
             'source_file_id': source.id,
             'source_type': source.source_type,
             'reliability_score': reliability,
             'edition_match_score': edition,
             'verified_evidence_score': factor,
+            'factual_grounding_authorized': factual_authorized,
             'status': source.status,
         })
-    score = min(factors) if factors and not missing else 0.0
-    return {'score': round(score, 1), 'files': details, 'missing_chunk_ids': missing}
+    score = min(factors) if factors and not missing and not authority_violations else 0.0
+    return {
+        'score': round(score, 1),
+        'files': details,
+        'missing_chunk_ids': missing,
+        'authority_violations': authority_violations,
+    }
 
 
 def calculate_candidate_qa(db: Session, candidate: ContentCandidate) -> dict:
@@ -95,7 +115,12 @@ def calculate_candidate_qa(db: Session, candidate: ContentCandidate) -> dict:
     invalid_refs = validation.get('invalid_chunk_refs') or []
     unknown_skills = validation.get('unknown_skill_codes') or []
     schema_ok = bool(candidate.schema_valid)
-    provenance_ok = float(candidate.provenance_score or 0) == 100.0 and not invalid_refs and not evidence['missing_chunk_ids']
+    provenance_ok = (
+        float(candidate.provenance_score or 0) == 100.0
+        and not invalid_refs
+        and not evidence['missing_chunk_ids']
+        and not evidence['authority_violations']
+    )
     skills_ok = not unknown_skills
     structure_ok = structure['score'] == 100.0
     candidate_not_rejected = candidate.status != 'REJECTED'
@@ -121,6 +146,7 @@ def calculate_candidate_qa(db: Session, candidate: ContentCandidate) -> dict:
             reason for condition, reason in [
                 (not candidate_not_rejected, 'candidate_already_rejected'),
                 (not schema_ok, 'schema_invalid'),
+                (bool(evidence['authority_violations']), 'source_authority_violation'),
                 (not provenance_ok, 'provenance_incomplete_or_invalid'),
                 (not skills_ok, 'unknown_skill_codes'),
                 (not structure_ok, 'lesson_structure_incomplete'),

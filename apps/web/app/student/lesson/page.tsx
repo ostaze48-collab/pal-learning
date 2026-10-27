@@ -1,5 +1,5 @@
-import GoldenLessonPlayer from './GoldenLessonPlayer';
+import LessonPlayer from './LessonPlayer';
 
 export default function LessonPage(){
-  return <GoldenLessonPlayer/>;
+  return <LessonPlayer/>;
 }

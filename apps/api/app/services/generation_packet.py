@@ -29,6 +29,7 @@ def _source_payload(db: Session, link: LessonSourceLink) -> dict | None:
         'page_number': chunk.page_number,
         'confidence': link.confidence,
         'relation': link.relation,
+        'link_status': link.status,
         'text': chunk.text[:2200],
     }
 
@@ -60,13 +61,30 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         for link, skill in skill_rows
     ]
 
+    # Production generation is intentionally stricter than discovery/linking.
+    # Auto-linking may create CANDIDATE / VERIFIED_CANDIDATE links, but only an
+    # explicit Admin verification promotes a teaching link to VERIFIED. Lesson
+    # generation never receives unreviewed factual chunks.
+    unverified_teaching_links = db.query(LessonSourceLink).filter(
+        LessonSourceLink.lesson_id == lesson_id,
+        LessonSourceLink.relation == 'TEACHING_SOURCE',
+        LessonSourceLink.status.in_(['CANDIDATE', 'VERIFIED_CANDIDATE']),
+    ).all()
     teaching_links = db.query(LessonSourceLink).filter(
         LessonSourceLink.lesson_id == lesson_id,
         LessonSourceLink.relation == 'TEACHING_SOURCE',
-        LessonSourceLink.status.in_(['CANDIDATE', 'VERIFIED_CANDIDATE', 'VERIFIED'])
+        LessonSourceLink.status == 'VERIFIED',
     ).order_by(LessonSourceLink.confidence.desc()).all()
+
     source_context = []
-    rejected_teaching_sources = []
+    rejected_teaching_sources = [
+        {
+            'source_chunk_id': link.source_chunk_id,
+            'link_status': link.status,
+            'reason': 'TEACHING_SOURCE_LINK_REQUIRES_ADMIN_VERIFICATION',
+        }
+        for link in unverified_teaching_links
+    ]
     for link in teaching_links[:12]:
         item = _source_payload(db, link)
         if not item:
@@ -76,6 +94,7 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
                 'source_file_id': item.get('source_file_id'),
                 'source_type': item.get('source_type'),
                 'source_chunk_id': item.get('source_chunk_id'),
+                'link_status': item.get('link_status'),
                 'reason': 'SOURCE_TYPE_NOT_AUTHORIZED_FOR_FACTUAL_GROUNDING',
             })
             continue
@@ -117,9 +136,6 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
 
     current_teaching_source = any(_looks_current_teaching_source(item) for item in source_context)
     scope_evidence_required = bool(source_context) and not current_teaching_source
-    # Fail closed for legacy-only teaching material until a current curriculum plan
-    # confirms that this exact unit/lesson remains in scope. Returning no factual
-    # context causes the existing factory queue gate to reject generation.
     effective_source_context = source_context
     scope_block_reason = None
     if scope_evidence_required and not scope_evidence:
@@ -128,7 +144,7 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
 
     existing_questions = db.query(Question).filter(Question.lesson_id == lesson_id).all()
     return {
-        'contract_version': 'lesson-generation-packet/v4',
+        'contract_version': 'lesson-generation-packet/v5',
         'lesson': {
             'id': lesson.id,
             'lesson_code': lesson.lesson_code,
@@ -141,7 +157,10 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         'authority_gate': {
             'rejected_teaching_sources': rejected_teaching_sources,
             'rejected_scope_sources': rejected_scope_sources,
-            'factual_sources_authorized': not rejected_teaching_sources,
+            'admin_verified_teaching_source_required': True,
+            'verified_teaching_source_count': len(teaching_links),
+            'unverified_teaching_source_count': len(unverified_teaching_links),
+            'factual_sources_authorized': not rejected_teaching_sources and bool(teaching_links),
             'scope_sources_authorized': not rejected_scope_sources,
         },
         'scope_gate': {
@@ -168,15 +187,17 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         'generation_rules': {
             'language': 'Arabic',
             'direction': 'RTL',
-            'grounding': 'Use only supplied curriculum teaching context for factual curriculum claims.',
+            'grounding': 'Use only supplied Admin-verified curriculum teaching context for factual curriculum claims.',
             'provenance_required': True,
             'provenance_field': 'source_chunk_ids',
             'scope_evidence_is_non_factual': True,
             'source_authority_enforced': True,
+            'admin_verified_teaching_source_required': True,
             'durable_source_storage_tracked': True,
             'lesson_loop': ['EXPLORE', 'UNDERSTAND', 'TRY', 'CHECK', 'DEEPEN', 'MASTERY', 'SUMMARY'],
             'avoid': [
                 'invented curriculum facts',
+                'using unreviewed lesson-source candidates as factual context',
                 'using curriculum-plan text as factual lesson explanation',
                 'using solution/reference-answer sources as factual lesson explanation',
                 'long lecture-like blocks',

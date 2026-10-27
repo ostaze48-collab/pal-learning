@@ -4,7 +4,8 @@ import {useEffect,useState} from 'react';
 
 const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
-type Current={units:Array<{lessons:Array<{id:number;lesson_code:string;title:string}>}>};
+type Lesson={id:number;lesson_code:string;title:string};
+type Current={units:Array<{lessons:Lesson[]}>};
 type Link={id:number;lesson_id:number;relation:string;confidence:number;source_method:string;status:string;source_chunk_id?:number;page_number?:number;text_preview?:string;source_file_id?:number;source_type?:string;source_edition?:string;factual_grounding_authorized:boolean};
 type Payload={lesson_id:number;lesson_code:string;lesson_title:string;links:Link[]};
 
@@ -21,10 +22,12 @@ export default function SourceLinkReview(){
       const r1=await fetch(`${API}/admin/current-semester`,{headers:headers()});
       const current:Current=await r1.json();
       if(!r1.ok) throw new Error((current as any).detail||'تعذر تحميل الفصل الحالي');
-      const id=current.units?.[0]?.lessons?.[0]?.id;
-      if(!id) throw new Error('الدرس الأول غير موجود');
-      setLessonId(id);
-      const r2=await fetch(`${API}/importer/lessons/${id}/source-links`,{headers:headers()});
+      const lessons=current.units.flatMap(unit=>unit.lessons||[]);
+      const requested=Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
+      const selected=lessons.find(item=>item.id===requested)||lessons[0];
+      if(!selected) throw new Error('لا توجد دروس في الفصل الحالي');
+      setLessonId(selected.id);
+      const r2=await fetch(`${API}/importer/lessons/${selected.id}/source-links`,{headers:headers()});
       const body=await r2.json();
       if(!r2.ok) throw new Error(body.detail||'تعذر تحميل روابط المصادر');
       setData(body);
@@ -63,6 +66,6 @@ export default function SourceLinkReview(){
         <button disabled={busy===link.id||link.status==='REJECTED'} onClick={()=>act(link.id,'reject')} style={{padding:'8px 12px',border:'1px solid #d5a3a3',borderRadius:8,background:'white',color:'#9b2222'}}>Reject</button>
       </div>
     </section>)}</div>}
-    <div style={{display:'flex',gap:12,marginTop:18,flexWrap:'wrap'}}><a href="/admin/current-semester">الفصل الحالي</a><a href="/admin/skill-mapping">Skill Mapping</a><a href="/admin">لوحة الإدارة</a></div>
+    <div style={{display:'flex',gap:12,marginTop:18,flexWrap:'wrap'}}><a href="/admin/current-semester/matrix">مصفوفة الفصل</a><a href={lessonId?`/admin/skill-mapping?lesson_id=${lessonId}`:'/admin/skill-mapping'}>Skill Mapping</a><a href="/admin/current-semester">الفصل الحالي</a><a href="/admin">لوحة الإدارة</a></div>
   </main>;
 }

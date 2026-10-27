@@ -3,10 +3,10 @@
 import {useEffect,useMemo,useState} from 'react';
 import {apiJson,studentHeaders} from '../../../lib/api';
 import {BottomNav,Notice,Pill,PrimaryButton,PrimaryLink,ProgressBar,StudentCard,StudentShell} from '../_components/StudentUI';
+import {LessonBlock,LessonBlockData,lessonBlockText} from './LessonContentBlocks';
 import {ConceptMapSpec,getScienceLessonTemplate,PredictionSpec} from './scienceLessonTemplates';
 
-type Block={id:number;block_type:string;content:any;order_no:number};
-type Section={id:number;section_number:number;title:string;blocks:Block[]};
+type Section={id:number;section_number:number;title:string;blocks:LessonBlockData[]};
 type LessonPayload={experimental:boolean;tutor_supported?:boolean;book:{id?:number;title:string;book_code:string};unit:{id?:number;title:string;unit_number:number};lesson:{id:number;title:string;lesson_code:string;estimated_minutes:number};sections:Section[]};
 type Question={id:number;question_code:string;question_type:string;prompt:string;options:string[];difficulty:number;purpose:string};
 type Progress={progress_percent:number;mastered_skills:number;skills:Array<{skill_id:number;name_ar:string;mastery_score:number;status:string}>};
@@ -17,15 +17,6 @@ type Step={kind:'section';key:string;title:string;section:Section}|{kind:'predic
 
 const OPTION_LABELS=['أ','ب','ج','د','هـ','و'];
 const buttonStyle={padding:'9px 12px',borderRadius:10,border:'1px solid #d7dde6',background:'#fff',fontWeight:800,cursor:'pointer'} as const;
-
-function blockText(block:Block){
-  const c=block.content||{};
-  if(block.block_type==='SUMMARY')return [c.title,...(c.items||[])].filter(Boolean).join('. ');
-  if(block.block_type==='TIMELINE')return [c.title,...(c.items||[]).flatMap((x:any)=>[x.name,x.text])].filter(Boolean).join('. ');
-  if(block.block_type==='MATCHING')return [c.title,c.prompt,...(c.pairs||[]).flat()].filter(Boolean).join('. ');
-  if(block.block_type==='MICROSCOPE_ZOOM')return [c.title,c.prompt,...(c.levels||[]).flatMap((x:any)=>[x.label,x.caption])].filter(Boolean).join('. ');
-  return [c.label,c.title,c.body].filter(Boolean).join('. ');
-}
 
 function speakArabic(text:string){
   if(typeof window==='undefined'||!('speechSynthesis' in window))return;
@@ -39,10 +30,6 @@ function AudioButton({text}:{text:string}){
   return <button onClick={()=>speakArabic(text)} aria-label="استمع إلى المحتوى" style={{...buttonStyle,padding:'7px 10px',fontSize:12}}>🔊 استمع</button>;
 }
 
-function Timeline({items}:{items:Array<{year:string;name:string;text:string}>}){
-  return <div style={{display:'grid',gap:10}}>{items.map((item,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'72px 1fr',gap:10}}><div style={{display:'grid',placeItems:'center',borderRadius:14,background:'#eef8f1',color:'#176b3a',fontWeight:900,padding:8,textAlign:'center'}}>{item.year}</div><div style={{padding:12,border:'1px solid #e7ebf1',borderRadius:14,background:'#fff'}}><strong>{item.name}</strong><div style={{marginTop:4,lineHeight:1.8,color:'#475467'}}>{item.text}</div></div></div>)}</div>;
-}
-
 function PredictionCard({spec}:{spec:PredictionSpec}){
   const [selected,setSelected]=useState<number|null>(null);
   const [revealed,setRevealed]=useState(false);
@@ -52,40 +39,6 @@ function PredictionCard({spec}:{spec:PredictionSpec}){
     <div style={{display:'grid',gap:8}}>{spec.options.map((option,i)=><button key={option} onClick={()=>!revealed&&setSelected(i)} style={{textAlign:'right',padding:12,borderRadius:12,border:selected===i?'2px solid #b98700':'1px solid #e1d39e',background:selected===i?'#fff4bf':'#fff',fontSize:15,fontWeight:800}}>{OPTION_LABELS[i]} · {option}</button>)}</div>
     {!revealed?<div style={{marginTop:12}}><PrimaryButton disabled={selected===null} onClick={()=>setRevealed(true)}>اكشف النتيجة</PrimaryButton></div>:<div style={{marginTop:12}}><Notice tone={correct?'good':'info'}><strong>{correct?spec.successTitle:spec.retryTitle}</strong><div style={{marginTop:4}}>{spec.explanation}</div></Notice></div>}
   </StudentCard>;
-}
-
-function VirtualMicroscope({content,lowData}:{content:any;lowData:boolean}){
-  const levels:Array<{label:string;caption:string;magnification:string}>=content.levels||[];
-  const [level,setLevel]=useState(0);const [lightOn,setLightOn]=useState(false);const [focus,setFocus]=useState(30);
-  const current=levels[level]||{label:'',caption:'',magnification:''};
-  const isMicroscope=level===2;const focused=!isMicroscope||focus>=82;const cells=isMicroscope?(lowData?18:30):level===1?(lowData?6:9):1;const blur=isMicroscope?Math.max(0,(82-focus)/12):0;const success=isMicroscope&&lightOn&&focused;
-  return <div style={{padding:14,borderRadius:18,border:'1px solid #d7e4dc',background:'linear-gradient(135deg,#f8fcf9,#f7f9ff)'}}>
-    <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><div><div style={{fontSize:11,color:'#667085',fontWeight:900}}>مختبر افتراضي</div><h3 style={{margin:'4px 0 5px',fontSize:20}}>{content.title||'جرّب بنفسك'}</h3><p style={{margin:0,color:'#526071',lineHeight:1.8}}>{content.prompt}</p></div><Pill tone={success?'good':'info'}>{success?'تم الضبط ✓':current.magnification}</Pill></div>
-    <div style={{display:'grid',gridTemplateColumns:'repeat(3,minmax(0,1fr))',gap:7,marginTop:14}}>{levels.map((row,i)=><button key={row.label} onClick={()=>setLevel(i)} style={{padding:'10px 6px',borderRadius:12,border:i===level?'2px solid #176b3a':'1px solid #d7dde6',background:i===level?'#eef9f1':'#fff',fontWeight:800,fontSize:12}}>{i===0?'👁️ ':i===1?'🔍 ':'🔬 '}{row.label}</button>)}</div>
-    {isMicroscope&&<div style={{display:'grid',gap:10,marginTop:12,padding:12,borderRadius:14,background:'#fff',border:'1px solid #e5e9ef'}}><div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center'}}><div><strong>1. شغّل مصدر الضوء</strong><div style={{fontSize:12,color:'#667085'}}>بدون الضوء لن تظهر العينة بوضوح.</div></div><button onClick={()=>setLightOn(v=>!v)} style={{...buttonStyle,background:lightOn?'#176b3a':'#f2f4f7',color:lightOn?'#fff':'#344054'}}>{lightOn?'مضاء':'تشغيل'}</button></div><div><div style={{display:'flex',justifyContent:'space-between',fontSize:13,fontWeight:800}}><span>2. اضبط التركيز</span><span>{focus}%</span></div><input aria-label="ضبط التركيز" type="range" min="0" max="100" value={focus} onChange={e=>setFocus(Number(e.target.value))} style={{width:'100%',marginTop:8}}/></div></div>}
-    <div style={{marginTop:12,minHeight:210,borderRadius:16,border:'1px solid #dbc9aa',background:lightOn||!isMicroscope?'#b98555':'#3d342f',padding:level===0?22:12,display:'grid',gridTemplateColumns:level===0?'1fr':`repeat(${level===1?3:6},1fr)`,gap:level===2?3:7,filter:`blur(${blur}px)`,opacity:isMicroscope&&!lightOn?.35:1,transition:lowData?'none':'all .2s'}}>{Array.from({length:cells}).map((_,i)=><div key={i} style={{minHeight:level===0?158:level===1?52:27,borderRadius:level===0?13:5,border:level===0?'0':'2px solid rgba(78,48,25,.55)',background:level===0?'linear-gradient(135deg,#c8935e,#9e683d)':i%3===0?'rgba(242,213,170,.72)':'rgba(221,180,128,.72)'}}>{level===0&&<div style={{display:'grid',height:'100%',placeItems:'center',color:'#fff7ec',fontWeight:900,fontSize:20}}>العينة</div>}</div>)}</div>
-    <div style={{marginTop:11,padding:11,borderRadius:12,background:'#fff',border:'1px solid #e6eaf0',lineHeight:1.8}}><strong>{current.label}:</strong> {current.caption}</div>{success&&<div style={{marginTop:9}}><Notice tone="good"><strong>أحسنت!</strong> أصبحت العينة واضحة.</Notice></div>}
-  </div>;
-}
-
-function DragMatching({content}:{content:any}){
-  const pairs:Array<[string,string]>=content.pairs||[];const targets=useMemo(()=>pairs.map(p=>p[1]).reverse(),[content]);
-  const [assignments,setAssignments]=useState<Record<string,string>>({});const [active,setActive]=useState('');const [checked,setChecked]=useState(false);
-  const sourceFor=(target:string)=>pairs.find(p=>p[1]===target)?.[0]||'';const correct=targets.filter(t=>assignments[t]===sourceFor(t)).length;
-  function assign(target:string,source:string){if(!source||checked)return;setAssignments(x=>({...x,[target]:source}));setActive('');}
-  return <div><div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><div><h3 style={{margin:'0 0 5px'}}>{content.title||'مطابقة'}</h3><p style={{margin:0,color:'#667085'}}>{content.prompt||'اسحب العنصر إلى المكان المناسب، أو اضغط عليه ثم اضغط على الهدف.'}</p></div><Pill tone={checked&&correct===pairs.length?'good':'info'}>{checked?`${correct}/${pairs.length}`:'اسحب وطابق'}</Pill></div>
-    <div style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) minmax(0,1.4fr)',gap:10,marginTop:13}}><div style={{display:'grid',gap:8,alignContent:'start'}}>{pairs.map(([source])=><button key={source} draggable={!checked} onDragStart={e=>e.dataTransfer.setData('text/plain',source)} onClick={()=>!checked&&setActive(source)} style={{padding:10,borderRadius:11,border:active===source?'2px solid #176b3a':'1px solid #d7dde6',background:active===source?'#eef9f1':'#fff',fontWeight:900}}>{source}</button>)}</div><div style={{display:'grid',gap:8}}>{targets.map(target=><button key={target} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();assign(target,e.dataTransfer.getData('text/plain'));}} onClick={()=>assign(target,active)} style={{minHeight:58,padding:10,borderRadius:11,border:'1px dashed #aeb8c5',background:'#fff',textAlign:'right'}}><div style={{fontSize:12,color:'#667085'}}>{target}</div><strong style={{display:'block',marginTop:5,color:checked?(assignments[target]===sourceFor(target)?'#176b3a':'#a33'):'#14213d'}}>{assignments[target]||'ضع العنصر هنا'}</strong></button>)}</div></div>
-    <div style={{display:'flex',gap:8,marginTop:12}}><PrimaryButton disabled={Object.keys(assignments).length<pairs.length||checked} onClick={()=>setChecked(true)}>تحقق من المطابقة</PrimaryButton><button onClick={()=>{setAssignments({});setChecked(false);setActive('');}} style={buttonStyle}>إعادة المحاولة</button></div>{checked&&<div style={{marginTop:10}}><Notice tone={correct===pairs.length?'good':'warn'}>{correct===pairs.length?'ممتاز! أكملت المطابقة بصورة صحيحة.':'راجع الإجابات ثم أعد المحاولة.'}</Notice></div>}</div>;
-}
-
-function LessonBlock({block,lowData}:{block:Block;lowData:boolean}){
-  const c=block.content||{};
-  if(block.block_type==='INFO_CARD')return <div style={{padding:14,borderRadius:15,background:'#f4f9ff',border:'1px solid #d8e8fb'}}><div style={{display:'flex',gap:9,alignItems:'center'}}><span style={{fontSize:27}}>{c.icon||'💡'}</span><div><div style={{fontSize:11,color:'#667085',fontWeight:900}}>{c.label||'معلومة'}</div><strong style={{fontSize:18}}>{c.title||''}</strong></div></div>{c.body&&<p style={{margin:'9px 0 0',lineHeight:1.9}}>{c.body}</p>}</div>;
-  if(block.block_type==='MICROSCOPE_ZOOM')return <VirtualMicroscope content={c} lowData={lowData}/>;
-  if(block.block_type==='TIMELINE')return <div><h3 style={{margin:'0 0 10px'}}>{c.title||'خط زمني'}</h3><Timeline items={c.items||[]}/></div>;
-  if(block.block_type==='MATCHING')return <DragMatching content={c}/>;
-  if(block.block_type==='SUMMARY')return <div style={{padding:14,borderRadius:15,background:'#f7fcf9',border:'1px solid #cfe7d7'}}><h3 style={{margin:'0 0 8px'}}>{c.title||'الخلاصة'}</h3><ul style={{margin:0,paddingInlineStart:20,lineHeight:2}}>{(c.items||[]).map((x:string,i:number)=><li key={i}>{x}</li>)}</ul></div>;
-  return <div><h3 style={{margin:'0 0 7px'}}>{c.title||c.label||''}</h3>{c.body&&<p style={{margin:0,lineHeight:1.95,color:'#344054'}}>{c.body}</p>}</div>;
 }
 
 function ConceptMap({spec}:{spec:ConceptMapSpec}){
@@ -157,7 +110,7 @@ export default function LessonPlayer(){
   }
 
   function nextStep(){if(activeStep?.kind==='challenge'&&!completedQuestions)return;setStepIndex(i=>Math.min(steps.length-1,i+1));}function previousStep(){setStepIndex(i=>Math.max(0,i-1));}
-  const sectionAudio=activeStep?.kind==='section'?activeStep.section.blocks.map(blockText).join('. '):'';
+  const sectionAudio=activeStep?.kind==='section'?activeStep.section.blocks.map(lessonBlockText).join('. '):'';
 
   return <StudentShell title={lesson?.lesson.title||'الدرس التفاعلي'} subtitle={lesson?`${lesson.book.title} ← الوحدة ${lesson.unit.unit_number}: ${lesson.unit.title}`:'جارٍ تحميل الدرس…'} backHref="/student">
     {error&&<div style={{marginBottom:14}}><Notice tone="bad">{error}{error.includes('تسجيل الدخول')&&<div style={{marginTop:9}}><PrimaryLink href="/student/login">تسجيل الدخول</PrimaryLink></div>}</Notice></div>}{!lesson&&!error&&<Notice>جارٍ تحميل الدرس التفاعلي…</Notice>}

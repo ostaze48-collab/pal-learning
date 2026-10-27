@@ -15,7 +15,8 @@ sys.path.insert(0, str(ROOT / 'apps' / 'api'))
 
 from fastapi.testclient import TestClient
 from app.db.base import SessionLocal
-from app.db.models import Lesson, Question
+from app.db.models import Lesson, LessonSourceLink, Question, SourceChunk
+from app.db.visual_models import VisualAsset
 from app.db.seed import run as seed
 from app.main import app
 
@@ -27,6 +28,48 @@ ADMIN_HEADERS = {'Authorization': f"Bearer {_login.json()['access_token']}"}
 _student_login = client.post('/auth/login', json={'email':'demo.student@example.test','password':'StudentDemoPassword123!'})
 assert _student_login.status_code == 200, _student_login.text
 STUDENT_HEADERS = {'Authorization': f"Bearer {_student_login.json()['access_token']}"}
+
+
+def _ensure_cleared_visual(lesson_id: int):
+    db = SessionLocal()
+    try:
+        links = db.query(LessonSourceLink).filter(
+            LessonSourceLink.lesson_id == lesson_id,
+            LessonSourceLink.relation == 'TEACHING_SOURCE',
+            LessonSourceLink.status == 'VERIFIED',
+        ).order_by(LessonSourceLink.id).all()
+        for link in links:
+            chunk = db.query(SourceChunk).filter(SourceChunk.id == link.source_chunk_id).first()
+            if not chunk or chunk.page_number is None:
+                continue
+            existing = db.query(VisualAsset).filter(
+                VisualAsset.lesson_id == lesson_id,
+                VisualAsset.source_file_id == chunk.source_file_id,
+                VisualAsset.source_page == chunk.page_number,
+                VisualAsset.asset_kind == 'TEXTBOOK_PAGE_CROP',
+            ).first()
+            if not existing:
+                db.add(VisualAsset(
+                    lesson_id=lesson_id,
+                    source_file_id=chunk.source_file_id,
+                    source_page=chunk.page_number,
+                    asset_kind='TEXTBOOK_PAGE_CROP',
+                    storage_key=f's3://test-bucket/api-flow/lesson-{lesson_id}-page-{chunk.page_number}.png',
+                    public_url=f'https://cdn.example.test/api-flow/lesson-{lesson_id}-page-{chunk.page_number}.png',
+                    checksum='e' * 64,
+                    width=1200,
+                    height=1700,
+                    rights_status='CLEARED',
+                    status='APPROVED',
+                    alt_text='صفحة تعليمية موثقة مرتبطة بالدرس.',
+                    caption='أصل بصري اختباري لمسار API.',
+                    hotspots_json=[],
+                ))
+                db.commit()
+            return
+        raise AssertionError('No verified teaching source with a page number was available for visual fixture')
+    finally:
+        db.close()
 
 
 def _verify_teaching_links(lesson_id: int = 1):
@@ -44,6 +87,7 @@ def _verify_teaching_links(lesson_id: int = 1):
         assert result.json()['status'] == 'VERIFIED'
         verified += 1
     assert verified >= 1
+    _ensure_cleared_visual(lesson_id)
 
 
 def test_diagnostic_and_recovery_flow():
@@ -160,6 +204,7 @@ def test_generation_packet_requires_and_uses_provenance():
     assert job['input']['generation_rules']['provenance_required'] is True
     assert job['input']['generation_rules']['source_authority_enforced'] is True
     assert len(job['input']['source_context']) >= 1
+    assert len(job['input']['visual_assets']) >= 1
     executed = client.post(f"/factory/jobs/{data['job_id']}/execute", headers=ADMIN_HEADERS)
     assert executed.status_code == 200
     assert executed.json()['status'] == 'WAITING_PROVIDER'

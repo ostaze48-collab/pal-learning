@@ -1,12 +1,13 @@
 'use client';
 
-import {useEffect,useState} from 'react';
+import {useEffect,useMemo,useState} from 'react';
 
 const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
 type Lesson={id:number;lesson_number:number;lesson_code:string;title:string;status:string};
 type Unit={id:number;unit_number:number;title:string;lessons:Lesson[]};
 type Source={id:number;source_type:string;source_url?:string;status:string;reliability_score:number;edition_match_score:number};
+type Readiness={queue_ready:boolean;execution_ready:boolean;blockers:string[];next_actions:string[];skills_count:number;authorized_factual_source_chunks:number;scope_evidence_count:number;provider:{provider:string;execution_ready:boolean}};
 type Payload={
   semester:number;
   book:{id:number;book_code:string;title:string;status:string;edition?:string};
@@ -21,7 +22,9 @@ export default function CurrentSemesterPage(){
   const [error,setError]=useState('');
   const [message,setMessage]=useState('');
   const [busy,setBusy]=useState<number|null>(null);
+  const [readiness,setReadiness]=useState<Readiness|null>(null);
 
+  const firstLesson=useMemo(()=>data?.units?.[0]?.lessons?.[0]||null,[data]);
   function authHeaders(){return {Authorization:`Bearer ${localStorage.getItem('pal_admin_token')||''}`};}
   async function load(){
     setError('');
@@ -57,8 +60,39 @@ export default function CurrentSemesterPage(){
       }else{
         setMessage(`Scope BLOCKED · المفقود: ${(b.missing_terms||[]).join('، ')||'—'}. لن يدخل المصدر في factual grounding.`);
       }
+      setReadiness(null);
       await load();
     }catch(e){setError(e instanceof Error?e.message:'فشل تحقق النطاق');}
+    finally{setBusy(null);}
+  }
+
+  async function checkReadiness(){
+    if(!firstLesson) return;
+    setBusy(firstLesson.id); setError(''); setMessage('');
+    try{
+      const r=await fetch(`${API}/factory/lessons/${firstLesson.id}/generation-readiness`,{headers:authHeaders()});
+      const b=await r.json();
+      if(!r.ok) throw new Error(typeof b.detail==='string'?b.detail:b.detail?.message||'تعذر فحص جاهزية التوليد');
+      setReadiness(b);
+      setMessage(b.queue_ready?'Generation Readiness PASS ✓ · يمكن إنشاء Job.':'Generation Readiness BLOCKED · راجع العقبات أدناه؛ لن ننشئ Job قبل إغلاقها.');
+    }catch(e){setError(e instanceof Error?e.message:'تعذر فحص جاهزية التوليد');}
+    finally{setBusy(null);}
+  }
+
+  async function queueGeneration(){
+    if(!firstLesson) return;
+    setBusy(firstLesson.id); setError(''); setMessage('');
+    try{
+      const r=await fetch(`${API}/factory/lessons/${firstLesson.id}/generate`,{method:'POST',headers:authHeaders()});
+      const b=await r.json();
+      if(!r.ok){
+        const detail=b.detail||{};
+        setReadiness(detail.generation_readiness||null);
+        throw new Error(detail.message||'الدرس غير جاهز للتوليد');
+      }
+      setMessage(`تم إنشاء Generation Job #${b.job_id} بحالة ${b.status}. التنفيذ الفعلي يعتمد على مزود AI.`);
+      await checkReadiness();
+    }catch(e){setError(e instanceof Error?e.message:'فشل إنشاء Generation Job');}
     finally{setBusy(null);}
   }
 
@@ -82,6 +116,21 @@ export default function CurrentSemesterPage(){
           <div style={{marginTop:8,display:'grid',gap:6}}>{unit.lessons.map(lesson=><div key={lesson.id} style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><span>{lesson.lesson_number}. {lesson.title}</span><code>{lesson.lesson_code}</code></div>)}</div>
         </div>)}</div>
       </section>
+
+      {firstLesson&&<section style={{marginTop:18,background:'#fffdf5',border:'1px solid #eadca8',borderRadius:14,padding:18}}>
+        <h2 style={{marginTop:0}}>أول درس إنتاجي: {firstLesson.title}</h2>
+        <p>الهيكل التعليمي موجود كـDraft فقط. لا يتم توليد محتوى factual قبل أن يمر المصدر والمهارات عبر بوابات الجاهزية.</p>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+          <button disabled={busy===firstLesson.id} onClick={checkReadiness} style={{padding:'9px 12px',borderRadius:9,border:'1px solid #b49c48',background:'white'}}>فحص Generation Readiness</button>
+          <button disabled={busy===firstLesson.id||!readiness?.queue_ready} onClick={queueGeneration} style={{padding:'9px 12px',borderRadius:9,border:0,background:readiness?.queue_ready?'#176b3a':'#9aa3ad',color:'white'}}>إنشاء Generation Job</button>
+        </div>
+        {readiness&&<div style={{marginTop:12,display:'grid',gap:8}}>
+          <div><strong>{readiness.queue_ready?'READY':'BLOCKED'}</strong> · Skills {readiness.skills_count} · Factual chunks {readiness.authorized_factual_source_chunks} · Scope evidence {readiness.scope_evidence_count}</div>
+          {!!readiness.blockers?.length&&<div style={{padding:10,borderRadius:9,background:'#fff0f0'}}>Blockers: {readiness.blockers.join(' · ')}</div>}
+          {!!readiness.next_actions?.length&&<div style={{padding:10,borderRadius:9,background:'#f7f8fa'}}>Next actions: {readiness.next_actions.join(' → ')}</div>}
+          <small>AI Provider: {readiness.provider?.provider||'—'} · execution ready: {String(readiness.execution_ready)}</small>
+        </div>}
+      </section>}
 
       <section style={{marginTop:18,background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:18}}>
         <h2 style={{marginTop:0}}>المصادر المسجلة</h2>

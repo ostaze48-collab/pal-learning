@@ -124,6 +124,8 @@ def test_candidate_preflight_and_staging_do_not_publish():
     assert second_approval.json()['staged_version_id'] == data['staged_version_id']
     assert second_approval.json()['duplicate_approval'] is True
 
-    lesson = client.get('/curriculum/lessons/1').json()
+    lesson_response = client.get('/curriculum/lessons/1', headers=HEADERS)
+    assert lesson_response.status_code == 200, lesson_response.text
+    lesson = lesson_response.json()
     # Staging approval is intentionally separate from the live lesson state.
     assert lesson['status'] == 'DRAFT'

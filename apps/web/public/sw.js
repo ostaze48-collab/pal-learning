@@ -1,10 +1,11 @@
-const CACHE='pal-learning-beta-v2-shell';
+const CACHE='pal-learning-beta-v3-shell';
 const SHELL=[
   '/',
   '/student',
   '/student/login',
   '/student/register',
   '/student/lesson',
+  '/student/activity',
   '/student/progress',
   '/student/recovery',
   '/student/result',

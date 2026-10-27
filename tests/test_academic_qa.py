@@ -73,12 +73,13 @@ def _stage_release_ready_lesson():
     packet = client.get(f'/factory/jobs/{job_id}', headers=HEADERS).json()['input']
     chunk_id = packet['source_context'][0]['source_chunk_id']
     skill_code = packet['skills'][0]['skill_code']
+    section_titles = [row['title'] for row in packet.get('section_blueprint', [])] or ['لماذا نحتاج إلى الهيكل؟']
 
     payload = {
         'learning_objectives': ['أن يفسر الطالب دور الجهاز الهيكلي في دعامة الجسم.'],
         'concepts': ['الجهاز الهيكلي', 'الدعامة'],
         'sections': [{
-            'title': 'لماذا نحتاج إلى الهيكل؟',
+            'title': title,
             'learning_goal': 'فهم وظيفة الدعامة',
             'blocks': [{
                 'block_type': 'TEXT',
@@ -87,7 +88,7 @@ def _stage_release_ready_lesson():
                 'content': {},
                 'source_chunk_ids': [chunk_id],
             }],
-        }],
+        } for title in section_titles],
         'questions': [{
             'question_type': 'MCQ',
             'prompt': 'ما إحدى وظائف الجهاز الهيكلي؟',
@@ -109,6 +110,7 @@ def _stage_release_ready_lesson():
     }
     ingested = client.post(f'/factory/jobs/{job_id}/ingest-output', json=payload, headers=HEADERS)
     assert ingested.status_code == 200, ingested.text
+    assert ingested.json()['status'] == 'READY_FOR_QA'
     candidate_id = ingested.json()['candidate_id']
 
     qa = client.post(f'/factory/candidates/{candidate_id}/qa', headers=HEADERS)

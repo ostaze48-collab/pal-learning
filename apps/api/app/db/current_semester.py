@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from .models import Book, CurriculumVersion, Grade, Lesson, SourceFile, SourcePackage, Subject, Unit
+from .models import Book, CurriculumVersion, Grade, Lesson, LessonSection, SourceFile, SourcePackage, Subject, Unit
 
 CURRENT_BOOK_CODE = 'PS.G05.SCI.S1'
 CURRENT_PACKAGE_CODE = 'PS-G05-SCI-S1-2026'
@@ -23,6 +23,16 @@ SEMESTER1_STRUCTURE = [
         (2, 'تحولات الطاقة'),
         (3, 'الطاقة والبيئة'),
     ]),
+]
+
+FIRST_LESSON_BLUEPRINT = [
+    (1, 'استكشف: ماذا يمكن أن نرى؟'),
+    (2, 'افهم: التعرف إلى المجهر'),
+    (3, 'افهم: اكتشاف الخلية'),
+    (4, 'طبّق: ملاحظة وتمييز'),
+    (5, 'تحقق من فهمك'),
+    (6, 'اختبر نفسك'),
+    (7, 'ملخص ومراجعة'),
 ]
 
 SUPPORTING_S1_SOURCES = [
@@ -56,6 +66,29 @@ SUPPORTING_S1_SOURCES = [
 ]
 
 
+def _ensure_first_lesson_blueprint(db: Session, first_lesson: Lesson | None) -> int:
+    if not first_lesson:
+        return 0
+    created = 0
+    for section_number, title in FIRST_LESSON_BLUEPRINT:
+        section = db.query(LessonSection).filter(
+            LessonSection.lesson_id == first_lesson.id,
+            LessonSection.section_number == section_number,
+        ).first()
+        if not section:
+            db.add(LessonSection(
+                lesson_id=first_lesson.id,
+                section_number=section_number,
+                title=title,
+                order_no=section_number,
+            ))
+            created += 1
+        else:
+            section.title = title
+            section.order_no = section_number
+    return created
+
+
 def ensure_current_semester_registry(db: Session) -> dict:
     """Idempotently register the current Grade 5 Science semester-1 production track.
 
@@ -64,6 +97,8 @@ def ensure_current_semester_registry(db: Session) -> dict:
     indexed topics align with cell/materials/energy. It still starts as a
     CATALOG_CANDIDATE and must pass scope/edition verification before factual use.
     Historical S1 sources improve package coverage but start with edition_match=0.
+    The first lesson receives only a pedagogical section blueprint; no factual blocks
+    are seeded before source verification.
     """
     cv = db.query(CurriculumVersion).filter(CurriculumVersion.academic_year == '2026').first()
     grade = db.query(Grade).filter(Grade.code == 'G05').first()
@@ -89,6 +124,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
 
     created_units = 0
     created_lessons = 0
+    first_lesson = None
     for unit_number, unit_title, lessons in SEMESTER1_STRUCTURE:
         unit = db.query(Unit).filter(
             Unit.book_id == book.id,
@@ -124,6 +160,10 @@ def ensure_current_semester_registry(db: Session) -> dict:
             else:
                 lesson.title = lesson_title
                 lesson.status = 'DRAFT' if lesson.status != 'PUBLISHED' else lesson.status
+            if unit_number == 1 and lesson_number == 1:
+                first_lesson = lesson
+
+    created_first_lesson_sections = _ensure_first_lesson_blueprint(db, first_lesson)
 
     package = db.query(SourcePackage).filter(SourcePackage.package_code == CURRENT_PACKAGE_CODE).first()
     created_package = False
@@ -200,8 +240,6 @@ def ensure_current_semester_registry(db: Session) -> dict:
         ))
         created_supporting_sources += 1
 
-    # The same broad Ministry catalog URL was previously attached to the S2 prototype.
-    # Keep the historical row for auditability, but ensure it contributes no semester-2 authority.
     s2_package = db.query(SourcePackage).filter(SourcePackage.package_code == 'PS-G05-SCI-S2-2026').first()
     reassigned_s2_rows = 0
     if s2_package:
@@ -225,12 +263,14 @@ def ensure_current_semester_registry(db: Session) -> dict:
         'book_code': book.book_code,
         'package_id': package.id,
         'package_code': package.package_code,
+        'first_lesson_id': first_lesson.id if first_lesson else None,
         'created_book': created_book,
         'created_package': created_package,
         'created_source': created_source,
         'created_supporting_sources': created_supporting_sources,
         'created_units': created_units,
         'created_lessons': created_lessons,
+        'created_first_lesson_sections': created_first_lesson_sections,
         'reassigned_s2_catalog_rows': reassigned_s2_rows,
         'semester': 1,
     }

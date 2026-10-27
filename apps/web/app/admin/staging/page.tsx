@@ -1,6 +1,6 @@
 'use client';
 
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 
 const API=process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -9,6 +9,7 @@ type Candidate={
  validation?:{candidate_qa?:any;staging_approval?:any};created_at?:string;
 };
 type Staged={id:number;lesson_id:number;candidate_id:number;version_label:string;status:string;release_readiness:string;approved_by_user_id:number;created_at?:string};
+type CurrentSemester={units:Array<{lessons:Array<{id:number;lesson_code:string;title:string}>}>};
 
 async function api(path:string,init:RequestInit={}){
  const headers=new Headers(init.headers);
@@ -21,25 +22,46 @@ async function api(path:string,init:RequestInit={}){
 }
 
 export default function StagingConsole(){
- const [lessonId,setLessonId]=useState(1);
+ const [lessonId,setLessonId]=useState(0);
+ const [currentLessonLabel,setCurrentLessonLabel]=useState('');
  const [rows,setRows]=useState<Candidate[]>([]);
  const [staged,setStaged]=useState<Staged[]>([]);
  const [preview,setPreview]=useState<any>(null);
  const [message,setMessage]=useState('');
  const [busy,setBusy]=useState('');
 
- async function load(){
+ async function load(targetLessonId?:number){
+  const id=targetLessonId||lessonId;
+  if(!id) return;
   setBusy('load');setMessage('');
   try{
    const [candidates,versions]=await Promise.all([
-    api(`/factory/lessons/${lessonId}/candidates`),
-    api(`/factory/lessons/${lessonId}/staged-versions`),
+    api(`/factory/lessons/${id}/candidates`),
+    api(`/factory/lessons/${id}/staged-versions`),
    ]);
    setRows(candidates);setStaged(versions);
   }
   catch(e){setMessage(e instanceof Error?e.message:'تعذر تحميل المرشحين');}
   finally{setBusy('');}
  }
+
+ useEffect(()=>{
+  let cancelled=false;
+  async function init(){
+   try{
+    const current:CurrentSemester=await api('/admin/current-semester');
+    const first=current.units?.[0]?.lessons?.[0];
+    if(!first) throw new Error('لا يوجد درس أول في الفصل الحالي.');
+    if(cancelled) return;
+    setLessonId(first.id);
+    setCurrentLessonLabel(`${first.lesson_code} · ${first.title}`);
+    await load(first.id);
+   }catch(e){if(!cancelled)setMessage(e instanceof Error?e.message:'تعذر تحديد درس الفصل الحالي');}
+  }
+  void init();
+  return()=>{cancelled=true;};
+ },[]);
+
  async function act(label:string,fn:()=>Promise<any>){
   setBusy(label);setMessage('');
   try{const result=await fn();setMessage(`${label} ✓`);await load();return result;}
@@ -84,10 +106,12 @@ export default function StagingConsole(){
   <h1>Candidate QA & Staging</h1>
   <p>هذه الشاشة لا تنشر أي محتوى. تفصل التحقق البنيوي والمصدر، snapshot الـstaging، ثم Academic AI QA المستقل.</p>
   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',background:'white',padding:14,borderRadius:14,border:'1px solid #e8edf5'}}>
-   <label>Lesson ID <input type="number" min="1" value={lessonId} onChange={e=>setLessonId(Number(e.target.value)||1)} style={{width:80,padding:8,marginInlineStart:6}}/></label>
-   <button onClick={load} disabled={!!busy}>تحميل المرشحين وStaging</button>
-   <a href="/admin/curriculum">العودة لمصنع المنهاج</a>
+   <label>Lesson ID <input type="number" min="1" value={lessonId||''} onChange={e=>setLessonId(Number(e.target.value)||0)} style={{width:80,padding:8,marginInlineStart:6}}/></label>
+   <button onClick={()=>load()} disabled={!!busy||!lessonId}>تحميل المرشحين وStaging</button>
+   <a href="/admin/current-semester">الفصل الحالي</a>
+   <a href="/admin/curriculum">مصنع المنهاج</a>
   </div>
+  {currentLessonLabel&&<div style={{marginTop:8,fontSize:13,opacity:.65}}>الدرس الافتراضي الحالي: {currentLessonLabel}</div>}
   {message&&<div style={{marginTop:12,padding:12,borderRadius:10,background:message.includes('✓')||message.includes('تم فتح')?'#ecfdf3':'#fff4e5'}}>{message}</div>}
 
   <section style={{marginTop:16,display:'grid',gap:12}}>

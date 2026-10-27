@@ -256,6 +256,45 @@ def run():
             )
             db.add(solutions_file); db.flush()
 
+        # Historical supporting sources: useful for pedagogy/recovery/assessment,
+        # but never counted as current-edition evidence until their files are
+        # imported and matched against the target curriculum.
+        supporting_sources = [
+            (
+                'TEACHER_GUIDE',
+                'https://www.sh-pal.com/2019/06/blog-post_41.html',
+                'grade5-science-teacher-guide-2019',
+                '2019 historical teacher guide',
+                90,
+            ),
+            (
+                'REMEDIAL',
+                'https://www.sh-pal.com/2019/03/blog-post_41.html',
+                'grade5-science-remedial-cards-2019',
+                '2019 historical remedial cards',
+                75,
+            ),
+            (
+                'WORKSHEET',
+                'https://www.sh-pal.com/2022/04/2022_53.html',
+                'grade5-science-final-review-cards-2022',
+                '2022 historical review worksheets',
+                80,
+            ),
+        ]
+        for source_type, source_url, filename, edition, reliability in supporting_sources:
+            existing_support = db.query(SourceFile).filter_by(
+                package_id=package.id, source_type=source_type, source_url=source_url
+            ).first()
+            if not existing_support:
+                db.add(SourceFile(
+                    package_id=package.id, source_type=source_type,
+                    source_url=source_url, original_filename=filename,
+                    edition=edition, reliability_score=reliability,
+                    edition_match_score=0, status='DISCOVERED'
+                ))
+        db.flush()
+
         skill_sets = seed_skill_graph(db, sci, math, lessons[1])
         seed_questions(db, lessons[1], skill_sets['science'], source_file)
 

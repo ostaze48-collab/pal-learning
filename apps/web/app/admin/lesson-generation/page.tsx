@@ -1,17 +1,26 @@
 'use client';
 
 import {useEffect,useMemo,useState} from 'react';
+import {ActionButton,ActionLink,AdminShell,ButtonRow,Card,MetricCard,Notice,SectionHeader,StatusPill} from '../_components/AdminUI';
 
 const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
 type Lesson={id:number;lesson_code:string;title:string};
 type Current={units:Array<{lessons:Lesson[]}>};
-type Readiness={queue_ready:boolean;execution_ready:boolean;blockers:string[];next_actions:string[];authorized_factual_source_chunks:number;skills_count:number;provider:{provider:string;execution_ready:boolean}};
+type Readiness={queue_ready:boolean;execution_ready:boolean;blockers:string[];next_actions:string[];authorized_factual_source_chunks:number;skills_count:number;scope_evidence_count?:number;provider:{provider:string;execution_ready:boolean}};
 type FactoryStatus={provider:string;generation_ready:boolean;model_configured:boolean;key_configured:boolean;mode:string};
 type Job={id:number;job_type:string;status:string;progress:number;model_route:string;prompt_version:string;error?:string|null;provider?:string|null};
 type Candidate={id:number;version_label:string;status:string;schema_valid:boolean;provenance_score:number;validation?:Record<string,unknown>;created_at?:string};
 
+function jobTone(status:string):'good'|'warn'|'bad'|'info'|'neutral'{
+  if(['OUTPUT_VALIDATED','COMPLETED'].includes(status)) return 'good';
+  if(['FAILED','STALE_INPUT','OUTPUT_REJECTED','OUTPUT_SCHEMA_INVALID'].includes(status)) return 'bad';
+  if(['QUEUED','WAITING_PROVIDER'].includes(status)) return 'warn';
+  return 'info';
+}
+
 export default function LessonGenerationPage(){
+  const [lessons,setLessons]=useState<Lesson[]>([]);
   const [lesson,setLesson]=useState<Lesson|null>(null);
   const [readiness,setReadiness]=useState<Readiness|null>(null);
   const [factory,setFactory]=useState<FactoryStatus|null>(null);
@@ -23,15 +32,15 @@ export default function LessonGenerationPage(){
 
   function headers(){return {Authorization:`Bearer ${localStorage.getItem('pal_admin_token')||''}`,'Content-Type':'application/json'};}
 
-  async function load(){
+  async function load(targetLessonId?:number){
     setError('');
     try{
       const currentRes=await fetch(`${API}/admin/current-semester`,{headers:headers()});
       const current:Current=await currentRes.json();
       if(!currentRes.ok) throw new Error((current as any).detail||'تعذر تحميل الفصل الحالي');
-      const lessons=current.units.flatMap(unit=>unit.lessons||[]);
-      const requested=Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
-      const selected=lessons.find(item=>item.id===requested)||lessons[0];
+      const all=current.units.flatMap(unit=>unit.lessons||[]);setLessons(all);
+      const requested=targetLessonId||Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
+      const selected=all.find(item=>item.id===requested)||all[0];
       if(!selected) throw new Error('لم يتم العثور على درس في الفصل الحالي');
       setLesson(selected);
 
@@ -41,23 +50,23 @@ export default function LessonGenerationPage(){
         fetch(`${API}/factory/lessons/${selected.id}/jobs`,{headers:headers()}),
         fetch(`${API}/factory/lessons/${selected.id}/candidates`,{headers:headers()}),
       ]);
-      const ready=await readyRes.json();
-      const status=await statusRes.json();
-      const allJobs=await jobsRes.json();
-      const candidateRows=await candidatesRes.json();
-      if(!readyRes.ok) throw new Error(ready.detail||'تعذر تحميل Generation Readiness');
+      const ready=await readyRes.json();const status=await statusRes.json();const allJobs=await jobsRes.json();const candidateRows=await candidatesRes.json();
+      if(!readyRes.ok) throw new Error(typeof ready.detail==='string'?ready.detail:ready.detail?.message||'تعذر تحميل Generation Readiness');
       if(!statusRes.ok) throw new Error(status.detail||'تعذر تحميل AI Provider status');
       if(!jobsRes.ok) throw new Error(allJobs.detail||'تعذر تحميل Jobs');
       if(!candidatesRes.ok) throw new Error(candidateRows.detail||'تعذر تحميل Candidates');
-      setReadiness(ready);
-      setFactory(status);
-      setJobs((allJobs||[]).filter((job:Job)=>job.job_type==='GENERATE_LESSON'));
-      setCandidates(candidateRows||[]);
+      setReadiness(ready);setFactory(status);setJobs((allJobs||[]).filter((job:Job)=>job.job_type==='GENERATE_LESSON'));setCandidates(candidateRows||[]);
     }catch(e){setError(e instanceof Error?e.message:'تعذر تحميل Lesson Generation');}
   }
   useEffect(()=>{void load();},[]);
 
   const latest=useMemo(()=>jobs[0]||null,[jobs]);
+  const retryable=!!latest&&['FAILED','STALE_INPUT','OUTPUT_REJECTED','OUTPUT_SCHEMA_INVALID'].includes(latest.status);
+
+  async function chooseLesson(id:number){
+    const url=new URL(window.location.href);url.searchParams.set('lesson_id',String(id));window.history.replaceState({},'',url);
+    setJobs([]);setCandidates([]);setMessage('');await load(id);
+  }
 
   async function queue(){
     if(!lesson) return;
@@ -66,7 +75,7 @@ export default function LessonGenerationPage(){
       const r=await fetch(`${API}/factory/lessons/${lesson.id}/generate`,{method:'POST',headers:headers()});
       const b=await r.json();
       if(!r.ok) throw new Error(typeof b.detail==='string'?b.detail:b.detail?.message||'تعذر إنشاء Generation Job');
-      setMessage(`تم إنشاء Generation Job #${b.job_id}. لم يتم توليد محتوى بعد.`);await load();
+      setMessage(`تم إنشاء Generation Job #${b.job_id}. تم تثبيت Snapshot للمصادر والمهارات؛ لم يتم توليد محتوى بعد.`);await load(lesson.id);
     }catch(e){setError(e instanceof Error?e.message:'تعذر إنشاء Generation Job');}
     finally{setBusy(null);}
   }
@@ -77,9 +86,7 @@ export default function LessonGenerationPage(){
       const r=await fetch(`${API}/factory/jobs/${jobId}/execute`,{method:'POST',headers:headers()});
       const b=await r.json();
       if(!r.ok) throw new Error(typeof b.detail==='string'?b.detail:b.detail?.message||'فشل تنفيذ AI');
-      if(b.status==='WAITING_PROVIDER') setMessage('الـJob متوقف على مزود AI حقيقي؛ لم يتم إنشاء درس وهمي.');
-      else setMessage(`AI execution انتهى بحالة ${b.status}. إذا كان COMPLETED فتبقى مرحلة Output Validation.`);
-      await load();
+      setMessage(b.status==='WAITING_PROVIDER'?'الـJob ينتظر مزود AI حقيقي؛ لم يتم إنشاء محتوى وهمي.':`انتهى تنفيذ AI بحالة ${b.status}.`);await load(lesson?.id);
     }catch(e){setError(e instanceof Error?e.message:'فشل تنفيذ AI');}
     finally{setBusy(null);}
   }
@@ -90,53 +97,70 @@ export default function LessonGenerationPage(){
       const r=await fetch(`${API}/factory/jobs/${jobId}/ingest-provider-output`,{method:'POST',headers:headers()});
       const b=await r.json();
       if(!r.ok) throw new Error(typeof b.detail==='string'?b.detail:b.detail?.message||'فشل التحقق من خرج المزود');
-      setMessage(`Output Validated ✓ · Candidate #${b.candidate_id} · Provenance ${b.provenance_score}%.`);await load();
+      setMessage(`Output Validated ✓ · Candidate #${b.candidate_id} · Provenance ${b.provenance_score}%.`);await load(lesson?.id);
     }catch(e){setError(e instanceof Error?e.message:'فشل التحقق من خرج المزود');}
     finally{setBusy(null);}
   }
 
-  const retryable=latest&&['FAILED','STALE_INPUT','OUTPUT_REJECTED','OUTPUT_SCHEMA_INVALID'].includes(latest.status);
+  return <AdminShell eyebrow="الإدارة ← الفصل الحالي ← Lesson Generation" title="توليد حزمة الدرس" description="التوليد لا يبدأ إلا بعد Source Review وSkill Approval. خرج AI يبقى Candidate منفصلًا ولا يلمس الدرس الحي قبل QA وStaging.">
+    <Card style={{marginBottom:14}}>
+      <SectionHeader title="الدرس الحالي" description={lesson?`${lesson.lesson_code} · ${lesson.title}`:'جارٍ تحميل الدرس'} aside={readiness?<StatusPill tone={readiness.queue_ready?'good':'bad'}>{readiness.queue_ready?'QUEUE READY':'BLOCKED'}</StatusPill>:undefined}/>
+      <select value={lesson?.id||''} onChange={e=>void chooseLesson(Number(e.target.value))} style={{width:'100%',minHeight:46,border:'1px solid #cfd6df',borderRadius:11,padding:'0 12px',background:'#fff',fontSize:15}}>
+        {lessons.map(item=><option key={item.id} value={item.id}>{item.lesson_code} · {item.title}</option>)}
+      </select>
+    </Card>
 
-  return <main style={{maxWidth:1000,margin:'30px auto',padding:20}}>
-    <div style={{fontSize:14,opacity:.65}}>الإدارة ← الفصل الحالي ← Lesson Generation</div>
-    <h1>توليد حزمة الدرس</h1>
-    <p>{lesson?`${lesson.lesson_code} · ${lesson.title}`:'جارٍ تحميل الدرس…'}</p>
-    {message&&<div style={{padding:12,borderRadius:10,background:'#eefbf3',marginBottom:12}}>{message}</div>}
-    {error&&<div style={{padding:12,borderRadius:10,background:'#ffecec',marginBottom:12}}>{error}</div>}
+    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(170px,1fr))',gap:10,marginBottom:14}}>
+      <MetricCard label="Generation Readiness" value={readiness?.queue_ready?'READY':'BLOCKED'} tone={readiness?.queue_ready?'good':'bad'} detail={`Sources ${readiness?.authorized_factual_source_chunks??'—'} · Skills ${readiness?.skills_count??'—'}`}/>
+      <MetricCard label="AI Provider" value={factory?.provider||'—'} tone={factory?.generation_ready?'good':'warn'} detail={`${factory?.mode||'—'} · execution ${factory?.generation_ready?'ready':'blocked'}`}/>
+      <MetricCard label="Candidates" value={candidates.length} tone={candidates.length?'good':'neutral'} detail="كل Candidate مستقل عن المحتوى المنشور"/>
+      <MetricCard label="Generation Jobs" value={jobs.length} detail={latest?`Latest: #${latest.id} ${latest.status}`:'لا يوجد Job'}/>
+    </div>
 
-    <section style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:12}}>
-      <div style={{background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:16}}><strong>Generation Readiness</strong><div style={{fontSize:24,marginTop:6}}>{readiness?.queue_ready?'READY':'BLOCKED'}</div><small>Sources {readiness?.authorized_factual_source_chunks??'—'} · Skills {readiness?.skills_count??'—'}</small></div>
-      <div style={{background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:16}}><strong>AI Provider</strong><div style={{fontSize:24,marginTop:6}}>{factory?.provider||'—'}</div><small>{factory?.mode||'—'} · generation ready {String(factory?.generation_ready??false)}</small></div>
-    </section>
+    {message&&<div style={{marginBottom:12}}><Notice tone="good">{message}</Notice></div>}
+    {error&&<div style={{marginBottom:12}}><Notice tone="bad">{error}</Notice></div>}
+    {!!readiness?.blockers?.length&&<div style={{marginBottom:14}}><Notice tone="bad"><strong>Blockers:</strong> {readiness.blockers.join(' · ')}{readiness.next_actions?.length?<div style={{marginTop:5}}><strong>Next:</strong> {readiness.next_actions.join(' · ')}</div>:null}</Notice></div>}
 
-    {!!readiness?.blockers?.length&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#fff1f1'}}>Blockers: {readiness.blockers.join(' · ')}</div>}
-
-    <section style={{marginTop:16,background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:18}}>
-      <h2 style={{marginTop:0}}>المرحلة الحالية</h2>
-      {!latest&&<><p>لا يوجد Generation Job بعد. إنشاء Job يثبت Snapshot للمصادر والمهارات المعتمدة لكنه لا يستدعي AI.</p><button disabled={busy!==null||!readiness?.queue_ready} onClick={queue}>إنشاء Generation Job</button></>}
-      {latest&&<div style={{padding:12,borderRadius:10,background:'#f8fafc'}}>
-        <strong>Job #{latest.id} · {latest.status}</strong><div>Progress {latest.progress}% · route {latest.model_route}</div>{latest.error&&<div style={{color:'#9b2222',marginTop:6}}>{latest.error}</div>}
-        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:10}}>
-          {latest.status==='QUEUED'&&factory?.generation_ready&&<button disabled={busy===latest.id} onClick={()=>execute(latest.id)}>تنفيذ AI</button>}
-          {latest.status==='QUEUED'&&!factory?.generation_ready&&<span style={{padding:8,borderRadius:8,background:'#fff4e5'}}>يلزم إعداد مزود AI حقيقي قبل التنفيذ.</span>}
-          {latest.status==='WAITING_PROVIDER'&&<span style={{padding:8,borderRadius:8,background:'#fff4e5'}}>WAITING_PROVIDER — لم يُنتج محتوى.</span>}
-          {latest.status==='COMPLETED'&&<button disabled={busy===latest.id} onClick={()=>ingest(latest.id)}>تحقق من Output وأنشئ Candidate</button>}
-          {latest.status==='OUTPUT_VALIDATED'&&<a href="/admin/staging">انتقل إلى Candidate QA / Staging</a>}
-          {retryable&&readiness?.queue_ready&&<button disabled={busy!==null} onClick={queue}>أنشئ Job جديد من الاعتمادات الحالية</button>}
-        </div>
+    <Card style={{marginBottom:14}}>
+      <SectionHeader title="الإجراء الحالي" description="هذه الأزرار تتبع حالة الـJob ولا تتجاوز أي بوابة."/>
+      {!latest&&<div><Notice tone={readiness?.queue_ready?'info':'warn'}>{readiness?.queue_ready?'كل البوابات غير المرتبطة بالمزود جاهزة. يمكنك إنشاء Job.':'أكمل Source Review وSkill Mapping أولًا.'}</Notice><div style={{marginTop:12}}><ActionButton disabled={busy!==null||!readiness?.queue_ready} onClick={()=>void queue()}>+ إنشاء Generation Job</ActionButton></div></div>}
+      {latest&&<div style={{padding:14,border:'1px solid #e7ebf1',borderRadius:13,background:'#fafbfc'}}>
+        <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><div><strong>Job #{latest.id}</strong><div style={{fontSize:12,color:'#667085',marginTop:3}}>route {latest.model_route} · prompt {latest.prompt_version}</div></div><StatusPill tone={jobTone(latest.status)}>{latest.status}</StatusPill></div>
+        <div style={{height:8,background:'#e9edf2',borderRadius:99,overflow:'hidden',marginTop:11}}><div style={{height:'100%',width:`${Math.max(0,Math.min(100,latest.progress||0))}%`,background:'#176b3a'}}/></div>
+        {latest.error&&<div style={{marginTop:10}}><Notice tone="bad">{latest.error}</Notice></div>}
+        <div style={{marginTop:12}}><ButtonRow>
+          {latest.status==='QUEUED'&&factory?.generation_ready&&<ActionButton disabled={busy===latest.id} onClick={()=>void execute(latest.id)}>تشغيل AI الآن</ActionButton>}
+          {latest.status==='QUEUED'&&!factory?.generation_ready&&<ActionLink href="/admin/readiness" tone="secondary">إعداد Production / AI Readiness</ActionLink>}
+          {latest.status==='COMPLETED'&&<ActionButton disabled={busy===latest.id} onClick={()=>void ingest(latest.id)}>تحقق من Output وأنشئ Candidate</ActionButton>}
+          {latest.status==='OUTPUT_VALIDATED'&&<ActionLink href="/admin/staging">التالي: Candidate QA / Staging</ActionLink>}
+          {retryable&&readiness?.queue_ready&&<ActionButton tone="secondary" disabled={busy!==null} onClick={()=>void queue()}>إنشاء Job جديد من الاعتمادات الحالية</ActionButton>}
+        </ButtonRow></div>
+        {latest.status==='WAITING_PROVIDER'&&<div style={{marginTop:10}}><Notice tone="warn">WAITING_PROVIDER — النظام رفض اختلاق محتوى محلي. يجب إعداد مزود AI حقيقي.</Notice></div>}
       </div>}
-    </section>
+    </Card>
 
-    <section style={{marginTop:16,background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:18}}>
-      <h2 style={{marginTop:0}}>Generation Jobs</h2>
-      {!jobs.length?<p>لا توجد Jobs.</p>:<div style={{display:'grid',gap:7}}>{jobs.map(job=><div key={job.id} style={{padding:9,borderRadius:8,background:'#f8fafc'}}>#{job.id} · <strong>{job.status}</strong> · {job.progress}% {job.error?`· ${job.error}`:''}</div>)}</div>}
-    </section>
+    <Card style={{marginBottom:14}}>
+      <SectionHeader title="Generation Jobs" description="سجل محاولات التوليد للدرس الحالي."/>
+      {!jobs.length?<Notice>لا توجد Jobs.</Notice>:<div style={{display:'grid',gap:8}}>{jobs.map(job=><div key={job.id} style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',padding:11,border:'1px solid #edf0f4',borderRadius:11}}><div><strong>#{job.id}</strong> · {job.progress}%<div style={{fontSize:12,color:'#667085'}}>{job.model_route} · {job.prompt_version}</div></div><StatusPill tone={jobTone(job.status)}>{job.status}</StatusPill></div>)}</div>}
+    </Card>
 
-    <section style={{marginTop:16,background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:18}}>
-      <h2 style={{marginTop:0}}>Content Candidates</h2>
-      {!candidates.length?<p>لا يوجد Candidate بعد. وجود Job وحده لا يُعد محتوى مولدًا.</p>:<div style={{display:'grid',gap:8}}>{candidates.map(candidate=><div key={candidate.id} style={{padding:10,borderRadius:9,background:'#f8fafc'}}><strong>Candidate #{candidate.id} · {candidate.version_label}</strong><div>{candidate.status} · Provenance {candidate.provenance_score}% · Schema {String(candidate.schema_valid)}</div></div>)}</div>}
-    </section>
+    <Card style={{marginBottom:14}}>
+      <SectionHeader title="Content Candidates" description="Candidate لا يعني Published. سيذهب بعد ذلك إلى Preflight وStaging وAcademic QA." aside={candidates.length?<ActionLink href="/admin/staging">فتح Staging Console</ActionLink>:undefined}/>
+      {!candidates.length?<Notice>لا يوجد Candidate بعد. وجود Job وحده لا يعتبر محتوى مولدًا.</Notice>:<div style={{display:'grid',gap:9}}>{candidates.map(candidate=><div key={candidate.id} style={{padding:12,border:'1px solid #e7ebf1',borderRadius:12}}>
+        <div style={{display:'flex',justifyContent:'space-between',gap:8,flexWrap:'wrap'}}><strong>Candidate #{candidate.id} · {candidate.version_label}</strong><StatusPill tone={candidate.status.includes('REJECT')?'bad':'info'}>{candidate.status}</StatusPill></div>
+        <div style={{display:'flex',gap:7,flexWrap:'wrap',marginTop:8}}><StatusPill tone={candidate.schema_valid?'good':'bad'}>Schema {candidate.schema_valid?'PASS':'FAIL'}</StatusPill><StatusPill tone={candidate.provenance_score===100?'good':'warn'}>Provenance {candidate.provenance_score}%</StatusPill></div>
+      </div>)}</div>}
+    </Card>
 
-    <div style={{display:'flex',gap:12,marginTop:18,flexWrap:'wrap'}}><a href="/admin/current-semester/matrix">مصفوفة الفصل</a><a href={lesson?`/admin/generation-readiness?lesson_id=${lesson.id}`:'/admin/generation-readiness'}>Generation Readiness</a><a href="/admin/current-semester">الفصل الحالي</a><a href="/admin/staging">Candidate QA / Staging</a><a href="/admin">لوحة الإدارة</a></div>
-  </main>;
+    <Card style={{position:'sticky',bottom:10,zIndex:2}}>
+      <SectionHeader title="تنقل سريع" description="ارجع خطوة للخلف أو انتقل إلى QA بعد إنشاء Candidate."/>
+      <ButtonRow>
+        <ActionLink href={lesson?`/admin/generation-readiness?lesson_id=${lesson.id}`:'/admin/generation-readiness'}>Generation Readiness</ActionLink>
+        <ActionLink href={lesson?`/admin/skill-mapping?lesson_id=${lesson.id}`:'/admin/skill-mapping'} tone="secondary">Skill Mapping</ActionLink>
+        <ActionLink href={lesson?`/admin/source-link-review?lesson_id=${lesson.id}`:'/admin/source-link-review'} tone="secondary">Source Review</ActionLink>
+        <ActionLink href="/admin/current-semester" tone="secondary">الفصل الحالي</ActionLink>
+        <ActionLink href="/admin/staging" tone="secondary">QA / Staging</ActionLink>
+      </ButtonRow>
+    </Card>
+  </AdminShell>;
 }

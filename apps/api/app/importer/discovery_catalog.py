@@ -76,6 +76,35 @@ SOURCE_DISCOVERY_CATALOG: tuple[SourceDiscoveryEntry, ...] = (
         edition_claim='third edition 2020 historical factual reference',
     ),
     SourceDiscoveryEntry(
+        source_code='PS.G05.SCI.S1.PLAN.2025.DISCOVERY',
+        package_code='PS-G05-SCI-S1-2026',
+        intended_source_type='CURRICULUM_PLAN',
+        title='خطة مادة العلوم للصف الخامس — الفصل الأول — برنامج الطوارئ 2025',
+        grade_code='G05',
+        subject_code='SCI',
+        semester=1,
+        academic_year='2025',
+        discovery_url='https://www.wepal.net/lms.resourceItemShow.114939',
+        corroboration_urls=(
+            'https://www.wepal.net/lms.resourceItems?context_id=44',
+            'https://www.wepal.net/lms.resourceList?level_id=5',
+            'https://www.wepal.net/library/?app=content.list&level=5&semester=1&subject=6&submit=submit&type=3',
+        ),
+        discovery_kind='SECONDARY_INDEX',
+        authority_claim='REPORTED_AS_2025_EMERGENCY_SCIENCE_PLAN_BY_PALESTINIAN_EDUCATION_LIBRARY',
+        file_verified=False,
+        ingestion_mode='UPLOAD_REQUIRED',
+        discovered_on='2026-10-27',
+        notes=(
+            'Current-scope discovery evidence only. The resource is indexed inside Grade 5 / Semester 1 / Science, '
+            'but the actual attachment has not yet been fetched and text-verified. Do not create current-scope links, '
+            'coverage, edition evidence, or generation authority from this catalog entry. Obtain the attachment, upload '
+            'it as CURRICULUM_PLAN, extract text, then verify the target lesson scope explicitly.'
+        ),
+        reliability_score=75.0,
+        edition_claim='2025 emergency curriculum plan; attachment and scope to verify',
+    ),
+    SourceDiscoveryEntry(
         source_code='PS.G05.SCI.S1.U01.L01.WORKSHEET.2024.OFFICIAL',
         package_code='PS-G05-SCI-S1-2026',
         intended_source_type='WORKSHEET',
@@ -163,7 +192,7 @@ def list_source_discoveries(package_code: str | None = None):
     if package_code:
         rows = tuple(item for item in rows if item.package_code == package_code)
     return {
-        'catalog_version': 'source-discovery/v2',
+        'catalog_version': 'source-discovery/v3',
         'entries': [asdict(item) for item in rows],
         'policy': {
             'unverified_discovery_creates_source_files': False,

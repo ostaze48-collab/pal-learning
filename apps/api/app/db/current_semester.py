@@ -35,6 +35,16 @@ FIRST_LESSON_BLUEPRINT = [
     (7, 'ملخص ومراجعة'),
 ]
 
+SECOND_LESSON_BLUEPRINT = [
+    (1, 'استكشف: لاحظ وقارن'),
+    (2, 'افهم: بناء مفهوم الخلية'),
+    (3, 'افهم: أنواع الخلايا'),
+    (4, 'طبّق: قارن وصنّف'),
+    (5, 'تحقق من فهمك'),
+    (6, 'اختبر نفسك'),
+    (7, 'ملخص ومراجعة'),
+]
+
 SUPPORTING_S1_SOURCES = [
     {
         'source_type': 'STUDENT_BOOK',
@@ -66,18 +76,22 @@ SUPPORTING_S1_SOURCES = [
 ]
 
 
-def _ensure_first_lesson_blueprint(db: Session, first_lesson: Lesson | None) -> int:
-    if not first_lesson:
+def _ensure_lesson_blueprint(
+    db: Session,
+    lesson: Lesson | None,
+    blueprint: list[tuple[int, str]],
+) -> int:
+    if not lesson:
         return 0
     created = 0
-    for section_number, title in FIRST_LESSON_BLUEPRINT:
+    for section_number, title in blueprint:
         section = db.query(LessonSection).filter(
-            LessonSection.lesson_id == first_lesson.id,
+            LessonSection.lesson_id == lesson.id,
             LessonSection.section_number == section_number,
         ).first()
         if not section:
             db.add(LessonSection(
-                lesson_id=first_lesson.id,
+                lesson_id=lesson.id,
                 section_number=section_number,
                 title=title,
                 order_no=section_number,
@@ -97,7 +111,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
     indexed topics align with cell/materials/energy. It still starts as a
     CATALOG_CANDIDATE and must pass scope/edition verification before factual use.
     Historical S1 sources improve package coverage but start with edition_match=0.
-    The first lesson receives only a pedagogical section blueprint; no factual blocks
+    Lessons 1 and 2 receive only pedagogical section blueprints; no factual blocks
     are seeded before source verification.
     """
     cv = db.query(CurriculumVersion).filter(CurriculumVersion.academic_year == '2026').first()
@@ -125,6 +139,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
     created_units = 0
     created_lessons = 0
     first_lesson = None
+    second_lesson = None
     for unit_number, unit_title, lessons in SEMESTER1_STRUCTURE:
         unit = db.query(Unit).filter(
             Unit.book_id == book.id,
@@ -162,8 +177,11 @@ def ensure_current_semester_registry(db: Session) -> dict:
                 lesson.status = 'DRAFT' if lesson.status != 'PUBLISHED' else lesson.status
             if unit_number == 1 and lesson_number == 1:
                 first_lesson = lesson
+            elif unit_number == 1 and lesson_number == 2:
+                second_lesson = lesson
 
-    created_first_lesson_sections = _ensure_first_lesson_blueprint(db, first_lesson)
+    created_first_lesson_sections = _ensure_lesson_blueprint(db, first_lesson, FIRST_LESSON_BLUEPRINT)
+    created_second_lesson_sections = _ensure_lesson_blueprint(db, second_lesson, SECOND_LESSON_BLUEPRINT)
 
     package = db.query(SourcePackage).filter(SourcePackage.package_code == CURRENT_PACKAGE_CODE).first()
     created_package = False
@@ -264,6 +282,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
         'package_id': package.id,
         'package_code': package.package_code,
         'first_lesson_id': first_lesson.id if first_lesson else None,
+        'second_lesson_id': second_lesson.id if second_lesson else None,
         'created_book': created_book,
         'created_package': created_package,
         'created_source': created_source,
@@ -271,6 +290,7 @@ def ensure_current_semester_registry(db: Session) -> dict:
         'created_units': created_units,
         'created_lessons': created_lessons,
         'created_first_lesson_sections': created_first_lesson_sections,
+        'created_second_lesson_sections': created_second_lesson_sections,
         'reassigned_s2_catalog_rows': reassigned_s2_rows,
         'semester': 1,
     }

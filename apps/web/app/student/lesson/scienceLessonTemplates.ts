@@ -79,6 +79,17 @@ const TEMPLATES:Record<string,ScienceLessonTemplate>={
       lockedText:'أكمل تحدي الدرس أولًا حتى تُمنح شارة مستكشف الخلية.',
     },
   },
+  'PS.G05.SCI.S1.U01.L02':{
+    subjectLabel:'علوم',
+    gradeLabel:'صف خامس',
+    internalName:'Science Lesson 002',
+    achievement:{
+      title:'مستكشف الخلايا',
+      emoji:'🧫',
+      completedText:'أكملت درس الخلية وأنواعها والتحدي المرتبط به.',
+      lockedText:'أكمل تحدي الدرس أولًا حتى تُفتح شارة مستكشف الخلايا.',
+    },
+  },
 };
 
 export function getScienceLessonTemplate(lessonCode?:string|null):ScienceLessonTemplate{

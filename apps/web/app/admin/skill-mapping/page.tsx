@@ -26,10 +26,12 @@ export default function SkillMappingPage(){
       const currentRes=await fetch(`${API}/admin/current-semester`,{headers:headers()});
       const current:Current=await currentRes.json();
       if(!currentRes.ok) throw new Error((current as any).detail||'تعذر تحميل الفصل الحالي');
-      const first=current.units?.[0]?.lessons?.[0];
-      if(!first) throw new Error('لم يتم العثور على الدرس الأول');
-      setLesson(first);
-      const mapRes=await fetch(`${API}/factory/lessons/${first.id}/skill-mapping`,{headers:headers()});
+      const lessons=current.units.flatMap(unit=>unit.lessons||[]);
+      const requested=Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
+      const chosen=lessons.find(item=>item.id===requested)||lessons[0];
+      if(!chosen) throw new Error('لم يتم العثور على درس في الفصل الحالي');
+      setLesson(chosen);
+      const mapRes=await fetch(`${API}/factory/lessons/${chosen.id}/skill-mapping`,{headers:headers()});
       const map=await mapRes.json();
       if(!mapRes.ok) throw new Error(map.detail||'تعذر تحميل Skill Mapping');
       setMapping(map);
@@ -129,6 +131,6 @@ export default function SkillMappingPage(){
       <button disabled={busy} onClick={()=>approve(reviewJob.job_id)} style={{marginTop:12,padding:'10px 14px',border:0,borderRadius:9,background:'#176b3a',color:'white',fontWeight:700}}>اعتماد المهارات المختارة</button>
     </section>}
 
-    <div style={{display:'flex',gap:10,marginTop:18,flexWrap:'wrap'}}><a href="/admin/current-semester">العودة للفصل الحالي</a><a href="/admin">لوحة الإدارة</a></div>
+    <div style={{display:'flex',gap:10,marginTop:18,flexWrap:'wrap'}}><a href="/admin/current-semester/matrix">مصفوفة الفصل</a><a href={lesson?`/admin/lesson-generation?lesson_id=${lesson.id}`:'/admin/lesson-generation'}>Lesson Generation</a><a href="/admin/current-semester">الفصل الحالي</a><a href="/admin">لوحة الإدارة</a></div>
   </main>;
 }

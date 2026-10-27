@@ -29,15 +29,17 @@ export default function LessonGenerationPage(){
       const currentRes=await fetch(`${API}/admin/current-semester`,{headers:headers()});
       const current:Current=await currentRes.json();
       if(!currentRes.ok) throw new Error((current as any).detail||'تعذر تحميل الفصل الحالي');
-      const first=current.units?.[0]?.lessons?.[0];
-      if(!first) throw new Error('لم يتم العثور على الدرس الأول');
-      setLesson(first);
+      const lessons=current.units.flatMap(unit=>unit.lessons||[]);
+      const requested=Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
+      const selected=lessons.find(item=>item.id===requested)||lessons[0];
+      if(!selected) throw new Error('لم يتم العثور على درس في الفصل الحالي');
+      setLesson(selected);
 
       const [readyRes,statusRes,jobsRes,candidatesRes]=await Promise.all([
-        fetch(`${API}/factory/lessons/${first.id}/generation-readiness`,{headers:headers()}),
+        fetch(`${API}/factory/lessons/${selected.id}/generation-readiness`,{headers:headers()}),
         fetch(`${API}/factory/status`,{headers:headers()}),
-        fetch(`${API}/factory/lessons/${first.id}/jobs`,{headers:headers()}),
-        fetch(`${API}/factory/lessons/${first.id}/candidates`,{headers:headers()}),
+        fetch(`${API}/factory/lessons/${selected.id}/jobs`,{headers:headers()}),
+        fetch(`${API}/factory/lessons/${selected.id}/candidates`,{headers:headers()}),
       ]);
       const ready=await readyRes.json();
       const status=await statusRes.json();
@@ -135,6 +137,6 @@ export default function LessonGenerationPage(){
       {!candidates.length?<p>لا يوجد Candidate بعد. وجود Job وحده لا يُعد محتوى مولدًا.</p>:<div style={{display:'grid',gap:8}}>{candidates.map(candidate=><div key={candidate.id} style={{padding:10,borderRadius:9,background:'#f8fafc'}}><strong>Candidate #{candidate.id} · {candidate.version_label}</strong><div>{candidate.status} · Provenance {candidate.provenance_score}% · Schema {String(candidate.schema_valid)}</div></div>)}</div>}
     </section>
 
-    <div style={{display:'flex',gap:12,marginTop:18,flexWrap:'wrap'}}><a href="/admin/current-semester">الفصل الحالي</a><a href="/admin/staging">Candidate QA / Staging</a><a href="/admin">لوحة الإدارة</a></div>
+    <div style={{display:'flex',gap:12,marginTop:18,flexWrap:'wrap'}}><a href="/admin/current-semester/matrix">مصفوفة الفصل</a><a href={lesson?`/admin/generation-readiness?lesson_id=${lesson.id}`:'/admin/generation-readiness'}>Generation Readiness</a><a href="/admin/current-semester">الفصل الحالي</a><a href="/admin/staging">Candidate QA / Staging</a><a href="/admin">لوحة الإدارة</a></div>
   </main>;
 }

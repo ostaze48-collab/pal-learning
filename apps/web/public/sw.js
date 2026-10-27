@@ -1,8 +1,42 @@
-const CACHE='pal-learning-v0.6-shell';
-const SHELL=['/','/student','/student/progress','/student/recovery'];
-self.addEventListener('install',event=>{event.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).catch(()=>null));self.skipWaiting();});
-self.addEventListener('activate',event=>{event.waitUntil(self.clients.claim());});
+const CACHE='pal-learning-beta-v1-shell';
+const SHELL=['/','/student','/student/login','/student/register','/student/lesson','/student/progress','/student/recovery'];
+
+self.addEventListener('install',event=>{
+  event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).catch(()=>null));
+  self.skipWaiting();
+});
+
+self.addEventListener('activate',event=>{
+  event.waitUntil(Promise.all([
+    caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key)))),
+    self.clients.claim(),
+  ]));
+});
+
 self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET') return;
-  event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(c=>c.put(event.request,copy));return response;}).catch(()=>caches.match(event.request).then(r=>r||caches.match('/student'))));
+  const url=new URL(event.request.url);
+  // Never cache cross-origin API/auth responses. Student data stays server-authoritative.
+  if(url.origin!==self.location.origin) return;
+
+  if(event.request.mode==='navigate'){
+    event.respondWith(
+      fetch(event.request)
+        .then(response=>{
+          if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));}
+          return response;
+        })
+        .catch(async()=>await caches.match(event.request)||await caches.match('/student')||await caches.match('/'))
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(event.request).then(cached=>cached||fetch(event.request).then(response=>{
+      if(response.ok&&url.pathname.startsWith('/_next/')){
+        const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));
+      }
+      return response;
+    }))
+  );
 });

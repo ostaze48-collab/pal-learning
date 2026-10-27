@@ -95,7 +95,15 @@ class AIGateway:
             packet = payload.get('packet') or {}
             allowed_chunks = [x.get('source_chunk_id') for x in packet.get('source_context', []) if x.get('source_chunk_id')]
             allowed_skills = [x.get('skill_code') for x in packet.get('skills', []) if x.get('skill_code')]
-            return common + (
+            section_blueprint = packet.get('section_blueprint') or []
+            blueprint_instruction = (
+                ' The approved section_blueprint for this lesson is '
+                + json.dumps(section_blueprint, ensure_ascii=False)
+                + '. Generate exactly the same number of sections in the same order. Preserve each section title or its clear pedagogical intent; '
+                  'do not merge, delete, reorder, or invent stages. Fill the approved stages with source-grounded content only.'
+                if section_blueprint else ''
+            )
+            return common + blueprint_instruction + (
                 ' Produce exactly one Arabic digital lesson object with only these top-level keys: '
                 'learning_objectives, concepts, sections, questions, summary, flashcards, '
                 'misconceptions, remediation_candidates. Do not add any other top-level key. '

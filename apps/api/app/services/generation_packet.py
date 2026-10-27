@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from ..db.models import (
-    Lesson, LessonSkill, LessonSourceLink, Question, Skill, SourceChunk, SourceFile
+    Lesson, LessonSection, LessonSkill, LessonSourceLink, Question, Skill, SourceChunk, SourceFile
 )
 from ..importer.source_policy import can_ground_facts, can_prove_current_scope
 
@@ -45,6 +45,18 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise ValueError('Lesson not found')
+
+    section_rows = db.query(LessonSection).filter(
+        LessonSection.lesson_id == lesson_id
+    ).order_by(LessonSection.order_no, LessonSection.section_number).all()
+    section_blueprint = [
+        {
+            'section_number': section.section_number,
+            'title': section.title,
+            'order_no': section.order_no,
+        }
+        for section in section_rows
+    ]
 
     skill_rows = db.query(LessonSkill, Skill).join(Skill, Skill.id == LessonSkill.skill_id).filter(
         LessonSkill.lesson_id == lesson_id
@@ -144,13 +156,14 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
 
     existing_questions = db.query(Question).filter(Question.lesson_id == lesson_id).all()
     return {
-        'contract_version': 'lesson-generation-packet/v5',
+        'contract_version': 'lesson-generation-packet/v6',
         'lesson': {
             'id': lesson.id,
             'lesson_code': lesson.lesson_code,
             'title': lesson.title,
             'estimated_minutes': lesson.estimated_minutes,
         },
+        'section_blueprint': section_blueprint,
         'skills': skills,
         'source_context': effective_source_context,
         'scope_evidence': scope_evidence,
@@ -194,12 +207,16 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
             'source_authority_enforced': True,
             'admin_verified_teaching_source_required': True,
             'durable_source_storage_tracked': True,
+            'section_blueprint_enforced': bool(section_blueprint),
+            'section_blueprint_rule': 'When section_blueprint is non-empty, preserve its section count, order, and pedagogical intent. Do not merge, delete, or invent stages.',
             'lesson_loop': ['EXPLORE', 'UNDERSTAND', 'TRY', 'CHECK', 'DEEPEN', 'MASTERY', 'SUMMARY'],
+            'interactive_block_types': ['MATCHING', 'CLASSIFY', 'COMPARE_GRID'],
             'avoid': [
                 'invented curriculum facts',
                 'using unreviewed lesson-source candidates as factual context',
                 'using curriculum-plan text as factual lesson explanation',
                 'using solution/reference-answer sources as factual lesson explanation',
+                'changing an approved pedagogical section blueprint without explicit admin revision',
                 'long lecture-like blocks',
                 'unsupported answer keys',
                 'stigmatising grade-level labels during remediation',

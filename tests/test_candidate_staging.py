@@ -76,7 +76,10 @@ def _prepare_valid_candidate():
             'skill_codes': [skill_code],
             'source_chunk_ids': [chunk_id],
         }],
-        'summary': ['الجهاز الهيكلي يساعد على دعامة الجسم.'],
+        'summary': [{
+            'text': 'الجهاز الهيكلي يساعد على دعامة الجسم.',
+            'source_chunk_ids': [chunk_id],
+        }],
         'flashcards': [],
         'misconceptions': [],
         'remediation_candidates': [],

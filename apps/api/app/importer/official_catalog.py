@@ -75,6 +75,46 @@ def _scope_term_report(text: str, entry: OfficialSourceCatalogEntry) -> dict:
     }
 
 
+def quarantine_unverified_catalog_sources(db: Session) -> dict:
+    """Remove unverified catalog links from weighted teaching-source types.
+
+    This also repairs older seed data that registered a ministry grade/subject link
+    directly as OFFICIAL_PACKAGE before the target semester/lesson scope was proven.
+    Extracted content is checked before quarantine so a previously verified-in-text
+    source is not downgraded unnecessarily.
+    """
+    checked = 0
+    quarantined = 0
+    already_verified = 0
+    for entry in OFFICIAL_SOURCE_CATALOG:
+        package = db.query(SourcePackage).filter(SourcePackage.package_code == entry.package_code).first()
+        if not package:
+            continue
+        row = db.query(SourceFile).filter(
+            SourceFile.package_id == package.id,
+            SourceFile.source_url == entry.registered_url,
+        ).first()
+        if not row:
+            continue
+        checked += 1
+        report = _scope_term_report(row.extracted_text or '', entry)
+        if report['scope_verified']:
+            already_verified += 1
+            continue
+        if row.source_type != 'CATALOG_CANDIDATE' or row.status not in {'SCOPE_UNVERIFIED', 'SCOPE_REJECTED'}:
+            row.source_type = 'CATALOG_CANDIDATE'
+            row.status = 'SCOPE_REJECTED' if row.extracted_text else 'SCOPE_UNVERIFIED'
+            row.edition_match_score = 0.0
+            quarantined += 1
+    if quarantined:
+        db.commit()
+    return {
+        'checked': checked,
+        'quarantined': quarantined,
+        'already_scope_verified': already_verified,
+    }
+
+
 @router.get('/official-sources')
 def list_official_sources(package_code: str | None = None):
     rows = OFFICIAL_SOURCE_CATALOG
@@ -143,11 +183,10 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
         ).first()
         if row:
             existing_count += 1
-            # A catalog link proves authority at grade/subject level, not that it
-            # belongs to this semester/package. Quarantine until content proves scope.
-            if row.source_type == entry.promoted_source_type and not row.extracted_text:
+            report = _scope_term_report(row.extracted_text or '', entry)
+            if not report['scope_verified'] and row.source_type != 'CATALOG_CANDIDATE':
                 row.source_type = 'CATALOG_CANDIDATE'
-                row.status = 'SCOPE_UNVERIFIED'
+                row.status = 'SCOPE_REJECTED' if row.extracted_text else 'SCOPE_UNVERIFIED'
                 row.edition_match_score = 0.0
                 quarantined += 1
         else:

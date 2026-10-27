@@ -12,7 +12,7 @@ from app.importer.router import _validate_source_url
 
 
 def _public_dns(*args, **kwargs):
-    return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('203.0.113.20', 443))]
+    return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('1.1.1.1', 443))]
 
 
 def _private_dns(*args, **kwargs):

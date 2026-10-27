@@ -22,13 +22,15 @@ class OfficialSourceCatalogEntry:
     package_code: str
     grade_code: str
     subject_code: str
-    source_type: str
+    promoted_source_type: str
     catalog_url: str
     registered_url: str
     authority: str
     reliability_score: float
     edition_claim: str
     verification_status: str
+    scope_verification_status: str
+    required_scope_terms: tuple[str, ...]
     verified_on: str
 
 
@@ -38,13 +40,15 @@ OFFICIAL_SOURCE_CATALOG: tuple[OfficialSourceCatalogEntry, ...] = (
         package_code='PS-G05-SCI-S2-2026',
         grade_code='G05',
         subject_code='SCI',
-        source_type='OFFICIAL_PACKAGE',
+        promoted_source_type='OFFICIAL_PACKAGE',
         catalog_url='https://www.moe.edu.ps/gaza/subjects',
         registered_url='https://moe.edu.ps/m/4070',
         authority='PALESTINIAN_MINISTRY_OF_EDUCATION',
         reliability_score=100.0,
         edition_claim='CURRENT_GAZA_LEARNING_PACKAGE_EDITION_TO_VERIFY',
         verification_status='CATALOG_LINK_CONFIRMED',
+        scope_verification_status='TARGET_SEMESTER_SCOPE_UNVERIFIED',
+        required_scope_terms=('الجهاز الهيكلي', 'أجهزة جسم الإنسان'),
         verified_on='2026-10-27',
     ),
 )
@@ -52,6 +56,23 @@ OFFICIAL_SOURCE_CATALOG: tuple[OfficialSourceCatalogEntry, ...] = (
 
 def entries_for_package(package_code: str) -> list[OfficialSourceCatalogEntry]:
     return [x for x in OFFICIAL_SOURCE_CATALOG if x.package_code == package_code]
+
+
+def _entry_for_url(url: str | None) -> OfficialSourceCatalogEntry | None:
+    if not url:
+        return None
+    return next((x for x in OFFICIAL_SOURCE_CATALOG if x.registered_url == url), None)
+
+
+def _scope_term_report(text: str, entry: OfficialSourceCatalogEntry) -> dict:
+    normalized = ' '.join((text or '').split())
+    matched = [term for term in entry.required_scope_terms if term in normalized]
+    missing = [term for term in entry.required_scope_terms if term not in normalized]
+    return {
+        'matched_terms': matched,
+        'missing_terms': missing,
+        'scope_verified': bool(entry.required_scope_terms) and not missing,
+    }
 
 
 @router.get('/official-sources')
@@ -70,7 +91,7 @@ def official_catalog_diff(package_id: int, db: Session = Depends(get_db)):
 
     expected = entries_for_package(package.package_code)
     existing = db.query(SourceFile).filter(SourceFile.package_id == package.id).all()
-    existing_keys = {(x.source_type, x.source_url) for x in existing}
+    existing_urls = {x.source_url: x for x in existing if x.source_url}
 
     return {
         'package_id': package.id,
@@ -78,14 +99,19 @@ def official_catalog_diff(package_id: int, db: Session = Depends(get_db)):
         'catalog_entries': [
             {
                 **asdict(entry),
-                'registered_in_package': (entry.source_type, entry.registered_url) in existing_keys,
+                'registered_in_package': entry.registered_url in existing_urls,
+                'current_source_type': (
+                    existing_urls[entry.registered_url].source_type
+                    if entry.registered_url in existing_urls else None
+                ),
+                'scope_verified': (
+                    existing_urls[entry.registered_url].source_type == entry.promoted_source_type
+                    if entry.registered_url in existing_urls else False
+                ),
             }
             for entry in expected
         ],
-        'missing_count': sum(
-            1 for entry in expected
-            if (entry.source_type, entry.registered_url) not in existing_keys
-        ),
+        'missing_count': sum(1 for entry in expected if entry.registered_url not in existing_urls),
     }
 
 
@@ -102,41 +128,53 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
             'package_code': package.package_code,
             'created': 0,
             'existing': 0,
+            'quarantined': 0,
             'sources': [],
         }
 
     created = 0
     existing_count = 0
+    quarantined = 0
     sources = []
     for entry in expected:
         row = db.query(SourceFile).filter(
             SourceFile.package_id == package.id,
-            SourceFile.source_type == entry.source_type,
             SourceFile.source_url == entry.registered_url,
         ).first()
         if row:
             existing_count += 1
+            # A catalog link proves authority at grade/subject level, not that it
+            # belongs to this semester/package. Quarantine until content proves scope.
+            if row.source_type == entry.promoted_source_type and not row.extracted_text:
+                row.source_type = 'CATALOG_CANDIDATE'
+                row.status = 'SCOPE_UNVERIFIED'
+                row.edition_match_score = 0.0
+                quarantined += 1
         else:
             row = SourceFile(
                 package_id=package.id,
-                source_type=entry.source_type,
+                source_type='CATALOG_CANDIDATE',
                 source_url=entry.registered_url,
                 original_filename=f'{entry.source_code.lower().replace(".", "-")}-registered-source',
                 edition=entry.edition_claim,
                 reliability_score=entry.reliability_score,
                 edition_match_score=0.0,
-                status='DISCOVERED',
+                status='SCOPE_UNVERIFIED',
             )
             db.add(row)
             db.flush()
             created += 1
+            quarantined += 1
         sources.append({
             'source_file_id': row.id,
             'source_code': entry.source_code,
             'source_type': row.source_type,
+            'promoted_source_type': entry.promoted_source_type,
             'registered_url': row.source_url,
             'catalog_url': entry.catalog_url,
             'authority': entry.authority,
+            'scope_verification_status': entry.scope_verification_status,
+            'required_scope_terms': list(entry.required_scope_terms),
             'edition_match_score': float(row.edition_match_score or 0),
             'status': row.status,
         })
@@ -147,6 +185,41 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
         'package_code': package.package_code,
         'created': created,
         'existing': existing_count,
+        'quarantined': quarantined,
         'sources': sources,
-        'note': 'Catalog sync registers discovery evidence only; it never verifies edition match or fetches the file.',
+        'note': 'Catalog sync proves discovery/authority only. Sources remain unweighted CATALOG_CANDIDATE records until extracted content verifies target scope.',
+    }
+
+
+@router.post('/source-files/{source_file_id}/verify-scope')
+def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_db)):
+    row = db.query(SourceFile).filter(SourceFile.id == source_file_id).first()
+    if not row:
+        raise HTTPException(404, 'Source file not found')
+    entry = _entry_for_url(row.source_url)
+    if not entry:
+        raise HTTPException(409, 'Source file is not backed by a verified catalog entry')
+    if not row.extracted_text:
+        raise HTTPException(409, 'Source must be fetched/extracted before scope verification')
+
+    report = _scope_term_report(row.extracted_text, entry)
+    if report['scope_verified']:
+        row.source_type = entry.promoted_source_type
+        if row.status in {'SCOPE_UNVERIFIED', 'SCOPE_REJECTED'}:
+            row.status = 'EXTRACTED'
+    else:
+        row.source_type = 'CATALOG_CANDIDATE'
+        row.status = 'SCOPE_REJECTED'
+
+    db.commit()
+    return {
+        'source_file_id': row.id,
+        'source_code': entry.source_code,
+        'scope_verified': report['scope_verified'],
+        'matched_terms': report['matched_terms'],
+        'missing_terms': report['missing_terms'],
+        'source_type': row.source_type,
+        'status': row.status,
+        'edition_match_score': float(row.edition_match_score or 0),
+        'note': 'Scope verification does not prove edition match; edition quality remains a separate gate.',
     }

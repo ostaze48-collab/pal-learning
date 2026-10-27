@@ -12,10 +12,16 @@ os.environ['BOOTSTRAP_ADMIN_PASSWORD'] = 'MatrixAdminPassword123!'
 sys.path.insert(0, str(ROOT / 'apps' / 'api'))
 
 from fastapi.testclient import TestClient
+from app.db.base import SessionLocal
+from app.db.current_semester import ensure_current_semester_registry
 from app.db.seed import run as seed
 from app.main import app
 
 seed()
+with SessionLocal() as db:
+    result = ensure_current_semester_registry(db)
+    assert result['ready'] is True
+
 client = TestClient(app)
 login = client.post('/auth/login', json={
     'email': 'matrix.admin@example.test',

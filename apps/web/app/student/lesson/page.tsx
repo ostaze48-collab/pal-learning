@@ -52,6 +52,7 @@ export default function LessonPage(){
   useEffect(()=>{void load();},[]);
 
   const answered=Object.keys(feedback).length;
+  const completedQuestions=questions.length>0&&answered===questions.length;
   const lessonUiProgress=lesson?.sections.length?Math.round(((lesson.sections.length+(questions.length?answered/questions.length:0))/(lesson.sections.length+1))*100):0;
 
   async function submit(q:Question){
@@ -94,7 +95,7 @@ export default function LessonPage(){
 
       <div id="questions" style={{scrollMarginTop:12}}/>
       <StudentCard style={{marginTop:14,background:'#fffdf7',borderColor:'#eadca8'}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',alignItems:'center'}}><div><div style={{fontSize:12,color:'#667085',fontWeight:900}}>تحقق من فهمك</div><h2 style={{margin:'3px 0 0'}}>أسئلة الدرس</h2></div><Pill tone={answered===questions.length&&questions.length?'good':'warn'}>{answered}/{questions.length} مجاب</Pill></div>
+        <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',alignItems:'center'}}><div><div style={{fontSize:12,color:'#667085',fontWeight:900}}>تحقق من فهمك</div><h2 style={{margin:'3px 0 0'}}>أسئلة الدرس</h2></div><Pill tone={completedQuestions?'good':'warn'}>{answered}/{questions.length} مجاب</Pill></div>
       </StudentCard>
 
       <div style={{display:'grid',gap:12,marginTop:12}}>{questions.map((q,index)=>{
@@ -106,6 +107,10 @@ export default function LessonPage(){
           {!f&&<div style={{marginTop:11}}><PrimaryButton disabled={selected[q.id]===undefined||busyQuestion===q.id} onClick={()=>void submit(q)}>{busyQuestion===q.id?'جارٍ الحفظ…':'تحقق واحفظ التقدم'}</PrimaryButton></div>}
           {f&&<div style={{marginTop:12}}><Notice tone={f.correct?'good':'warn'}><strong>{f.correct?'إجابة صحيحة ✓':'تحتاج مراجعة'}</strong><div style={{marginTop:4}}>{f.message}</div><div style={{fontSize:11,marginTop:5}}>المحاولة رقم {f.attempt}</div></Notice></div>}
         </StudentCard>})}</div>
+
+      {completedQuestions&&<StudentCard style={{marginTop:14,background:'linear-gradient(135deg,#effaf2,#eef5ff)',borderColor:'#bfe0ca'}}>
+        <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap'}}><div><Pill tone="good">أكملت الأسئلة ✓</Pill><h2 style={{margin:'8px 0 5px',fontSize:22}}>شاهد نتيجة الدرس</h2><p style={{margin:0,color:'#526071',lineHeight:1.7}}>سنجمّع آخر إجابة لكل سؤال مع Mastery حسب المهارة ونقترح الخطوة التالية.</p></div><PrimaryLink href="/student/result">عرض النتيجة</PrimaryLink></div>
+      </StudentCard>}
 
       <StudentCard style={{marginTop:14}}>
         <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap'}}><div><div style={{fontSize:12,color:'#667085',fontWeight:900}}>Mastery</div><h2 style={{margin:'3px 0 0'}}>تقدمك حسب المهارة</h2></div><strong style={{fontSize:26}}>{progress?.progress_percent||0}%</strong></div>

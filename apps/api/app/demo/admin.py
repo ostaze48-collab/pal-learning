@@ -88,6 +88,28 @@ def demo_admin_dashboard(db: Session = Depends(get_db)):
     completion_rate = round((completed_students / attempted_students) * 100, 1) if attempted_students else 0.0
     correct_rate = round((correct / attempts) * 100, 1) if attempts else 0.0
 
+    feedback_events = db.query(LearningEvent).filter(
+        LearningEvent.lesson_id == lesson.id,
+        LearningEvent.event_type == 'BETA_FEEDBACK',
+    ).order_by(LearningEvent.server_timestamp.desc(), LearningEvent.id.desc()).all()
+    feedback_categories: dict[str, int] = {}
+    recent_feedback = []
+    for event in feedback_events:
+        metadata = event.metadata_json or {}
+        category = str(metadata.get('category') or 'OTHER')
+        feedback_categories[category] = feedback_categories.get(category, 0) + 1
+        if len(recent_feedback) < 10:
+            student = db.query(StudentProfile).filter(StudentProfile.id == event.student_id).first()
+            recent_feedback.append({
+                'id': event.id,
+                'student_id': event.student_id,
+                'student_name': student.display_name if student else 'طالب',
+                'category': category,
+                'message': metadata.get('message'),
+                'context': metadata.get('context'),
+                'created_at': event.server_timestamp.isoformat() if event.server_timestamp else None,
+            })
+
     return {
         'experimental': True,
         'scope': 'single-lesson-beta',
@@ -117,6 +139,11 @@ def demo_admin_dashboard(db: Session = Depends(get_db)):
         'ai_tutor': {
             'requests': tutor_requests,
             'mode': 'GROUNDED_DEMO_TUTOR',
+        },
+        'feedback': {
+            'total': len(feedback_events),
+            'by_category': feedback_categories,
+            'recent': recent_feedback,
         },
         'release_policy': {
             'student_content_status': DEMO_STATUS,

@@ -10,6 +10,7 @@ from app.db.current_semester import (
     ensure_current_semester_registry,
 )
 from app.db.models import (
+    AIJob,
     Book,
     CurriculumVersion,
     Grade,
@@ -22,6 +23,7 @@ from app.db.models import (
     SourcePackage,
     Subject,
 )
+from app.factory.router import queue_lesson_generation
 
 
 def _session():
@@ -53,6 +55,7 @@ def test_pipeline_starts_fail_closed_and_points_to_source_fetch():
         assert payload['package_code'] == CURRENT_PACKAGE_CODE
         assert payload['lesson']['lesson_code'] == f'{CURRENT_BOOK_CODE}.U01.L01'
         assert stages['REGISTRY']['status'] == 'DONE'
+        assert stages['DURABLE_STORAGE']['status'] == 'DONE'
         assert stages['SOURCE_FETCH']['status'] == 'READY'
         assert stages['SOURCE_FETCH']['action'] == 'FETCH_OFFICIAL_SOURCE'
         assert stages['SEMESTER_SCOPE']['status'] == 'BLOCKED'
@@ -72,7 +75,8 @@ def test_pipeline_starts_fail_closed_and_points_to_source_fetch():
         db.close()
 
 
-def test_pipeline_reaches_generation_ready_only_after_verified_source_and_skill():
+def test_pipeline_marks_generation_done_only_after_output_validated(monkeypatch):
+    monkeypatch.setenv('AI_PROVIDER', 'LOCAL_MOCK')
     db, subject = _session()
     try:
         book = db.query(Book).filter(Book.book_code == CURRENT_BOOK_CODE).one()
@@ -134,20 +138,36 @@ def test_pipeline_reaches_generation_ready_only_after_verified_source_and_skill(
         ))
         db.commit()
 
-        payload = current_semester_pipeline(db)
-        stages = _stage_map(payload)
+        ready_payload = current_semester_pipeline(db)
+        ready_stages = _stage_map(ready_payload)
+        assert ready_stages['SOURCE_FETCH']['status'] == 'DONE'
+        assert ready_stages['SEMESTER_SCOPE']['status'] == 'DONE'
+        assert ready_stages['LESSON_LINKING']['status'] == 'DONE'
+        assert ready_stages['SOURCE_REVIEW']['status'] == 'DONE'
+        assert ready_stages['SKILL_MAPPING']['status'] == 'DONE'
+        assert ready_stages['LESSON_GENERATION']['status'] == 'READY'
+        assert ready_stages['LESSON_GENERATION']['action'] == 'QUEUE_GENERATION'
+        assert ready_payload['generation_readiness']['queue_ready'] is True
 
-        assert stages['SOURCE_FETCH']['status'] == 'DONE'
-        assert stages['SEMESTER_SCOPE']['status'] == 'DONE'
-        assert stages['LESSON_LINKING']['status'] == 'DONE'
-        assert stages['SOURCE_REVIEW']['status'] == 'DONE'
-        assert stages['SKILL_MAPPING']['status'] == 'DONE'
-        assert stages['LESSON_GENERATION']['status'] == 'READY'
-        assert stages['LESSON_GENERATION']['action'] == 'QUEUE_GENERATION'
-        assert payload['next_stage']['key'] == 'LESSON_GENERATION'
-        assert payload['counts']['verified_source_links'] == 1
-        assert payload['counts']['linked_skills'] == 1
-        assert payload['generation_readiness']['queue_ready'] is True
-        assert payload['generation_readiness']['authorized_factual_source_chunks'] == 1
+        queued = queue_lesson_generation(lesson.id, db)
+        queued_payload = current_semester_pipeline(db)
+        queued_stage = _stage_map(queued_payload)['LESSON_GENERATION']
+        assert queued_stage['status'] == 'READY'
+        assert queued_stage['action'] == 'OPEN_LESSON_GENERATION'
+        assert 'QUEUED' in queued_stage['detail']
+        assert queued_payload['next_stage']['key'] == 'LESSON_GENERATION'
+
+        job = db.query(AIJob).filter(AIJob.id == queued['job_id']).one()
+        job.status = 'OUTPUT_VALIDATED'
+        job.progress = 70
+        db.commit()
+
+        completed_payload = current_semester_pipeline(db)
+        completed_stage = _stage_map(completed_payload)['LESSON_GENERATION']
+        assert completed_stage['status'] == 'DONE'
+        assert completed_stage['action'] is None
+        assert completed_payload['next_stage'] is None
+        assert completed_payload['counts']['verified_source_links'] == 1
+        assert completed_payload['counts']['linked_skills'] == 1
     finally:
         db.close()

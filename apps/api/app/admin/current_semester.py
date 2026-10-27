@@ -109,12 +109,9 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
     stages: list[dict] = []
     stages.append(_stage('REGISTRY', 'سجل الفصل الأول', 'DONE', detail=f'{book.book_code} · {package.package_code}'))
     stages.append(_stage(
-        'DURABLE_STORAGE',
-        'تخزين ملفات المنهاج',
-        'DONE' if storage_ready else 'BLOCKED',
+        'DURABLE_STORAGE', 'تخزين ملفات المنهاج', 'DONE' if storage_ready else 'BLOCKED',
         detail=(
-            f'{storage.backend} · {storage.bucket or "development local storage"}'
-            if storage_ready else
+            f'{storage.backend} · {storage.bucket or "development local storage"}' if storage_ready else
             'PostgreSQL production requires R2/S3 before importing factual PDFs. Missing: '
             + ', '.join(storage.missing or ('STORAGE_BACKEND=R2/S3',))
         ),
@@ -216,17 +213,41 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
     if lesson:
         readiness = calculate_generation_readiness(db, lesson.id)
     generation_ready = bool(readiness and readiness['queue_ready'])
-    generation_done = bool(latest_generation_job and latest_generation_job.status not in {'FAILED', 'OUTPUT_REJECTED'})
-    stages.append(_stage(
-        'LESSON_GENERATION', 'توليد حزمة الدرس',
-        'DONE' if generation_done else ('READY' if generation_ready else 'BLOCKED'),
-        detail=(
-            f'آخر Generation Job #{latest_generation_job.id}: {latest_generation_job.status}'
-            if latest_generation_job else
-            ('كل بوابات Queue جاهزة.' if generation_ready else ' · '.join((readiness or {}).get('blockers') or ['غير جاهز']))
-        ),
-        action=None if generation_done else ('QUEUE_GENERATION' if generation_ready else None),
-    ))
+    generation_status = latest_generation_job.status if latest_generation_job else None
+
+    if generation_status == 'OUTPUT_VALIDATED':
+        generation_stage = _stage(
+            'LESSON_GENERATION', 'توليد حزمة الدرس', 'DONE',
+            detail=f'Generation Job #{latest_generation_job.id}: OUTPUT_VALIDATED · ContentCandidate جاهز لـQA.',
+        )
+    elif latest_generation_job:
+        if generation_status == 'WAITING_PROVIDER':
+            stage_status = 'BLOCKED'
+            detail = f'Generation Job #{latest_generation_job.id}: WAITING_PROVIDER · يجب إعداد مزود AI حقيقي.'
+        elif generation_status == 'COMPLETED':
+            stage_status = 'READY'
+            detail = f'Generation Job #{latest_generation_job.id}: COMPLETED · خرج المزود ينتظر Schema/Provenance validation.'
+        elif generation_status in {'QUEUED', 'RUNNING'}:
+            stage_status = 'READY'
+            detail = f'Generation Job #{latest_generation_job.id}: {generation_status} · لم يصبح ContentCandidate بعد.'
+        elif generation_status in {'FAILED', 'STALE_INPUT', 'OUTPUT_REJECTED', 'OUTPUT_SCHEMA_INVALID'}:
+            stage_status = 'READY' if generation_ready else 'BLOCKED'
+            detail = f'Generation Job #{latest_generation_job.id}: {generation_status} · يلزم الفحص/إعادة المحاولة.'
+        else:
+            stage_status = 'READY'
+            detail = f'Generation Job #{latest_generation_job.id}: {generation_status}.'
+        generation_stage = _stage(
+            'LESSON_GENERATION', 'توليد حزمة الدرس', stage_status,
+            detail=detail,
+            action='OPEN_LESSON_GENERATION',
+        )
+    else:
+        generation_stage = _stage(
+            'LESSON_GENERATION', 'توليد حزمة الدرس', 'READY' if generation_ready else 'BLOCKED',
+            detail=('كل بوابات Queue جاهزة.' if generation_ready else ' · '.join((readiness or {}).get('blockers') or ['غير جاهز'])),
+            action='QUEUE_GENERATION' if generation_ready else None,
+        )
+    stages.append(generation_stage)
 
     next_stage = next((stage for stage in stages if stage['status'] != 'DONE'), None)
     return {
@@ -235,13 +256,8 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
         'package_code': package.package_code,
         'database': {'backend': database_backend, 'production': production_database},
         'storage': {
-            'backend': storage.backend,
-            'durable': storage.durable,
-            'configured': storage.configured,
-            'bucket': storage.bucket,
-            'missing': list(storage.missing),
-            'required': production_database,
-            'ready': storage_ready,
+            'backend': storage.backend, 'durable': storage.durable, 'configured': storage.configured,
+            'bucket': storage.bucket, 'missing': list(storage.missing), 'required': production_database, 'ready': storage_ready,
         },
         'lesson': {'id': lesson.id, 'lesson_code': lesson.lesson_code, 'title': lesson.title} if lesson else None,
         'source': {
@@ -249,11 +265,7 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
             'page_count': source.page_count, 'edition_match_score': source.edition_match_score,
             'durable': _source_is_durable(source),
         } if source else None,
-        'counts': {
-            'candidate_source_links': candidate_links,
-            'verified_source_links': verified_links,
-            'linked_skills': linked_skills,
-        },
+        'counts': {'candidate_source_links': candidate_links, 'verified_source_links': verified_links, 'linked_skills': linked_skills},
         'stages': stages,
         'next_stage': next_stage,
         'generation_readiness': readiness,

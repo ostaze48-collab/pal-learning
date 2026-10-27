@@ -50,12 +50,14 @@ export default function StagingConsole(){
   async function init(){
    try{
     const current:CurrentSemester=await api('/admin/current-semester');
-    const first=current.units?.[0]?.lessons?.[0];
-    if(!first) throw new Error('لا يوجد درس أول في الفصل الحالي.');
+    const lessons=current.units.flatMap(unit=>unit.lessons||[]);
+    const requested=Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
+    const selected=lessons.find(item=>item.id===requested)||lessons[0];
+    if(!selected) throw new Error('لا توجد دروس في الفصل الحالي.');
     if(cancelled) return;
-    setLessonId(first.id);
-    setCurrentLessonLabel(`${first.lesson_code} · ${first.title}`);
-    await load(first.id);
+    setLessonId(selected.id);
+    setCurrentLessonLabel(`${selected.lesson_code} · ${selected.title}`);
+    await load(selected.id);
    }catch(e){if(!cancelled)setMessage(e instanceof Error?e.message:'تعذر تحديد درس الفصل الحالي');}
   }
   void init();
@@ -108,10 +110,11 @@ export default function StagingConsole(){
   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',background:'white',padding:14,borderRadius:14,border:'1px solid #e8edf5'}}>
    <label>Lesson ID <input type="number" min="1" value={lessonId||''} onChange={e=>setLessonId(Number(e.target.value)||0)} style={{width:80,padding:8,marginInlineStart:6}}/></label>
    <button onClick={()=>load()} disabled={!!busy||!lessonId}>تحميل المرشحين وStaging</button>
+   <a href="/admin/current-semester/matrix">مصفوفة الفصل</a>
    <a href="/admin/current-semester">الفصل الحالي</a>
    <a href="/admin/curriculum">مصنع المنهاج</a>
   </div>
-  {currentLessonLabel&&<div style={{marginTop:8,fontSize:13,opacity:.65}}>الدرس الافتراضي الحالي: {currentLessonLabel}</div>}
+  {currentLessonLabel&&<div style={{marginTop:8,fontSize:13,opacity:.65}}>الدرس المحدد: {currentLessonLabel}</div>}
   {message&&<div style={{marginTop:12,padding:12,borderRadius:10,background:message.includes('✓')||message.includes('تم فتح')?'#ecfdf3':'#fff4e5'}}>{message}</div>}
 
   <section style={{marginTop:16,display:'grid',gap:12}}>
@@ -149,6 +152,7 @@ export default function StagingConsole(){
       <button disabled={!!busy} onClick={async()=>{setBusy('preview-stage');try{setPreview(await api(`/factory/staged-versions/${s.id}`));}catch(e){setMessage(e instanceof Error?e.message:'فشل معاينة staging');}finally{setBusy('');}}}>Preview Snapshot JSON</button>
       <button disabled={!!busy} onClick={()=>openMobilePreview(s)}>فتح معاينة الهاتف</button>
       <button disabled={!!busy||s.release_readiness!=='READY'} onClick={()=>runAcademicQa(s)}>Run Academic AI QA</button>
+      <a href={`/admin/release?lesson_id=${lessonId}`} style={{padding:'6px 9px'}}>Final Release Gate</a>
      </div>
     </div>
     {s.release_readiness!=='READY'&&<div style={{fontSize:12,color:'#8a4b00',marginTop:6}}>Academic QA محظورة حتى تصبح Source Evidence عند عتبة الإصدار.</div>}
@@ -164,7 +168,7 @@ export default function StagingConsole(){
   </section>}
 
   <section style={{...panel,marginTop:16,background:'#fffaf0'}}>
-   <strong>مهم:</strong> STAGING ولا Academic QA يعنيان PUBLISHED. حتى نتيجة Academic QA = PASS ستبقى بدون صلاحية نشر إلى أن تكتمل Release/Publish transaction مع PostgreSQL والمصدر الحالي الموثق.
+   <strong>مهم:</strong> STAGING ولا Academic QA يعنيان PUBLISHED. حتى نتيجة Academic QA = PASS لا تجعل النسخة مرئية للطالب؛ النشر يتم فقط عبر Audited Release Transaction بعد نجاح Final Release Gate، وهي fail-closed على SQLite.
   </section>
  </main>
 }

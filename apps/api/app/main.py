@@ -14,6 +14,7 @@ from .importer.official_catalog import (
     quarantine_unverified_catalog_sources,
     router as official_catalog_router,
 )
+from .importer.scope_evidence import router as scope_evidence_router
 from .learning.router import router as learning_router
 from .qa.router import router as qa_router
 from .admin.router import router as admin_router
@@ -24,7 +25,7 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.8.2'
+VERSION = '1.9.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -81,7 +82,7 @@ def health():
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
             'production-readiness-diagnostics', 'alembic-migration-gate',
             'official-source-catalog', 'catalog-scope-quarantine',
-            'unreleased-demo-publication-quarantine',
+            'unreleased-demo-publication-quarantine', 'current-curriculum-plan-scope-evidence',
         ],
     }
 
@@ -116,6 +117,7 @@ def ready():
 app.include_router(curriculum_router)
 app.include_router(importer_router)
 app.include_router(official_catalog_router)
+app.include_router(scope_evidence_router)
 app.include_router(learning_router)
 app.include_router(qa_router)
 app.include_router(admin_router)

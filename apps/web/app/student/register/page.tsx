@@ -1,14 +1,31 @@
 'use client';
 import {FormEvent,useState} from 'react';
-const API=process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+import {Notice,StudentCard,StudentShell} from '../_components/StudentUI';
+const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
+
 export default function StudentRegister(){
- const [message,setMessage]=useState('');
- async function submit(e:FormEvent<HTMLFormElement>){
-  e.preventDefault(); const f=new FormData(e.currentTarget);
-  const body={email:String(f.get('email')||''),password:String(f.get('password')||''),display_name:String(f.get('display_name')||''),grade_id:Number(f.get('grade_id')||5)};
-  const r=await fetch(`${API}/auth/register-student`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); const data=await r.json();
-  if(!r.ok){setMessage(data.detail||'تعذر إنشاء الحساب');return;}
-  localStorage.setItem('pal_student_token',data.access_token); window.location.href='/student';
- }
- return <main style={{maxWidth:520,margin:'50px auto',padding:20}}><h1>إنشاء حساب طالب</h1><form onSubmit={submit} style={{display:'grid',gap:12,background:'white',padding:20,borderRadius:16,border:'1px solid #e8edf5'}}><input name="display_name" placeholder="الاسم المعروض" required style={{padding:12}}/><input name="email" type="email" placeholder="البريد الإلكتروني" required style={{padding:12}}/><input name="password" type="password" placeholder="كلمة المرور" minLength={8} required style={{padding:12}}/><select name="grade_id" defaultValue="5" style={{padding:12}}>{Array.from({length:9},(_,i)=><option key={i+1} value={i+1}>الصف {i+1}</option>)}</select><button style={{padding:12,border:0,borderRadius:10,background:'#1f6feb',color:'white'}}>إنشاء الحساب</button></form>{message&&<p>{message}</p>}</main>
+  const [message,setMessage]=useState('');const [busy,setBusy]=useState(false);
+  async function submit(e:FormEvent<HTMLFormElement>){
+    e.preventDefault();setBusy(true);setMessage('');const f=new FormData(e.currentTarget);
+    const body={email:String(f.get('email')||''),password:String(f.get('password')||''),display_name:String(f.get('display_name')||''),grade_id:5};
+    try{
+      const r=await fetch(`${API}/auth/register-student`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const data=await r.json();
+      if(!r.ok)throw new Error(typeof data.detail==='string'?data.detail:'تعذر إنشاء الحساب');
+      localStorage.setItem('pal_student_token',data.access_token);window.location.href='/student';
+    }catch(e:any){setMessage(e.message||'تعذر إنشاء الحساب');setBusy(false);}
+  }
+  return <StudentShell title="إنشاء حساب طالب" subtitle="نسخة تجريبية — الصف الخامس — العلوم والحياة" backHref="/">
+    <StudentCard>
+      <form onSubmit={submit} style={{display:'grid',gap:12}}>
+        <label style={{fontWeight:800}}>الاسم المعروض<input name="display_name" placeholder="مثال: أحمد" required style={{display:'block',width:'100%',boxSizing:'border-box',marginTop:6,padding:'12px 13px',border:'1px solid #ccd5df',borderRadius:11,fontSize:16}}/></label>
+        <label style={{fontWeight:800}}>البريد الإلكتروني<input name="email" type="email" autoComplete="email" placeholder="name@example.com" required style={{display:'block',width:'100%',boxSizing:'border-box',marginTop:6,padding:'12px 13px',border:'1px solid #ccd5df',borderRadius:11,fontSize:16}}/></label>
+        <label style={{fontWeight:800}}>كلمة المرور<input name="password" type="password" autoComplete="new-password" placeholder="8 أحرف على الأقل" minLength={8} required style={{display:'block',width:'100%',boxSizing:'border-box',marginTop:6,padding:'12px 13px',border:'1px solid #ccd5df',borderRadius:11,fontSize:16}}/></label>
+        <div style={{padding:12,borderRadius:11,background:'#f8fafc',border:'1px solid #edf0f4'}}><div style={{fontSize:11,color:'#667085',fontWeight:900}}>المسار التجريبي المثبت</div><strong>الصف الخامس · العلوم والحياة · الفصل الأول</strong><div style={{fontSize:13,color:'#667085',marginTop:4}}>الدرس الأول: المجهر واكتشاف الخلية</div></div>
+        <button disabled={busy} style={{minHeight:48,border:0,borderRadius:12,background:busy?'#9fbbaa':'#176b3a',color:'#fff',fontWeight:900,fontSize:16}}>{busy?'جارٍ إنشاء الحساب…':'إنشاء الحساب وبدء التعلم'}</button>
+      </form>
+      {message&&<div style={{marginTop:12}}><Notice tone="bad">{message}</Notice></div>}
+      <div style={{marginTop:16,paddingTop:14,borderTop:'1px solid #edf0f4'}}><span style={{color:'#667085'}}>لديك حساب بالفعل؟ </span><a href="/student/login" style={{fontWeight:900,color:'#176b3a'}}>تسجيل الدخول</a></div>
+    </StudentCard>
+    <div style={{marginTop:12}}><Notice tone="info">لا نطلب في هذه النسخة إلا البيانات الضرورية لإنشاء ملف تعلم تجريبي.</Notice></div>
+  </StudentShell>;
 }

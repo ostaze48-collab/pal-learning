@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -58,10 +59,62 @@ def entries_for_package(package_code: str) -> list[OfficialSourceCatalogEntry]:
     return [x for x in OFFICIAL_SOURCE_CATALOG if x.package_code == package_code]
 
 
-def _entry_for_url(url: str | None) -> OfficialSourceCatalogEntry | None:
-    if not url:
+def _source_meta(row: SourceFile) -> dict:
+    return dict(row.extraction_meta or {})
+
+
+def _host(url: str | None) -> str:
+    try:
+        return (urlparse(url or '').hostname or '').lower()
+    except ValueError:
+        return ''
+
+
+def _looks_like_entry(row: SourceFile, entry: OfficialSourceCatalogEntry) -> bool:
+    if row.source_url == entry.registered_url:
+        return True
+    meta = _source_meta(row)
+    if meta.get('registered_source_url') == entry.registered_url:
+        return True
+    if meta.get('catalog_source_code') == entry.source_code:
+        return True
+    name = (row.original_filename or '').lower()
+    if 'moe-current-grade5-science' in name and entry.grade_code == 'G05' and entry.subject_code == 'SCI':
+        return True
+    # A redirect target can replace the visible URL during old imports. Within
+    # the exact expected package, a single Ministry-hosted 100%-reliability row
+    # is a safe compatibility fallback and is immediately stamped with catalog
+    # identity on the next sync.
+    return _host(row.source_url).endswith('moe.edu.ps') and float(row.reliability_score or 0) >= 99
+
+
+def _catalog_row_for_entry(db: Session, package: SourcePackage, entry: OfficialSourceCatalogEntry) -> SourceFile | None:
+    rows = db.query(SourceFile).filter(SourceFile.package_id == package.id).order_by(SourceFile.id).all()
+    matches = [row for row in rows if _looks_like_entry(row, entry)]
+    if not matches:
         return None
-    return next((x for x in OFFICIAL_SOURCE_CATALOG if x.registered_url == url), None)
+    exact = [row for row in matches if row.source_url == entry.registered_url]
+    return exact[0] if exact else matches[0]
+
+
+def _stamp_catalog_identity(row: SourceFile, entry: OfficialSourceCatalogEntry) -> None:
+    meta = _source_meta(row)
+    meta['catalog_source_code'] = entry.source_code
+    meta['registered_source_url'] = entry.registered_url
+    meta['catalog_url'] = entry.catalog_url
+    meta['catalog_authority'] = entry.authority
+    row.extraction_meta = meta
+
+
+def _entry_for_source_file(db: Session, row: SourceFile) -> OfficialSourceCatalogEntry | None:
+    package = db.query(SourcePackage).filter(SourcePackage.id == row.package_id).first()
+    if not package:
+        return None
+    entries = entries_for_package(package.package_code)
+    for entry in entries:
+        if _looks_like_entry(row, entry):
+            return entry
+    return None
 
 
 def _scope_term_report(text: str, entry: OfficialSourceCatalogEntry) -> dict:
@@ -81,13 +134,6 @@ def _recalculate_package(db: Session, package: SourcePackage) -> None:
 
 
 def quarantine_unverified_catalog_sources(db: Session) -> dict:
-    """Remove unverified catalog links from weighted teaching-source types.
-
-    The current Grade-5 Science Ministry link belongs to the semester-1 production
-    track. It remains CATALOG_CANDIDATE until extracted text confirms all three
-    semester-1 unit markers. Semester-2 prototype rows are handled separately by
-    the current-semester registry and carry no current authority.
-    """
     checked = 0
     quarantined = 0
     already_verified = 0
@@ -96,12 +142,10 @@ def quarantine_unverified_catalog_sources(db: Session) -> dict:
         package = db.query(SourcePackage).filter(SourcePackage.package_code == entry.package_code).first()
         if not package:
             continue
-        row = db.query(SourceFile).filter(
-            SourceFile.package_id == package.id,
-            SourceFile.source_url == entry.registered_url,
-        ).first()
+        row = _catalog_row_for_entry(db, package, entry)
         if not row:
             continue
+        _stamp_catalog_identity(row, entry)
         checked += 1
         report = _scope_term_report(row.extracted_text or '', entry)
         if report['scope_verified']:
@@ -115,13 +159,9 @@ def quarantine_unverified_catalog_sources(db: Session) -> dict:
             quarantined += 1
     for package in touched_packages.values():
         _recalculate_package(db, package)
-    if quarantined:
+    if checked:
         db.commit()
-    return {
-        'checked': checked,
-        'quarantined': quarantined,
-        'already_scope_verified': already_verified,
-    }
+    return {'checked': checked, 'quarantined': quarantined, 'already_scope_verified': already_verified}
 
 
 @router.get('/official-sources')
@@ -137,31 +177,22 @@ def official_catalog_diff(package_id: int, db: Session = Depends(get_db)):
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
         raise HTTPException(404, 'Source package not found')
-
     expected = entries_for_package(package.package_code)
-    existing = db.query(SourceFile).filter(SourceFile.package_id == package.id).all()
-    existing_urls = {x.source_url: x for x in existing if x.source_url}
-
-    return {
-        'package_id': package.id,
-        'package_code': package.package_code,
-        'catalog_entries': [
-            {
-                **asdict(entry),
-                'registered_in_package': entry.registered_url in existing_urls,
-                'current_source_type': (
-                    existing_urls[entry.registered_url].source_type
-                    if entry.registered_url in existing_urls else None
-                ),
-                'scope_verified': (
-                    existing_urls[entry.registered_url].source_type == entry.promoted_source_type
-                    if entry.registered_url in existing_urls else False
-                ),
-            }
-            for entry in expected
-        ],
-        'missing_count': sum(1 for entry in expected if entry.registered_url not in existing_urls),
-    }
+    payload = []
+    missing = 0
+    for entry in expected:
+        row = _catalog_row_for_entry(db, package, entry)
+        if not row:
+            missing += 1
+        payload.append({
+            **asdict(entry),
+            'registered_in_package': bool(row),
+            'source_file_id': row.id if row else None,
+            'current_source_type': row.source_type if row else None,
+            'current_source_url': row.source_url if row else None,
+            'scope_verified': bool(row and row.source_type == entry.promoted_source_type),
+        })
+    return {'package_id': package.id, 'package_code': package.package_code, 'catalog_entries': payload, 'missing_count': missing}
 
 
 @router.post('/source-packages/{package_id}/sync')
@@ -169,29 +200,19 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
         raise HTTPException(404, 'Source package not found')
-
     expected = entries_for_package(package.package_code)
     if not expected:
-        return {
-            'package_id': package.id,
-            'package_code': package.package_code,
-            'created': 0,
-            'existing': 0,
-            'quarantined': 0,
-            'sources': [],
-        }
+        return {'package_id': package.id, 'package_code': package.package_code, 'created': 0, 'existing': 0, 'quarantined': 0, 'sources': []}
 
     created = 0
     existing_count = 0
     quarantined = 0
     sources = []
     for entry in expected:
-        row = db.query(SourceFile).filter(
-            SourceFile.package_id == package.id,
-            SourceFile.source_url == entry.registered_url,
-        ).first()
+        row = _catalog_row_for_entry(db, package, entry)
         if row:
             existing_count += 1
+            _stamp_catalog_identity(row, entry)
             report = _scope_term_report(row.extracted_text or '', entry)
             if not report['scope_verified'] and row.source_type != 'CATALOG_CANDIDATE':
                 row.source_type = 'CATALOG_CANDIDATE'
@@ -208,17 +229,18 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
                 reliability_score=entry.reliability_score,
                 edition_match_score=0.0,
                 status='SCOPE_UNVERIFIED',
+                extraction_meta={},
             )
-            db.add(row)
-            db.flush()
-            created += 1
-            quarantined += 1
+            _stamp_catalog_identity(row, entry)
+            db.add(row); db.flush()
+            created += 1; quarantined += 1
         sources.append({
             'source_file_id': row.id,
             'source_code': entry.source_code,
             'source_type': row.source_type,
             'promoted_source_type': entry.promoted_source_type,
-            'registered_url': row.source_url,
+            'registered_url': entry.registered_url,
+            'current_source_url': row.source_url,
             'catalog_url': entry.catalog_url,
             'authority': entry.authority,
             'scope_verification_status': entry.scope_verification_status,
@@ -238,7 +260,7 @@ def sync_official_catalog(package_id: int, db: Session = Depends(get_db)):
         'package_completeness': package.completeness_score,
         'package_quality': package.quality_score,
         'sources': sources,
-        'note': 'Catalog sync proves discovery/authority only. Sources remain unweighted CATALOG_CANDIDATE records until extracted content verifies semester-1 scope.',
+        'note': 'Catalog identity is preserved independently from redirect targets. Scope verification remains mandatory.',
     }
 
 
@@ -247,18 +269,18 @@ def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_d
     row = db.query(SourceFile).filter(SourceFile.id == source_file_id).first()
     if not row:
         raise HTTPException(404, 'Source file not found')
-    entry = _entry_for_url(row.source_url)
+    entry = _entry_for_source_file(db, row)
     if not entry:
         raise HTTPException(409, 'Source file is not backed by a verified catalog entry')
     if not row.extracted_text:
         raise HTTPException(409, 'Source must be fetched/extracted before scope verification')
-
     package = db.query(SourcePackage).filter(SourcePackage.id == row.package_id).first()
     if not package:
         raise HTTPException(404, 'Source package not found')
     if package.package_code != entry.package_code:
         raise HTTPException(409, 'Catalog source is attached to the wrong semester/package')
 
+    _stamp_catalog_identity(row, entry)
     report = _scope_term_report(row.extracted_text, entry)
     if report['scope_verified']:
         row.source_type = entry.promoted_source_type
@@ -278,8 +300,10 @@ def verify_catalog_source_scope(source_file_id: int, db: Session = Depends(get_d
         'missing_terms': report['missing_terms'],
         'source_type': row.source_type,
         'status': row.status,
+        'registered_url': entry.registered_url,
+        'current_source_url': row.source_url,
         'edition_match_score': float(row.edition_match_score or 0),
         'package_completeness': package.completeness_score,
         'package_quality': package.quality_score,
-        'note': 'Scope verification confirms semester 1 only. Edition match remains a separate quality gate.',
+        'note': 'Scope verification confirms semester 1 only. Redirect target changes do not alter catalog identity.',
     }

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..auth.deps import require_admin
 from ..db.deps import get_db
-from ..db.models import AIJob, Book, Lesson, LessonSkill, Skill, Subject, Unit
+from ..db.models import AIJob, Book, Lesson, LessonSkill, LessonSourceLink, Skill, Subject, Unit
 from ..schemas.skill_mapping import SkillApprovalRequest, SkillMappingPayload
 from ..services.generation_packet import build_lesson_generation_packet
 
@@ -44,22 +44,35 @@ def queue_skill_mapping(lesson_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, 'Lesson not found')
 
     packet = build_lesson_generation_packet(db, lesson_id)
-    source_context = packet.get('source_context') or []
+    packet_context = packet.get('source_context') or []
+    verified_chunk_ids = {
+        link.source_chunk_id for link in db.query(LessonSourceLink).filter(
+            LessonSourceLink.lesson_id == lesson_id,
+            LessonSourceLink.relation == 'TEACHING_SOURCE',
+            LessonSourceLink.status == 'VERIFIED',
+        ).all()
+    }
+    source_context = [
+        item for item in packet_context
+        if item.get('source_chunk_id') in verified_chunk_ids
+    ]
     if not source_context:
         raise HTTPException(409, detail={
-            'message': 'Skill mapping requires authorized factual source context',
+            'message': 'Skill mapping requires admin-verified factual teaching-source links',
             'scope_gate': packet.get('scope_gate') or {},
             'authority_gate': packet.get('authority_gate') or {},
+            'verified_teaching_source_chunk_ids': sorted(verified_chunk_ids),
         })
 
     input_json = {
-        'contract_version': 'skill-mapping-packet/v1',
+        'contract_version': 'skill-mapping-packet/v2',
         'lesson': packet['lesson'],
         'source_context': source_context,
         'rules': {
             'propose_measurable_skills_only': True,
             'no_skill_codes_from_model': True,
             'provenance_required': True,
+            'verified_teaching_source_required': True,
             'allowed_source_chunk_ids': [x['source_chunk_id'] for x in source_context],
             'admin_approval_required': True,
         },
@@ -82,6 +95,7 @@ def queue_skill_mapping(lesson_id: int, db: Session = Depends(get_db)):
         'status': job.status,
         'source_chunks': len(source_context),
         'approval_required': True,
+        'verified_teaching_source_required': True,
     }
 
 

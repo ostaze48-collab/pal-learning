@@ -25,6 +25,7 @@ from .qa.reference_console import router as reference_console_router
 from .admin.router import router as admin_router
 from .admin.readiness import router as readiness_router
 from .admin.current_semester import router as current_semester_router
+from .admin.semester_matrix import router as semester_matrix_router
 from .factory.router import router as factory_router
 from .factory.generation_readiness import router as generation_readiness_router
 from .factory.skill_mapping import router as skill_mapping_router
@@ -35,7 +36,7 @@ from .factory.release_transaction import router as release_transaction_router
 from .factory.staging_preview import router as staging_preview_router
 from .auth.router import router as auth_router
 
-VERSION = '1.16.0'
+VERSION = '1.17.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -106,7 +107,7 @@ def health():
             'official-source-catalog', 'source-discovery-catalog', 'catalog-scope-quarantine',
             'unreleased-demo-publication-quarantine', 'current-curriculum-plan-scope-evidence',
             'source-authority-policy-enforcement', 'current-semester-1-priority-registry',
-            'current-semester-admin-console',
+            'current-semester-admin-console', 'current-semester-production-matrix',
         ],
     }
 
@@ -151,6 +152,7 @@ app.include_router(reference_console_router)
 app.include_router(admin_router)
 app.include_router(readiness_router)
 app.include_router(current_semester_router)
+app.include_router(semester_matrix_router)
 app.include_router(factory_router)
 app.include_router(generation_readiness_router)
 app.include_router(skill_mapping_router)

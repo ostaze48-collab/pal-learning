@@ -14,6 +14,8 @@ os.environ['BOOTSTRAP_DEMO_STUDENT_PASSWORD'] = 'StudentDemoPassword123!'
 sys.path.insert(0, str(ROOT / 'apps' / 'api'))
 
 from fastapi.testclient import TestClient
+from app.db.base import SessionLocal
+from app.db.models import Lesson, Question
 from app.db.seed import run as seed
 from app.main import app
 
@@ -37,11 +39,29 @@ def test_diagnostic_and_recovery_flow():
     assert data['remediation']['estimated_minutes'] == 7
 
 
-def test_attempt_updates_mastery():
-    r = client.post('/learning/questions/1/attempt', json={'answer': 1, 'response_time_ms': 5000}, headers=STUDENT_HEADERS)
-    assert r.status_code == 200
-    assert r.json()['correct'] is True
-    assert r.json()['mastery_updates'][0]['confidence'] < 0.5
+def test_attempt_updates_mastery_only_for_published_question():
+    blocked = client.post('/learning/questions/1/attempt', json={'answer': 1, 'response_time_ms': 5000}, headers=STUDENT_HEADERS)
+    assert blocked.status_code == 404
+
+    db = SessionLocal()
+    try:
+        lesson = db.query(Lesson).filter(Lesson.id == 1).one()
+        question = db.query(Question).filter(Question.id == 1).one()
+        lesson.status = 'PUBLISHED'
+        question.status = 'PUBLISHED'
+        db.commit()
+
+        r = client.post('/learning/questions/1/attempt', json={'answer': 1, 'response_time_ms': 5000}, headers=STUDENT_HEADERS)
+        assert r.status_code == 200
+        assert r.json()['correct'] is True
+        assert r.json()['mastery_updates'][0]['confidence'] < 0.5
+    finally:
+        lesson = db.query(Lesson).filter(Lesson.id == 1).one()
+        question = db.query(Question).filter(Question.id == 1).one()
+        lesson.status = 'DRAFT'
+        question.status = 'DRAFT'
+        db.commit()
+        db.close()
 
 
 def test_offline_sync_is_idempotent():
@@ -59,6 +79,7 @@ def test_qa_gate_blocks_unverified_source_provenance():
     assert data['status'] != 'PASS'
     p = client.post('/qa/lessons/1/publish', headers=ADMIN_HEADERS)
     assert p.status_code == 409
+    assert p.json()['detail']['publication_authorized'] is False
 
 
 def test_learning_health_endpoint():
@@ -102,8 +123,10 @@ def test_solution_upload_and_alignment():
     assert aligned.status_code == 200
     data = aligned.json()
     assert data['solution_items_detected'] == 1
+    assert data['answer_validation_source_policy_enforced'] is True
     first = next(x for x in data['matches'] if x['question_id'] == 1)
     assert first['matched'] is True
+    assert first['source_file_id'] == r.json()['source_file_id']
     assert first['validation']['status'] == 'VERIFIED_MATCH'
 
 
@@ -118,6 +141,7 @@ def test_generation_packet_requires_and_uses_provenance():
     assert data['skills'] >= 1
     job = client.get(f"/factory/jobs/{data['job_id']}", headers=ADMIN_HEADERS).json()
     assert job['input']['generation_rules']['provenance_required'] is True
+    assert job['input']['generation_rules']['source_authority_enforced'] is True
     assert len(job['input']['source_context']) >= 1
     executed = client.post(f"/factory/jobs/{data['job_id']}/execute", headers=ADMIN_HEADERS)
     assert executed.status_code == 200

@@ -20,11 +20,16 @@ def _ready_stage(**overrides):
     return SimpleNamespace(**data)
 
 
-def test_postgres_academic_pass_is_ready_but_never_publishes():
+def test_postgres_academic_pass_is_ready_for_transaction_but_never_publishes():
     result = calculate_final_release_gate(_ready_stage(), 'postgresql')
     assert result['decision'] == 'READY_FOR_RELEASE_TRANSACTION'
     assert result['blockers'] == []
     assert result['publication_authorized'] is False
+    assert result['checks']['legacy_direct_publish_disabled'] is True
+    assert result['release_policy']['direct_legacy_publish_disabled'] is True
+    assert result['release_transaction_available'] is False
+    assert result['release_policy']['audited_release_transaction_implemented'] is False
+    assert result['next_action'] == 'BUILD_OR_ENABLE_AUDITED_RELEASE_TRANSACTION'
 
 
 def test_sqlite_blocks_release_even_when_content_passes():
@@ -32,6 +37,7 @@ def test_sqlite_blocks_release_even_when_content_passes():
     assert result['decision'] == 'BLOCKED'
     assert 'persistent_production_database' in result['blockers']
     assert result['publication_authorized'] is False
+    assert result['next_action'] == 'RESOLVE_RELEASE_GATE_BLOCKERS'
 
 
 def test_academic_block_or_unsupported_claim_blocks_release():
@@ -49,3 +55,4 @@ def test_academic_block_or_unsupported_claim_blocks_release():
     assert 'academic_qa_passed' in result['blockers']
     assert 'academic_effective_recommendation_pass' in result['blockers']
     assert 'no_unsupported_claims' in result['blockers']
+    assert result['publication_authorized'] is False

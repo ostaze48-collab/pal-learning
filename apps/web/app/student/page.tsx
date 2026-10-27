@@ -30,7 +30,7 @@ export default function Student(){
           <div style={{fontSize:34}}>🔬</div>
         </div>
         <div style={{marginTop:16}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:13}}><strong>تقدمك في الدرس</strong><strong>{home.progress_percent}%</strong></div><ProgressBar value={home.progress_percent}/></div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:16}}><PrimaryLink href="/student/lesson">{home.attempts?'متابعة الدرس':'ابدأ الدرس'}</PrimaryLink><PrimaryLink href="/student/progress" secondary>عرض التقدم</PrimaryLink></div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:16}}><PrimaryLink href="/student/lesson">{home.attempts?'متابعة الدرس':'ابدأ الدرس'}</PrimaryLink><PrimaryLink href="/student/progress" secondary>عرض التقدم</PrimaryLink><PrimaryLink href="/student/feedback" secondary>أرسل ملاحظة</PrimaryLink></div>
       </StudentCard>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:14}}>
@@ -49,6 +49,7 @@ export default function Student(){
           <div>✓ أسئلة تحفظ تقدمك وتحدّث Mastery حسب المهارة</div>
           <div>✓ مساعد درس تجريبي مقيد بمحتوى الدرس</div>
           <div>✓ مراجعة قصيرة مبنية على أضعف مهارة لديك</div>
+          <div>✓ إرسال ملاحظات مباشرة إلى فريق الـBeta</div>
         </div>
       </StudentCard>
       <BottomNav active="home"/>

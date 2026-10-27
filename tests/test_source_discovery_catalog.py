@@ -28,7 +28,7 @@ def test_discovered_plan_type_can_prove_scope_but_cannot_ground_facts():
 
 def test_discovery_endpoint_policy_is_fail_closed_and_explicit():
     result = list_source_discoveries('PS-G05-SCI-S2-2026')
-    assert result['catalog_version'] == 'source-discovery/v2'
+    assert result['catalog_version'] == 'source-discovery/v3'
     assert len(result['entries']) == 1
     assert result['policy']['unverified_discovery_creates_source_files'] is False
     assert result['policy']['verified_direct_file_registration_requires_admin'] is True

@@ -13,6 +13,9 @@ os.environ['BOOTSTRAP_ADMIN_PASSWORD'] = 'AcademicQaTestPassword123!'
 sys.path.insert(0, str(ROOT / 'apps' / 'api'))
 
 from fastapi.testclient import TestClient
+from app.db.base import SessionLocal
+from app.db.models import LessonSourceLink, SourceChunk
+from app.db.visual_models import VisualAsset
 from app.db.seed import run as seed
 from app.main import app
 
@@ -24,6 +27,48 @@ login = client.post('/auth/login', json={
 })
 assert login.status_code == 200, login.text
 HEADERS = {'Authorization': f"Bearer {login.json()['access_token']}"}
+
+
+def _ensure_cleared_visual(lesson_id: int):
+    db = SessionLocal()
+    try:
+        links = db.query(LessonSourceLink).filter(
+            LessonSourceLink.lesson_id == lesson_id,
+            LessonSourceLink.relation == 'TEACHING_SOURCE',
+            LessonSourceLink.status == 'VERIFIED',
+        ).order_by(LessonSourceLink.id).all()
+        for link in links:
+            chunk = db.query(SourceChunk).filter(SourceChunk.id == link.source_chunk_id).first()
+            if not chunk or chunk.page_number is None:
+                continue
+            existing = db.query(VisualAsset).filter(
+                VisualAsset.lesson_id == lesson_id,
+                VisualAsset.source_file_id == chunk.source_file_id,
+                VisualAsset.source_page == chunk.page_number,
+                VisualAsset.asset_kind == 'TEXTBOOK_PAGE_CROP',
+            ).first()
+            if not existing:
+                db.add(VisualAsset(
+                    lesson_id=lesson_id,
+                    source_file_id=chunk.source_file_id,
+                    source_page=chunk.page_number,
+                    asset_kind='TEXTBOOK_PAGE_CROP',
+                    storage_key=f's3://test-bucket/academic/lesson-{lesson_id}-page-{chunk.page_number}.png',
+                    public_url=f'https://cdn.example.test/academic/lesson-{lesson_id}-page-{chunk.page_number}.png',
+                    checksum='d' * 64,
+                    width=1200,
+                    height=1700,
+                    rights_status='CLEARED',
+                    status='APPROVED',
+                    alt_text='صفحة تعليمية موثقة من مصدر الدرس.',
+                    caption='أصل بصري اختباري للمراجعة الأكاديمية.',
+                    hotspots_json=[],
+                ))
+                db.commit()
+            return
+        raise AssertionError('No verified teaching source with a page number was available for visual fixture')
+    finally:
+        db.close()
 
 
 def _verify_teaching_links(lesson_id: int = 1):
@@ -41,6 +86,7 @@ def _verify_teaching_links(lesson_id: int = 1):
         assert result.json()['status'] == 'VERIFIED'
         verified += 1
     assert verified >= 1
+    _ensure_cleared_visual(lesson_id)
 
 
 def _stage_release_ready_lesson():

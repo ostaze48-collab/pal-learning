@@ -17,7 +17,10 @@ class VisualAsset(Base):
     lesson_id: Mapped[int] = mapped_column(ForeignKey('lessons.id'), index=True)
     source_file_id: Mapped[int] = mapped_column(ForeignKey('source_files.id'), index=True)
     source_page: Mapped[int] = mapped_column(Integer, index=True)
+    parent_asset_id: Mapped[int | None] = mapped_column(ForeignKey('visual_assets.id'), nullable=True, index=True)
     asset_kind: Mapped[str] = mapped_column(String(40), default='TEXTBOOK_PAGE_CROP')
+    region_key: Mapped[str] = mapped_column(String(80), default='full-page')
+    crop_box_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     storage_key: Mapped[str] = mapped_column(Text)
     low_data_storage_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     public_url: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -35,7 +38,7 @@ class VisualAsset(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            'lesson_id', 'source_file_id', 'source_page', 'asset_kind',
-            name='uq_visual_asset_lesson_source_page_kind',
+            'lesson_id', 'source_file_id', 'source_page', 'asset_kind', 'region_key',
+            name='uq_visual_asset_lesson_source_page_kind_region',
         ),
     )

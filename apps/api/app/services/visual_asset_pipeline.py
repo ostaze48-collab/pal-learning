@@ -1,11 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-from collections import defaultdict
 
 from sqlalchemy.orm import Session
 
-from ..db.models import Book, Lesson, LessonSourceLink, SourceChunk, SourceFile, SourcePackage, Unit
+from ..db.models import Book, Lesson, LessonSourceLink, SourceChunk, SourceFile, SourcePackage
 from ..db.visual_models import VisualAsset
 from ..importer.source_policy import can_ground_facts
 from .object_storage import persist_visual_asset_bytes, read_storage_bytes
@@ -57,7 +56,7 @@ def lesson_visual_source_pages(db: Session, lesson_id: int) -> list[dict]:
 def _render_page_variants(pdf_bytes: bytes, page_number: int) -> dict:
     try:
         import fitz
-    except ImportError as exc:  # pragma: no cover - dependency installed in production
+    except ImportError as exc:  # pragma: no cover
         raise RuntimeError('PyMuPDF is required for textbook visual extraction') from exc
 
     document = fitz.open(stream=pdf_bytes, filetype='pdf')
@@ -106,6 +105,7 @@ def extract_lesson_visual_assets(db: Session, lesson_id: int) -> dict:
             VisualAsset.source_file_id == source_file_id,
             VisualAsset.source_page == page_number,
             VisualAsset.asset_kind == 'TEXTBOOK_PAGE_CROP',
+            VisualAsset.region_key == 'full-page',
         ).first()
 
         if existing and existing.checksum == checksum:
@@ -140,6 +140,7 @@ def extract_lesson_visual_assets(db: Session, lesson_id: int) -> dict:
                 source_file_id=source_file_id,
                 source_page=page_number,
                 asset_kind='TEXTBOOK_PAGE_CROP',
+                region_key='full-page',
                 rights_status='REVIEW_REQUIRED',
                 status='EXTRACTED',
                 hotspots_json=[],
@@ -175,7 +176,10 @@ def serialize_visual_asset(db: Session, asset: VisualAsset, include_private: boo
         'source_file_id': asset.source_file_id,
         'source_page': asset.source_page,
         'source_label': _source_label(db, asset.source_file_id),
+        'parent_asset_id': asset.parent_asset_id,
         'asset_kind': asset.asset_kind,
+        'region_key': asset.region_key,
+        'crop_box': asset.crop_box_json,
         'src': asset.public_url,
         'low_data_src': asset.low_data_url,
         'width': asset.width,
@@ -193,17 +197,26 @@ def serialize_visual_asset(db: Session, asset: VisualAsset, include_private: boo
 
 
 def generation_visual_assets(db: Session, lesson_id: int, allowed_source_pages: set[tuple[int, int]]) -> list[dict]:
-    """Return only learner-deliverable CLEARED visuals backed by effective source context."""
+    """Return cleared visuals, preferring focused figures over full textbook pages."""
     rows = db.query(VisualAsset).filter(
         VisualAsset.lesson_id == lesson_id,
         VisualAsset.rights_status == 'CLEARED',
         VisualAsset.status == 'APPROVED',
     ).order_by(VisualAsset.source_page, VisualAsset.id).all()
+
+    eligible = [
+        asset for asset in rows
+        if (asset.source_file_id, asset.source_page) in allowed_source_pages and asset.public_url
+    ]
+    focused_pages = {
+        (asset.source_file_id, asset.source_page)
+        for asset in eligible
+        if asset.asset_kind == 'TEXTBOOK_FIGURE'
+    }
+
     result = []
-    for asset in rows:
-        if (asset.source_file_id, asset.source_page) not in allowed_source_pages:
-            continue
-        if not asset.public_url:
+    for asset in eligible:
+        if asset.asset_kind == 'TEXTBOOK_PAGE_CROP' and (asset.source_file_id, asset.source_page) in focused_pages:
             continue
         result.append(serialize_visual_asset(db, asset, include_private=False))
     return result

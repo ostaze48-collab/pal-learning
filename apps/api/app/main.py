@@ -27,6 +27,7 @@ from .demo.admin import router as demo_admin_router
 from .demo.result import router as demo_result_router
 from .demo.state import router as demo_state_router
 from .demo.feedback import router as demo_feedback_router
+from .demo.activity import router as demo_activity_router
 from .qa.router import router as qa_router
 from .qa.reference_console import router as reference_console_router
 from .admin.router import router as admin_router
@@ -43,7 +44,7 @@ from .factory.release_transaction import router as release_transaction_router
 from .factory.staging_preview import router as staging_preview_router
 from .auth.router import router as auth_router
 
-VERSION = '1.20.1'
+VERSION = '1.21.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -125,7 +126,7 @@ def health():
             'single-lesson-experimental-beta', 'single-lesson-beta-student-api',
             'single-lesson-beta-health-diagnostics', 'single-lesson-beta-operations-dashboard',
             'single-lesson-beta-result-summary', 'single-lesson-beta-persistent-session-state',
-            'single-lesson-beta-feedback-capture',
+            'single-lesson-beta-feedback-capture', 'single-lesson-beta-interactive-matching-activity',
         ],
     }
 
@@ -172,6 +173,7 @@ app.include_router(demo_admin_router)
 app.include_router(demo_result_router)
 app.include_router(demo_state_router)
 app.include_router(demo_feedback_router)
+app.include_router(demo_activity_router)
 app.include_router(qa_router)
 app.include_router(reference_console_router)
 app.include_router(admin_router)

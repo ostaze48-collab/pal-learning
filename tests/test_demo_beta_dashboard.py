@@ -11,8 +11,6 @@ os.environ['DATABASE_URL'] = f'sqlite:///{DB}'
 os.environ['EXPERIMENTAL_DEMO'] = 'true'
 os.environ['BOOTSTRAP_ADMIN_EMAIL'] = 'beta.admin@example.test'
 os.environ['BOOTSTRAP_ADMIN_PASSWORD'] = 'BetaAdminPassword123!'
-os.environ['BOOTSTRAP_DEMO_STUDENT_EMAIL'] = 'beta.student@example.test'
-os.environ['BOOTSTRAP_DEMO_STUDENT_PASSWORD'] = 'BetaStudentPassword123!'
 sys.path.insert(0, str(ROOT / 'apps' / 'api'))
 
 from fastapi.testclient import TestClient
@@ -36,12 +34,17 @@ admin_login = client.post('/auth/login', json={
 assert admin_login.status_code == 200, admin_login.text
 ADMIN = {'Authorization': f"Bearer {admin_login.json()['access_token']}"}
 
-student_login = client.post('/auth/login', json={
-    'email': 'beta.student@example.test',
-    'password': 'BetaStudentPassword123!',
+grades = client.get('/curriculum/grades')
+assert grades.status_code == 200, grades.text
+grade5 = next(row for row in grades.json() if row['code'] == 'G05')
+registered = client.post('/auth/register-student', json={
+    'email': 'beta.flow.student@example.test',
+    'password': 'BetaFlowStudentPassword123!',
+    'display_name': 'طالب Beta Flow',
+    'grade_id': grade5['id'],
 })
-assert student_login.status_code == 200, student_login.text
-STUDENT = {'Authorization': f"Bearer {student_login.json()['access_token']}"}
+assert registered.status_code == 200, registered.text
+STUDENT = {'Authorization': f"Bearer {registered.json()['access_token']}"}
 
 
 def test_demo_health_and_scope_are_single_lesson():

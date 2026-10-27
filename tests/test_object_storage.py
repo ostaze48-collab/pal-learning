@@ -38,9 +38,9 @@ def test_r2_requires_all_credentials(monkeypatch):
     config = storage_configuration()
     assert config.durable is True
     assert config.configured is False
-    assert 'S3_ENDPOINT_URL' in config.missing
-    assert 'S3_ACCESS_KEY_ID' in config.missing
-    assert 'S3_SECRET_ACCESS_KEY' in config.missing
+    assert 'R2_ENDPOINT_URL' in config.missing
+    assert 'R2_ACCESS_KEY_ID' in config.missing
+    assert 'R2_SECRET_ACCESS_KEY' in config.missing
 
 
 def test_r2_configuration_can_be_complete_without_network_call(monkeypatch):

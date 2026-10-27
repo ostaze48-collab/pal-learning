@@ -107,11 +107,11 @@ def _prepare_valid_candidate():
     assert ingested.status_code == 200, ingested.text
     assert ingested.json()['status'] == 'READY_FOR_QA'
     assert ingested.json()['validation']['section_blueprint']['valid'] is True
-    return ingested.json()['candidate_id']
+    return ingested.json()['candidate_id'], section_titles[0]
 
 
 def test_candidate_preflight_and_staging_do_not_publish():
-    candidate_id = _prepare_valid_candidate()
+    candidate_id, first_section_title = _prepare_valid_candidate()
 
     qa = client.post(f'/factory/candidates/{candidate_id}/qa', headers=HEADERS)
     assert qa.status_code == 200, qa.text
@@ -136,7 +136,7 @@ def test_candidate_preflight_and_staging_do_not_publish():
     assert staged.status_code == 200, staged.text
     staged_data = staged.json()
     assert staged_data['candidate_id'] == candidate_id
-    assert staged_data['snapshot']['sections'][0]['title'] == approved_section_title(staged_data)
+    assert staged_data['snapshot']['sections'][0]['title'] == first_section_title
     assert staged_data['qa_snapshot']['preflight_status'] == 'PASS'
 
     second_approval = client.post(f'/factory/candidates/{candidate_id}/approve-staging', headers=HEADERS)
@@ -148,9 +148,3 @@ def test_candidate_preflight_and_staging_do_not_publish():
     assert lesson_response.status_code == 200, lesson_response.text
     lesson = lesson_response.json()
     assert lesson['status'] == 'DRAFT'
-
-
-def approved_section_title(staged_data: dict) -> str:
-    validation = staged_data['qa_snapshot'].get('candidate_validation') or {}
-    expected = ((validation.get('section_blueprint') or {}).get('expected_sections') or [])
-    return expected[0]['title'] if expected else staged_data['snapshot']['sections'][0]['title']

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..db.deps import get_db
 from ..auth.deps import require_admin
 from ..db.models import (
-    Book, ContentBlock, Lesson, LessonSection, LessonSkill, LessonSourceLink, Question, QuestionSkill,
-    QAResult, ReferenceAnswer, SourceFile, SourcePackage, Unit
+    ContentBlock, Lesson, LessonSection, LessonSkill, LessonSourceLink, Question, QuestionSkill,
+    QAResult, ReferenceAnswer, SourceChunk, SourceFile, SourcePackage, Unit
 )
+from ..importer.source_policy import can_ground_facts, can_validate_answers
 from ..services.solution_alignment import align_questions, parse_solution_items, validate_answer
 
 router = APIRouter(prefix='/qa', tags=['quality-assurance'], dependencies=[Depends(require_admin)])
@@ -22,6 +22,32 @@ def _lesson_ids_for_book(db: Session, book_id: int) -> list[int]:
     return [x.id for x in db.query(Lesson).filter(Lesson.unit_id.in_(unit_ids)).all()]
 
 
+def _authorized_factual_lesson_links(db: Session, lesson_id: int) -> list[LessonSourceLink]:
+    links = db.query(LessonSourceLink).filter(
+        LessonSourceLink.lesson_id == lesson_id,
+        LessonSourceLink.relation == 'TEACHING_SOURCE',
+        LessonSourceLink.status.in_(['CANDIDATE', 'VERIFIED_CANDIDATE', 'VERIFIED']),
+    ).all()
+    authorized = []
+    for link in links:
+        chunk = db.query(SourceChunk).filter(SourceChunk.id == link.source_chunk_id).first()
+        if not chunk:
+            continue
+        source = db.query(SourceFile).filter(SourceFile.id == chunk.source_file_id).first()
+        if source and can_ground_facts(source.source_type):
+            authorized.append(link)
+    return authorized
+
+
+def _reference_answer_weight(db: Session, ref: ReferenceAnswer, validation_weights: dict[str, float]) -> float:
+    if not ref.source_file_id:
+        return 0.0
+    source = db.query(SourceFile).filter(SourceFile.id == ref.source_file_id).first()
+    if not source or not can_validate_answers(source.source_type):
+        return 0.0
+    return validation_weights.get(ref.validation_status, 0.2)
+
+
 @router.post('/source-packages/{package_id}/align-solutions')
 def align_solution_source(package_id: int, db: Session = Depends(get_db)):
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
@@ -31,16 +57,15 @@ def align_solution_source(package_id: int, db: Session = Depends(get_db)):
         SourceFile.package_id == package_id,
         SourceFile.source_type == 'SOLUTIONS',
     ).all()
+    solution_files = [source for source in solution_files if can_validate_answers(source.source_type)]
     if not solution_files:
-        raise HTTPException(409, 'No SOLUTIONS source has been imported')
+        raise HTTPException(409, 'No policy-authorized SOLUTIONS source has been imported')
+
     parsed_items = []
-    item_source = {}
     for source in solution_files:
         items = parse_solution_items(source.extracted_text or '')
         for item in items:
-            idx = len(parsed_items)
-            parsed_items.append(item)
-            item_source[idx] = source.id
+            parsed_items.append({**item, 'source_file_id': source.id})
     if not parsed_items:
         raise HTTPException(409, 'No conservative سؤال/جواب pairs were detected; AI/admin review is required')
 
@@ -48,12 +73,24 @@ def align_solution_source(package_id: int, db: Session = Depends(get_db)):
     questions = db.query(Question).filter(Question.lesson_id.in_(lesson_ids)).all() if lesson_ids else []
     prompts = [q.prompt for q in questions]
     aligned = align_questions(prompts, parsed_items, threshold=0.36)
+    authorized_ids = {source.id for source in solution_files}
     results = []
     for q, match in zip(questions, aligned):
         if not match.get('matched'):
             results.append({'question_id': q.id, **match})
             continue
-        # Locate the matched parsed item again by strongest question similarity through align_questions result.
+
+        matched_source_id = match.get('source_file_id')
+        if matched_source_id not in authorized_ids:
+            results.append({
+                'question_id': q.id,
+                **match,
+                'matched': False,
+                'authority_blocked': True,
+                'blocking_reason': 'REFERENCE_SOURCE_NOT_AUTHORIZED_FOR_ANSWER_VALIDATION',
+            })
+            continue
+
         ref_answer = match.get('reference_answer') or ''
         expected = q.correct_answer_json
         if isinstance(expected, dict) and 'value' in expected:
@@ -70,8 +107,7 @@ def align_solution_source(package_id: int, db: Session = Depends(get_db)):
         ref.answer_text = ref_answer
         ref.confidence = float(match.get('score', 0))
         ref.validation_status = validation['status']
-        # Best effort source: first solution source; precise source lines stay in alignment output.
-        ref.source_file_id = solution_files[0].id
+        ref.source_file_id = int(matched_source_id)
         results.append({'question_id': q.id, **match, 'validation': validation})
     db.commit()
     return {
@@ -79,6 +115,7 @@ def align_solution_source(package_id: int, db: Session = Depends(get_db)):
         'solution_items_detected': len(parsed_items),
         'questions_checked': len(questions),
         'matches': results,
+        'answer_validation_source_policy_enforced': True,
     }
 
 
@@ -93,12 +130,13 @@ def calculate_lesson_qa(db: Session, lesson_id: int) -> dict:
     questions = db.query(Question).filter(Question.lesson_id == lesson_id).all()
 
     blocks_with_refs = sum(1 for b in blocks if b.source_refs)
-    lesson_source_links = db.query(LessonSourceLink).filter(LessonSourceLink.lesson_id == lesson_id).all()
+    all_lesson_source_links = db.query(LessonSourceLink).filter(LessonSourceLink.lesson_id == lesson_id).all()
+    factual_lesson_source_links = _authorized_factual_lesson_links(db, lesson_id)
     source_alignment = (100 * blocks_with_refs / len(blocks)) if blocks else 0
-    if blocks and blocks_with_refs == 0 and lesson_source_links:
-        source_alignment = 60  # lesson-level provenance exists, but block-level provenance is still incomplete
+    if blocks and blocks_with_refs == 0 and factual_lesson_source_links:
+        source_alignment = 60  # factual lesson provenance exists, but block-level provenance is incomplete
     elif blocks and blocks_with_refs == 0:
-        source_alignment = 25  # source package exists but exact lesson/block provenance is not yet mapped
+        source_alignment = 25  # no authorized factual lesson-level provenance has been mapped yet
 
     linked_question_ids = {
         x.question_id for x in db.query(QuestionSkill).filter(
@@ -121,7 +159,18 @@ def calculate_lesson_qa(db: Session, lesson_id: int) -> dict:
         'UNVERIFIED': 0.2,
         'CONFLICT': 0.0,
     }
-    answer_validation = 100 * (sum(validation_weights.get(r.validation_status, 0.2) for r in refs) / len(questions)) if questions else 0
+    authorized_reference_answers = sum(
+        1 for ref in refs
+        if ref.source_file_id
+        and (
+            (source := db.query(SourceFile).filter(SourceFile.id == ref.source_file_id).first()) is not None
+            and can_validate_answers(source.source_type)
+        )
+    )
+    answer_validation = (
+        100 * (sum(_reference_answer_weight(db, ref, validation_weights) for ref in refs) / len(questions))
+        if questions else 0
+    )
 
     overall = (
         source_alignment * 0.35 +
@@ -140,8 +189,15 @@ def calculate_lesson_qa(db: Session, lesson_id: int) -> dict:
         'overall_score': round(overall, 1),
         'status': status,
         'details': {
-            'sections': len(sections), 'blocks': len(blocks), 'blocks_with_source_refs': blocks_with_refs,
-            'lesson_skills': len(lesson_skills), 'lesson_source_links': len(lesson_source_links), 'questions': len(questions), 'reference_answers': len(refs),
+            'sections': len(sections),
+            'blocks': len(blocks),
+            'blocks_with_source_refs': blocks_with_refs,
+            'lesson_skills': len(lesson_skills),
+            'lesson_source_links': len(all_lesson_source_links),
+            'authorized_factual_lesson_source_links': len(factual_lesson_source_links),
+            'questions': len(questions),
+            'reference_answers': len(refs),
+            'authorized_answer_validation_refs': authorized_reference_answers,
         },
     }
 
@@ -165,19 +221,25 @@ def run_lesson_qa(lesson_id: int, db: Session = Depends(get_db)):
 
 @router.post('/lessons/{lesson_id}/publish')
 def publish_lesson(lesson_id: int, db: Session = Depends(get_db)):
+    """Legacy route retained only as an explicit fail-closed compatibility guard.
+
+    Publication is intentionally unavailable until an audited release transaction
+    is implemented after staging, academic QA and the final non-publishing release gate.
+    """
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise HTTPException(404, 'Lesson not found')
-    latest = db.query(QAResult).filter(QAResult.lesson_id == lesson_id).order_by(QAResult.id.desc()).first()
-    if not latest:
-        raise HTTPException(409, 'Run QA before publishing')
-    if latest.status != 'PASS':
-        raise HTTPException(409, {
-            'message': 'Publishing blocked by QA gate',
-            'overall_score': latest.overall_score,
-            'source_alignment_score': latest.source_alignment_score,
-            'answer_validation_score': latest.answer_validation_score,
-        })
-    lesson.status = 'PUBLISHED'
-    db.commit()
-    return {'lesson_id': lesson_id, 'status': lesson.status, 'qa_result_id': latest.id}
+    raise HTTPException(
+        409,
+        detail={
+            'message': 'Direct lesson publication is disabled',
+            'publication_authorized': False,
+            'required_flow': [
+                'CANDIDATE_QA',
+                'STAGING_APPROVAL',
+                'ACADEMIC_QA',
+                'FINAL_RELEASE_GATE',
+                'AUDITED_RELEASE_TRANSACTION_NOT_IMPLEMENTED',
+            ],
+        },
+    )

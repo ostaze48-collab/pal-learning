@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, UTC
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ..db.deps import get_db
@@ -88,13 +89,10 @@ def execute_factory_job(job_id: int, db: Session = Depends(get_db)):
     return {'job_id': job.id, 'status': job.status, 'progress': job.progress, 'result': job.result_json, 'error': job.error}
 
 
-@router.post('/jobs/{job_id}/ingest-output')
-def ingest_generated_output(job_id: int, payload: GeneratedLessonPayload, db: Session = Depends(get_db)):
-    job = db.query(AIJob).filter(AIJob.id == job_id).first()
-    if not job:
-        raise HTTPException(404, 'Job not found')
+def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -> dict:
     if job.job_type != 'GENERATE_LESSON' or job.source_type != 'LESSON' or not job.source_id:
         raise HTTPException(409, 'Job is not a lesson-generation job')
+
     packet = job.input_json or {}
     allowed_chunks = {x.get('source_chunk_id') for x in packet.get('source_context', []) if x.get('source_chunk_id')}
     allowed_skills = {x.get('skill_code') for x in packet.get('skills', []) if x.get('skill_code')}
@@ -149,6 +147,58 @@ def ingest_generated_output(job_id: int, payload: GeneratedLessonPayload, db: Se
         'provenance_score': candidate.provenance_score,
         'validation': candidate.validation_json,
     }
+
+
+@router.post('/jobs/{job_id}/ingest-output')
+def ingest_generated_output(job_id: int, payload: GeneratedLessonPayload, db: Session = Depends(get_db)):
+    job = db.query(AIJob).filter(AIJob.id == job_id).first()
+    if not job:
+        raise HTTPException(404, 'Job not found')
+    return _store_candidate(job, payload, db)
+
+
+@router.post('/jobs/{job_id}/ingest-provider-output')
+def ingest_provider_output(job_id: int, db: Session = Depends(get_db)):
+    """Validate the provider output already stored on the job.
+
+    Execution and ingestion are deliberately separate. A provider can finish a job,
+    but its output cannot become a ContentCandidate until it passes the strict
+    GeneratedLessonPayload schema and the same provenance/skill allowlists used for
+    manually ingested output.
+    """
+    job = db.query(AIJob).filter(AIJob.id == job_id).first()
+    if not job:
+        raise HTTPException(404, 'Job not found')
+    if job.job_type != 'GENERATE_LESSON' or job.source_type != 'LESSON' or not job.source_id:
+        raise HTTPException(409, 'Job is not a lesson-generation job')
+
+    output = ((job.result_json or {}).get('output') or {})
+    if not isinstance(output, dict) or not output:
+        raise HTTPException(409, 'Provider output is not available')
+    if output.get('requires_provider_for_generation'):
+        raise HTTPException(409, 'This job still requires a real generation provider')
+    if output.get('parse_status') == 'NON_JSON_OUTPUT':
+        job.status = 'OUTPUT_SCHEMA_INVALID'
+        job.error = 'Provider returned non-JSON output'
+        db.commit()
+        raise HTTPException(422, 'Provider output is not valid JSON')
+
+    try:
+        payload = GeneratedLessonPayload.model_validate(output)
+    except ValidationError as exc:
+        job.status = 'OUTPUT_SCHEMA_INVALID'
+        job.progress = 55
+        job.error = 'Provider output does not match GeneratedLessonPayload'
+        db.commit()
+        raise HTTPException(
+            422,
+            detail={
+                'message': 'Provider output does not match GeneratedLessonPayload',
+                'errors': exc.errors(include_url=False),
+            },
+        ) from exc
+
+    return _store_candidate(job, payload, db)
 
 
 @router.get('/lessons/{lesson_id}/candidates')

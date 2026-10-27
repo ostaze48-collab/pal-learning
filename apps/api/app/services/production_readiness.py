@@ -4,6 +4,7 @@ import os
 from dataclasses import dataclass
 
 from ..importer.source_policy import allowed_source_types, source_allows
+from .object_storage import storage_configuration
 from .release_policy import (
     AUDITED_RELEASE_TRANSACTION_IMPLEMENTED,
     DIRECT_LEGACY_PUBLISH_ENABLED,
@@ -40,6 +41,7 @@ def evaluate_production_readiness(
     ai_model = bool(os.getenv('OPENAI_MODEL') or os.getenv('OPENAI_MODEL_BALANCED')) if provider == 'OPENAI' else False
     jwt_secret = os.getenv('JWT_SECRET', '')
     bootstrap_password = os.getenv('BOOTSTRAP_ADMIN_PASSWORD', '')
+    storage = storage_configuration()
 
     production_origins = [x for x in allowed_origins if x.startswith('https://')]
     wildcard_origin = '*' in allowed_origins
@@ -47,6 +49,8 @@ def evaluate_production_readiness(
     checks = {
         'persistent_database': database_backend in {'postgresql', 'postgres'},
         'database_migration_current': migration_current,
+        'durable_source_storage': storage.durable,
+        'source_storage_configured': storage.durable and storage.configured,
         'jwt_secret_configured': len(jwt_secret) >= 32 and jwt_secret.lower() not in {'change-me', 'changeme'},
         'cors_has_production_origin': bool(production_origins),
         'cors_has_no_wildcard': not wildcard_origin,
@@ -67,6 +71,12 @@ def evaluate_production_readiness(
             'database_backend': database_backend,
             'migration_revision': migration_revision,
             'migration_head': migration_head,
+            'storage_backend': storage.backend,
+            'storage_durable': storage.durable,
+            'storage_configured': storage.configured,
+            'storage_bucket': storage.bucket,
+            'storage_endpoint_configured': bool(storage.endpoint_url),
+            'storage_missing': list(storage.missing),
             'ai_provider': provider,
             'production_origins': production_origins,
             'bootstrap_password_present': bool(bootstrap_password),

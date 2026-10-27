@@ -8,6 +8,7 @@ from ..db.current_semester import CURRENT_BOOK_CODE, CURRENT_PACKAGE_CODE, MINIS
 from ..db.deps import get_db
 from ..db.models import AIJob, Book, Lesson, LessonSkill, LessonSourceLink, SourceFile, SourcePackage, Unit
 from ..factory.generation_readiness import calculate_generation_readiness
+from ..services.object_storage import storage_configuration
 
 router = APIRouter(prefix='/admin', tags=['admin-current-semester'], dependencies=[Depends(require_admin)])
 CURRENT_CATALOG_SOURCE_CODE = 'PS.G05.SCI.GAZA.CURRENT.S1'
@@ -42,19 +43,25 @@ def _first_lesson(db: Session, book_id: int) -> Lesson | None:
 
 
 def _stage(key: str, label: str, status: str, *, detail: str, action: str | None = None) -> dict:
-    return {
-        'key': key,
-        'label': label,
-        'status': status,
-        'detail': detail,
-        'action': action,
-    }
+    return {'key': key, 'label': label, 'status': status, 'detail': detail, 'action': action}
+
+
+def _database_backend(db: Session) -> str:
+    bind = db.get_bind()
+    return bind.url.get_backend_name() if bind is not None else 'unknown'
+
+
+def _source_is_durable(source: SourceFile | None) -> bool:
+    if not source:
+        return False
+    meta = dict(source.extraction_meta or {})
+    file_key = source.file_key or ''
+    return bool(meta.get('durable_storage') or str(file_key).startswith('s3://'))
 
 
 @router.get('/current-semester')
 def current_semester(db: Session = Depends(get_db)):
     book, package = _registry(db)
-
     units = db.query(Unit).filter(Unit.book_id == book.id).order_by(Unit.order_no).all()
     unit_payload = []
     for unit in units:
@@ -64,13 +71,8 @@ def current_semester(db: Session = Depends(get_db)):
             'unit_number': unit.unit_number,
             'title': unit.title,
             'lessons': [
-                {
-                    'id': lesson.id,
-                    'lesson_number': lesson.lesson_number,
-                    'lesson_code': lesson.lesson_code,
-                    'title': lesson.title,
-                    'status': lesson.status,
-                }
+                {'id': lesson.id, 'lesson_number': lesson.lesson_number, 'lesson_code': lesson.lesson_code,
+                 'title': lesson.title, 'status': lesson.status}
                 for lesson in lessons
             ],
         })
@@ -78,29 +80,13 @@ def current_semester(db: Session = Depends(get_db)):
     sources = db.query(SourceFile).filter(SourceFile.package_id == package.id).order_by(SourceFile.id).all()
     return {
         'semester': 1,
-        'book': {
-            'id': book.id,
-            'book_code': book.book_code,
-            'title': book.title,
-            'status': book.status,
-            'edition': book.edition,
-        },
-        'package': {
-            'id': package.id,
-            'package_code': package.package_code,
-            'status': package.status,
-            'source_count': len(sources),
-        },
+        'book': {'id': book.id, 'book_code': book.book_code, 'title': book.title, 'status': book.status, 'edition': book.edition},
+        'package': {'id': package.id, 'package_code': package.package_code, 'status': package.status, 'source_count': len(sources)},
         'units': unit_payload,
         'sources': [
-            {
-                'id': source.id,
-                'source_type': source.source_type,
-                'source_url': source.source_url,
-                'status': source.status,
-                'reliability_score': source.reliability_score,
-                'edition_match_score': source.edition_match_score,
-            }
+            {'id': source.id, 'source_type': source.source_type, 'source_url': source.source_url,
+             'status': source.status, 'reliability_score': source.reliability_score,
+             'edition_match_score': source.edition_match_score}
             for source in sources
         ],
         'backlog': {
@@ -115,44 +101,61 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
     book, package = _registry(db)
     lesson = _first_lesson(db, book.id)
     source = _current_official_source(db, package.id)
+    database_backend = _database_backend(db)
+    production_database = database_backend in {'postgresql', 'postgres'}
+    storage = storage_configuration()
+    storage_ready = (not production_database) or (storage.durable and storage.configured)
 
     stages: list[dict] = []
+    stages.append(_stage('REGISTRY', 'سجل الفصل الأول', 'DONE', detail=f'{book.book_code} · {package.package_code}'))
     stages.append(_stage(
-        'REGISTRY',
-        'سجل الفصل الأول',
-        'DONE',
-        detail=f'{book.book_code} · {package.package_code}',
+        'DURABLE_STORAGE',
+        'تخزين ملفات المنهاج',
+        'DONE' if storage_ready else 'BLOCKED',
+        detail=(
+            f'{storage.backend} · {storage.bucket or "development local storage"}'
+            if storage_ready else
+            'PostgreSQL production requires R2/S3 before importing factual PDFs. Missing: '
+            + ', '.join(storage.missing or ('STORAGE_BACKEND=R2/S3',))
+        ),
+        action=None,
     ))
 
     if not source:
         stages.append(_stage(
             'SOURCE_FETCH', 'جلب المصدر الرسمي', 'BLOCKED',
-            detail='مصدر الوزارة غير مسجل في الحزمة الحالية.', action='SYNC_OR_REGISTER_OFFICIAL_SOURCE',
+            detail='مصدر الوزارة غير مسجل في الحزمة الحالية.',
+            action='SYNC_OR_REGISTER_OFFICIAL_SOURCE' if storage_ready else None,
         ))
         source_fetched = False
+        source_ready = False
         scope_verified = False
     else:
         source_fetched = bool(source.extracted_text) and source.status in {'EXTRACTED', 'ANALYZED'}
+        source_durable = _source_is_durable(source)
+        source_ready = source_fetched and ((not production_database) or source_durable)
+        fetch_status = 'DONE' if source_ready else ('READY' if storage_ready else 'BLOCKED')
+        if source_fetched and production_database and not source_durable:
+            fetch_detail = f'المصدر #{source.id} مستخرج لكنه غير محفوظ تخزينًا دائمًا؛ أعد جلبه بعد تهيئة R2/S3.'
+        elif source_fetched:
+            fetch_detail = f'{source.page_count or 0} صفحة · {source.status} · durable={source_durable if production_database else "dev"}'
+        else:
+            fetch_detail = f'المصدر #{source.id} مسجل ويحتاج Fetch/Extraction.'
         stages.append(_stage(
-            'SOURCE_FETCH', 'جلب المصدر الرسمي', 'DONE' if source_fetched else 'READY',
-            detail=(
-                f'{source.page_count or 0} صفحة · {source.status}' if source_fetched
-                else f'المصدر #{source.id} مسجل ويحتاج Fetch/Extraction.'
-            ),
-            action=None if source_fetched else 'FETCH_OFFICIAL_SOURCE',
+            'SOURCE_FETCH', 'جلب المصدر الرسمي', fetch_status,
+            detail=fetch_detail,
+            action=None if source_ready else ('FETCH_OFFICIAL_SOURCE' if storage_ready else None),
         ))
-        scope_verified = source.source_type == 'OFFICIAL_PACKAGE' and source_fetched
+        scope_verified = source.source_type == 'OFFICIAL_PACKAGE' and source_ready
 
     stages.append(_stage(
-        'SEMESTER_SCOPE',
-        'تحقق نطاق الفصل الأول',
-        'DONE' if scope_verified else ('READY' if source_fetched else 'BLOCKED'),
+        'SEMESTER_SCOPE', 'تحقق نطاق الفصل الأول',
+        'DONE' if scope_verified else ('READY' if source_ready else 'BLOCKED'),
         detail=(
             'الخلية + خصائص المادة + الطاقة في حياتنا مؤكدة في النص المستخرج.'
-            if scope_verified else
-            'يجب إثبات مؤشرات وحدات الفصل الأول داخل المصدر المستخرج.'
+            if scope_verified else 'يجب إثبات مؤشرات وحدات الفصل الأول داخل المصدر المستخرج والدائم.'
         ),
-        action=None if scope_verified else ('VERIFY_SEMESTER_SCOPE' if source_fetched else None),
+        action=None if scope_verified else ('VERIFY_SEMESTER_SCOPE' if source_ready else None),
     ))
 
     candidate_links = 0
@@ -161,7 +164,6 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
     latest_skill_job = None
     latest_generation_job = None
     readiness = None
-
     if lesson:
         candidate_links = db.query(LessonSourceLink).filter(
             LessonSourceLink.lesson_id == lesson.id,
@@ -183,23 +185,16 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
 
     link_done = candidate_links > 0 or verified_links > 0
     stages.append(_stage(
-        'LESSON_LINKING',
-        'ربط المصدر بالدرس',
+        'LESSON_LINKING', 'ربط المصدر بالدرس',
         'DONE' if link_done else ('READY' if scope_verified else 'BLOCKED'),
-        detail=(
-            f'{candidate_links} مرشح + {verified_links} موثّق للدرس الأول.'
-            if link_done else 'لم تُنشأ Lesson Source candidates بعد.'
-        ),
+        detail=(f'{candidate_links} مرشح + {verified_links} موثّق للدرس الأول.' if link_done else 'لم تُنشأ Lesson Source candidates بعد.'),
         action=None if link_done else ('AUTO_LINK_LESSONS' if scope_verified else None),
     ))
-
     stages.append(_stage(
-        'SOURCE_REVIEW',
-        'مراجعة Source Chunks',
+        'SOURCE_REVIEW', 'مراجعة Source Chunks',
         'DONE' if verified_links > 0 else ('READY' if candidate_links > 0 else 'BLOCKED'),
         detail=(
-            f'{verified_links} Teaching Source link موثّق إداريًا.'
-            if verified_links > 0 else
+            f'{verified_links} Teaching Source link موثّق إداريًا.' if verified_links > 0 else
             f'{candidate_links} رابط مرشح ينتظر Verify.' if candidate_links > 0 else
             'لا يوجد رابط مرشح يمكن مراجعته.'
         ),
@@ -208,8 +203,7 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
 
     skill_ready = linked_skills > 0
     stages.append(_stage(
-        'SKILL_MAPPING',
-        'استخراج واعتماد المهارات',
+        'SKILL_MAPPING', 'استخراج واعتماد المهارات',
         'DONE' if skill_ready else ('READY' if verified_links > 0 else 'BLOCKED'),
         detail=(
             f'{linked_skills} مهارة مرتبطة بالدرس.' if skill_ready else
@@ -224,8 +218,7 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
     generation_ready = bool(readiness and readiness['queue_ready'])
     generation_done = bool(latest_generation_job and latest_generation_job.status not in {'FAILED', 'OUTPUT_REJECTED'})
     stages.append(_stage(
-        'LESSON_GENERATION',
-        'توليد حزمة الدرس',
+        'LESSON_GENERATION', 'توليد حزمة الدرس',
         'DONE' if generation_done else ('READY' if generation_ready else 'BLOCKED'),
         detail=(
             f'آخر Generation Job #{latest_generation_job.id}: {latest_generation_job.status}'
@@ -240,17 +233,21 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
         'semester': 1,
         'package_id': package.id,
         'package_code': package.package_code,
-        'lesson': {
-            'id': lesson.id,
-            'lesson_code': lesson.lesson_code,
-            'title': lesson.title,
-        } if lesson else None,
+        'database': {'backend': database_backend, 'production': production_database},
+        'storage': {
+            'backend': storage.backend,
+            'durable': storage.durable,
+            'configured': storage.configured,
+            'bucket': storage.bucket,
+            'missing': list(storage.missing),
+            'required': production_database,
+            'ready': storage_ready,
+        },
+        'lesson': {'id': lesson.id, 'lesson_code': lesson.lesson_code, 'title': lesson.title} if lesson else None,
         'source': {
-            'id': source.id,
-            'source_type': source.source_type,
-            'status': source.status,
-            'page_count': source.page_count,
-            'edition_match_score': source.edition_match_score,
+            'id': source.id, 'source_type': source.source_type, 'status': source.status,
+            'page_count': source.page_count, 'edition_match_score': source.edition_match_score,
+            'durable': _source_is_durable(source),
         } if source else None,
         'counts': {
             'candidate_source_links': candidate_links,
@@ -260,12 +257,6 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
         'stages': stages,
         'next_stage': next_stage,
         'generation_readiness': readiness,
-        'latest_skill_mapping_job': {
-            'id': latest_skill_job.id,
-            'status': latest_skill_job.status,
-        } if latest_skill_job else None,
-        'latest_generation_job': {
-            'id': latest_generation_job.id,
-            'status': latest_generation_job.status,
-        } if latest_generation_job else None,
+        'latest_skill_mapping_job': {'id': latest_skill_job.id, 'status': latest_skill_job.status} if latest_skill_job else None,
+        'latest_generation_job': {'id': latest_generation_job.id, 'status': latest_generation_job.status} if latest_generation_job else None,
     }

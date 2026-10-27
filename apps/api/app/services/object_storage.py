@@ -42,8 +42,6 @@ def storage_configuration() -> StorageConfiguration:
     secret_key = os.getenv('R2_SECRET_ACCESS_KEY') if is_r2 else os.getenv('S3_SECRET_ACCESS_KEY')
     public_base = os.getenv('R2_PUBLIC_BASE_URL') if is_r2 else os.getenv('S3_PUBLIC_BASE_URL')
 
-    # Compatibility fallback lets an S3-compatible provider use the generic S3 names,
-    # while diagnostics still report the names that match the selected backend.
     if is_r2:
         bucket = bucket or os.getenv('S3_BUCKET')
         endpoint = endpoint or os.getenv('S3_ENDPOINT_URL')
@@ -79,6 +77,58 @@ def _safe_filename(filename: str) -> str:
     return name[:120] or 'source.bin'
 
 
+def _credentials(config: StorageConfiguration) -> tuple[str | None, str | None]:
+    if config.backend == 'R2':
+        return (
+            os.getenv('R2_ACCESS_KEY_ID') or os.getenv('S3_ACCESS_KEY_ID'),
+            os.getenv('R2_SECRET_ACCESS_KEY') or os.getenv('S3_SECRET_ACCESS_KEY'),
+        )
+    return os.getenv('S3_ACCESS_KEY_ID'), os.getenv('S3_SECRET_ACCESS_KEY')
+
+
+def _s3_client(config: StorageConfiguration):
+    if not config.durable or not config.configured:
+        raise RuntimeError(
+            'Durable source storage is not configured: '
+            + ','.join(config.missing or ('unsupported_backend',))
+        )
+    try:
+        import boto3
+    except ImportError as exc:  # pragma: no cover
+        raise RuntimeError('boto3 is required for S3-compatible storage') from exc
+    access_key, secret_key = _credentials(config)
+    return boto3.client(
+        's3',
+        endpoint_url=config.endpoint_url,
+        aws_access_key_id=access_key,
+        aws_secret_access_key=secret_key,
+        region_name=os.getenv('S3_REGION', 'auto'),
+    )
+
+
+def _parse_s3_key(file_key: str) -> tuple[str, str]:
+    if not file_key.startswith('s3://'):
+        raise ValueError('Not an s3:// storage key')
+    value = file_key[5:]
+    bucket, sep, key = value.partition('/')
+    if not sep or not bucket or not key:
+        raise ValueError('Invalid s3:// storage key')
+    return bucket, key
+
+
+def read_storage_bytes(file_key: str) -> bytes:
+    """Read an imported source from LOCAL or configured S3-compatible storage."""
+    if not file_key:
+        raise RuntimeError('Source file has no storage key')
+    if not file_key.startswith('s3://'):
+        return Path(file_key).read_bytes()
+
+    config = storage_configuration()
+    bucket, key = _parse_s3_key(file_key)
+    body = _s3_client(config).get_object(Bucket=bucket, Key=key)['Body']
+    return body.read()
+
+
 def persist_source_bytes(
     *,
     data: bytes,
@@ -87,48 +137,52 @@ def persist_source_bytes(
     content_type: str | None,
     local_path: Path,
 ) -> str:
-    """Persist an imported curriculum source and return the durable file key.
-
-    LOCAL intentionally returns the local path for development/demo. S3-compatible
-    backends upload the original bytes and return an s3:// key. Extraction may
-    still use the local working copy; factual provenance points at this returned key.
-    """
+    """Persist an imported curriculum source and return the durable file key."""
     config = storage_configuration()
     if config.backend == 'LOCAL':
         return str(local_path)
-    if not config.durable or not config.configured:
-        raise RuntimeError(
-            'Durable source storage is not configured: '
-            + ','.join(config.missing or ('unsupported_backend',))
-        )
-
-    try:
-        import boto3
-    except ImportError as exc:  # pragma: no cover - dependency is present in production requirements
-        raise RuntimeError('boto3 is required for S3-compatible source storage') from exc
-
-    if config.backend == 'R2':
-        access_key = os.getenv('R2_ACCESS_KEY_ID') or os.getenv('S3_ACCESS_KEY_ID')
-        secret_key = os.getenv('R2_SECRET_ACCESS_KEY') or os.getenv('S3_SECRET_ACCESS_KEY')
-    else:
-        access_key = os.getenv('S3_ACCESS_KEY_ID')
-        secret_key = os.getenv('S3_SECRET_ACCESS_KEY')
-    region = os.getenv('S3_REGION', 'auto')
+    client = _s3_client(config)
     key = f"curriculum/{checksum[:2]}/{checksum}-{_safe_filename(filename)}"
-
-    client = boto3.client(
-        's3',
-        endpoint_url=config.endpoint_url,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name=region,
-    )
-    put_args = {
-        'Bucket': config.bucket,
-        'Key': key,
-        'Body': data,
-    }
+    put_args = {'Bucket': config.bucket, 'Key': key, 'Body': data}
     if content_type:
         put_args['ContentType'] = content_type
     client.put_object(**put_args)
     return f"s3://{config.bucket}/{key}"
+
+
+def persist_visual_asset_bytes(
+    *,
+    data: bytes,
+    lesson_id: int,
+    source_file_id: int,
+    source_page: int,
+    checksum: str,
+    variant: str = 'main',
+    extension: str = 'png',
+    content_type: str = 'image/png',
+    local_dir: str | Path = 'data/visual-assets',
+) -> dict:
+    """Persist a derived page visual without granting learner-facing rights.
+
+    A public URL is returned only when storage has a configured public base URL.
+    Rights clearance remains a separate database/admin decision.
+    """
+    config = storage_configuration()
+    filename = f'l{lesson_id}-s{source_file_id}-p{source_page}-{variant}-{checksum[:16]}.{extension}'
+    key = f'visual-assets/lessons/{lesson_id}/source-{source_file_id}/page-{source_page}/{filename}'
+
+    if config.backend == 'LOCAL':
+        root = Path(local_dir)
+        target = root / str(lesson_id) / str(source_file_id) / filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+        return {'storage_key': str(target), 'public_url': None, 'durable': False}
+
+    client = _s3_client(config)
+    client.put_object(Bucket=config.bucket, Key=key, Body=data, ContentType=content_type)
+    base = (config.public_base_url or '').rstrip('/')
+    return {
+        'storage_key': f's3://{config.bucket}/{key}',
+        'public_url': f'{base}/{key}' if base else None,
+        'durable': True,
+    }

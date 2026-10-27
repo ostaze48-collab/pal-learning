@@ -133,7 +133,7 @@ def test_readiness_reports_missing_skills_and_factual_source(monkeypatch):
         db.close()
 
 
-def test_legacy_book_reports_current_plan_blocker(monkeypatch):
+def test_legacy_book_reports_current_plan_and_visual_blockers(monkeypatch):
     monkeypatch.setenv('AI_PROVIDER', 'LOCAL_MOCK')
     db, lesson, package = _db_with_lesson()
     try:
@@ -147,13 +147,19 @@ def test_legacy_book_reports_current_plan_blocker(monkeypatch):
         _add_cleared_visual(db, lesson, teaching_chunk)
         result = calculate_generation_readiness(db, lesson.id)
         assert result['queue_ready'] is False
-        assert result['blockers'] == ['LEGACY_TEACHING_SOURCE_REQUIRES_CURRENT_SCOPE_EVIDENCE']
+        assert result['blockers'] == [
+            'LEGACY_TEACHING_SOURCE_REQUIRES_CURRENT_SCOPE_EVIDENCE',
+            'NO_CLEARED_VISUAL_ASSET',
+        ]
         assert result['scope_gate']['current_scope_evidence_required'] is True
         assert result['scope_gate']['current_scope_evidence_present'] is False
+        assert result['visual_gate']['ready'] is False
+        assert result['visual_gate']['cleared_asset_count'] == 0
         assert result['next_actions'] == [
             'OBTAIN_CURRENT_CURRICULUM_PLAN',
             'UPLOAD_CURRICULUM_PLAN',
             'VERIFY_CURRENT_PLAN_SCOPE',
+            'EXTRACT_REVIEW_AND_CLEAR_VISUAL_ASSET',
         ]
     finally:
         db.close()
@@ -231,8 +237,9 @@ def test_generate_endpoint_queues_after_all_non_provider_gates_pass(monkeypatch)
         assert queued['skills'] == 1
         assert queued['source_chunks'] == 1
         assert queued['generation_readiness']['queue_ready'] is True
-        assert queued['generation_readiness']['visual_gate']['ready'] is True
         assert queued['generation_readiness']['execution_ready'] is False
+        job = db.query(AIJob).filter(AIJob.id == queued['job_id']).one()
+        assert len((job.input_json or {}).get('visual_assets') or []) == 1
         assert db.query(AIJob).count() == 1
     finally:
         db.close()

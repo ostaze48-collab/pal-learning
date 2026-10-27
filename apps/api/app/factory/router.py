@@ -127,11 +127,89 @@ def get_factory_job(job_id: int, db: Session = Depends(get_db)):
     }
 
 
+def _ids(items: list[dict], key: str) -> set:
+    return {item.get(key) for item in items if item.get(key) is not None}
+
+
+def _lesson_job_input_freshness(job: AIJob, db: Session) -> dict:
+    """Revalidate queued lesson inputs against current admin-approved state.
+
+    A queue snapshot must never outlive source-link or skill approval. New verified
+    sources/skills may be added without invalidating an older safe subset, but every
+    source chunk and skill captured by the job must still be currently approved.
+    """
+    if job.source_type != 'LESSON' or not job.source_id or job.job_type not in {'GENERATE_LESSON', 'EXTRACT_SKILLS'}:
+        return {'fresh': True, 'checked': False, 'reasons': []}
+
+    try:
+        current = build_lesson_generation_packet(db, job.source_id)
+    except ValueError:
+        return {'fresh': False, 'checked': True, 'reasons': ['LESSON_NOT_FOUND']}
+
+    queued = job.input_json or {}
+    queued_chunks = _ids(queued.get('source_context') or [], 'source_chunk_id')
+    current_chunks = _ids(current.get('source_context') or [], 'source_chunk_id')
+    removed_chunks = sorted(queued_chunks - current_chunks)
+
+    reasons: list[str] = []
+    if not queued_chunks:
+        reasons.append('QUEUED_JOB_HAS_NO_FACTUAL_SOURCE_CHUNKS')
+    if removed_chunks:
+        reasons.append('SOURCE_CHUNK_NO_LONGER_ADMIN_VERIFIED')
+
+    removed_skills: list[str] = []
+    readiness = None
+    if job.job_type == 'GENERATE_LESSON':
+        queued_skills = _ids(queued.get('skills') or [], 'skill_code')
+        current_skills = _ids(current.get('skills') or [], 'skill_code')
+        removed_skills = sorted(queued_skills - current_skills)
+        if not queued_skills:
+            reasons.append('QUEUED_JOB_HAS_NO_APPROVED_SKILLS')
+        if removed_skills:
+            reasons.append('SKILL_NO_LONGER_LINKED_TO_LESSON')
+        readiness = calculate_generation_readiness(db, job.source_id)
+        if not readiness['queue_ready']:
+            reasons.append('LESSON_NO_LONGER_GENERATION_READY')
+
+    return {
+        'fresh': not reasons,
+        'checked': True,
+        'reasons': reasons,
+        'removed_source_chunk_ids': removed_chunks,
+        'removed_skill_codes': removed_skills,
+        'current_source_chunk_ids': sorted(current_chunks),
+        'generation_readiness': readiness,
+    }
+
+
+def _require_fresh_job_input(job: AIJob, db: Session) -> dict:
+    freshness = _lesson_job_input_freshness(job, db)
+    if freshness['fresh']:
+        return freshness
+    job.status = 'STALE_INPUT'
+    job.progress = 0
+    job.error = 'Queued lesson inputs are no longer approved'
+    result = dict(job.result_json or {})
+    result['input_freshness'] = freshness
+    job.result_json = result
+    db.commit()
+    raise HTTPException(
+        409,
+        detail={
+            'message': 'Queued lesson inputs are stale and require a new job',
+            'job_id': job.id,
+            'input_freshness': freshness,
+        },
+    )
+
+
 @router.post('/jobs/{job_id}/execute')
 def execute_factory_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(AIJob).filter(AIJob.id == job_id).first()
     if not job:
         raise HTTPException(404, 'Job not found')
+    _require_fresh_job_input(job, db)
+
     provider = os.getenv('AI_PROVIDER', 'LOCAL_MOCK')
     gateway = AIGateway(provider=provider)
     job.status = 'RUNNING'; job.progress = 15; job.started_at = datetime.now(UTC).replace(tzinfo=None); db.commit()
@@ -141,6 +219,7 @@ def execute_factory_job(job_id: int, db: Session = Depends(get_db)):
             'provider': response.provider,
             'output': response.output,
             'usage': response.usage,
+            'input_freshness': {'fresh': True, 'checked_at_execution': True},
         }
         if response.output.get('requires_provider_for_generation'):
             job.status = 'WAITING_PROVIDER'
@@ -158,6 +237,7 @@ def execute_factory_job(job_id: int, db: Session = Depends(get_db)):
 def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -> dict:
     if job.job_type != 'GENERATE_LESSON' or job.source_type != 'LESSON' or not job.source_id:
         raise HTTPException(409, 'Job is not a lesson-generation job')
+    _require_fresh_job_input(job, db)
 
     packet = job.input_json or {}
     allowed_chunks = {x.get('source_chunk_id') for x in packet.get('source_context', []) if x.get('source_chunk_id')}
@@ -211,6 +291,7 @@ def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -
             'citable_items': total_citable,
             'cited_items': cited,
             'all_citable_items_have_refs': provenance_score == 100.0,
+            'input_revalidated_before_ingest': True,
         },
     )
     db.add(candidate)
@@ -235,18 +316,13 @@ def ingest_generated_output(job_id: int, payload: GeneratedLessonPayload, db: Se
 
 @router.post('/jobs/{job_id}/ingest-provider-output')
 def ingest_provider_output(job_id: int, db: Session = Depends(get_db)):
-    """Validate the provider output already stored on the job.
-
-    Execution and ingestion are deliberately separate. A provider can finish a job,
-    but its output cannot become a ContentCandidate until it passes the strict
-    GeneratedLessonPayload schema and the same provenance/skill allowlists used for
-    manually ingested output.
-    """
+    """Validate provider output and re-check the source/skill approvals before staging it."""
     job = db.query(AIJob).filter(AIJob.id == job_id).first()
     if not job:
         raise HTTPException(404, 'Job not found')
     if job.job_type != 'GENERATE_LESSON' or job.source_type != 'LESSON' or not job.source_id:
         raise HTTPException(409, 'Job is not a lesson-generation job')
+    _require_fresh_job_input(job, db)
 
     output = ((job.result_json or {}).get('output') or {})
     if not isinstance(output, dict) or not output:

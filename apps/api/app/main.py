@@ -29,7 +29,7 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.11.1'
+VERSION = '1.12.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -77,6 +77,7 @@ def health():
         'capabilities': [
             'curriculum', 'importer', 'source-chunks', 'lesson-source-provenance',
             'solution-alignment', 'reference-answer-validation-console',
+            'durable-curriculum-source-storage',
             'skills', 'mastery', 'diagnostic', 'recovery',
             'offline-sync', 'qa-gate', 'learning-health', 'content-factory-packets',
             'structured-ai-output', 'content-candidates', 'retention', 'daily-plan',

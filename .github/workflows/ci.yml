@@ -19,6 +19,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pytest httpx2
+      - name: Verify Alembic migration head
+        working-directory: apps/api
+        env:
+          DATABASE_URL: sqlite:///./migration-ci.db
+        run: |
+          rm -f migration-ci.db
+          alembic upgrade head
+          python - <<'PY'
+          from sqlalchemy import create_engine, text
+          engine = create_engine('sqlite:///./migration-ci.db')
+          with engine.connect() as connection:
+              revision = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
+          assert revision == '20261027_01', revision
+          print(f'Alembic head verified: {revision}')
+          PY
       - name: Run API tests
         env:
           DATABASE_URL: sqlite:///./ci.db

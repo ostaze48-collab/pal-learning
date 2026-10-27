@@ -29,3 +29,22 @@ class StagedLessonVersion(Base):
     __table_args__ = (
         UniqueConstraint('lesson_id', 'version_label', name='uq_staged_lesson_version_label'),
     )
+
+
+class ReleaseTransaction(Base):
+    __tablename__ = 'release_transactions'
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    staged_version_id: Mapped[int] = mapped_column(
+        ForeignKey('staged_lesson_versions.id'), unique=True, index=True
+    )
+    lesson_id: Mapped[int] = mapped_column(ForeignKey('lessons.id'), index=True)
+    content_version_id: Mapped[int | None] = mapped_column(
+        ForeignKey('content_versions.id'), nullable=True, index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), default='COMMITTED', index=True)
+    snapshot_sha256: Mapped[str] = mapped_column(String(64))
+    manifest_sha256: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    manifest_json: Mapped[dict] = mapped_column(JSON)
+    released_by_user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    released_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

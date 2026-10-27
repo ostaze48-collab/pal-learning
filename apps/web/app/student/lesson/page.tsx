@@ -9,19 +9,20 @@ type Section={id:number;section_number:number;title:string;blocks:Block[]};
 type LessonPayload={experimental:boolean;book:{title:string;book_code:string};unit:{title:string;unit_number:number};lesson:{id:number;title:string;lesson_code:string;estimated_minutes:number};sections:Section[]};
 type Question={id:number;question_code:string;question_type:string;prompt:string;options:string[];difficulty:number;purpose:string};
 type Progress={progress_percent:number;mastered_skills:number;skills:Array<{skill_id:number;name_ar:string;mastery_score:number;status:string}>};
-type Feedback={correct:boolean;message:string;attempt:number};
+type Feedback={correct:boolean;message:string;attempt:number;restored?:boolean};
+type SessionState={answered_questions:number;total_questions:number;remaining_questions:number;completed_questions:boolean;completion_percent:number;questions:Array<{question_id:number;answered:boolean;latest_attempt:null|{attempt_number:number;answer:number|string;correct:boolean}}>};
 
 const OPTION_LABELS=['أ','ب','ج','د','هـ','و'];
 
 function Timeline({items}:{items:Array<{year:string;name:string;text:string}>}){
-  return <div style={{display:'grid',gap:10}}>{items.map((item,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'62px 1fr',gap:10,alignItems:'stretch'}}><div style={{display:'grid',placeItems:'center',borderRadius:12,background:'#eef8f1',color:'#176b3a',fontWeight:900}}>{item.year}</div><div style={{padding:11,border:'1px solid #e7ebf1',borderRadius:12,background:'#fff'}}><strong>{item.name}</strong><div style={{marginTop:4,lineHeight:1.7,color:'#475467'}}>{item.text}</div></div></div>)}</div>;
+  return <div style={{display:'grid',gap:10}}>{items.map((item,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'62px 1fr',gap:10}}><div style={{display:'grid',placeItems:'center',borderRadius:12,background:'#eef8f1',color:'#176b3a',fontWeight:900}}>{item.year}</div><div style={{padding:11,border:'1px solid #e7ebf1',borderRadius:12}}><strong>{item.name}</strong><div style={{marginTop:4,lineHeight:1.7,color:'#475467'}}>{item.text}</div></div></div>)}</div>;
 }
 
 function LessonBlock({block}:{block:Block}){
   const c=block.content||{};
   if(block.block_type==='INFO_CARD') return <div style={{padding:14,borderRadius:14,background:'#f4f9ff',border:'1px solid #d8e8fb'}}><div style={{display:'flex',gap:9,alignItems:'center'}}><span style={{fontSize:25}}>{c.icon||'💡'}</span><div><div style={{fontSize:11,color:'#667085',fontWeight:900}}>{c.label||'معلومة'}</div><strong style={{fontSize:18}}>{c.title||''}</strong></div></div>{c.body&&<p style={{margin:'9px 0 0',lineHeight:1.85}}>{c.body}</p>}</div>;
   if(block.block_type==='TIMELINE') return <div><h3 style={{margin:'0 0 10px'}}>{c.title||'خط زمني'}</h3><Timeline items={c.items||[]}/></div>;
-  if(block.block_type==='MATCHING') return <div><h3 style={{margin:'0 0 6px'}}>{c.title||'مطابقة'}</h3><p style={{margin:'0 0 10px',color:'#667085'}}>{c.prompt}</p><div style={{display:'grid',gap:8}}>{(c.pairs||[]).map((p:string[],i:number)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,alignItems:'center',padding:10,borderRadius:11,background:'#fafbfc',border:'1px solid #edf0f5'}}><strong>{p[0]}</strong><span>←</span><span>{p[1]}</span></div>)}</div></div>;
+  if(block.block_type==='MATCHING') return <div><h3 style={{margin:'0 0 6px'}}>{c.title||'مطابقة'}</h3><p style={{margin:'0 0 10px',color:'#667085'}}>{c.prompt}</p><div style={{display:'grid',gap:8}}>{(c.pairs||[]).map((p:string[],i:number)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,padding:10,borderRadius:11,background:'#fafbfc',border:'1px solid #edf0f5'}}><strong>{p[0]}</strong><span>←</span><span>{p[1]}</span></div>)}</div></div>;
   if(block.block_type==='SUMMARY') return <div style={{padding:14,borderRadius:14,background:'#f7fcf9',border:'1px solid #cfe7d7'}}><h3 style={{margin:'0 0 8px'}}>{c.title||'الخلاصة'}</h3><ul style={{margin:0,paddingInlineStart:20,lineHeight:1.9}}>{(c.items||[]).map((x:string,i:number)=><li key={i}>{x}</li>)}</ul></div>;
   return <div><h3 style={{margin:'0 0 7px'}}>{c.title||c.label||''}</h3>{c.body&&<p style={{margin:0,lineHeight:1.9,color:'#344054'}}>{c.body}</p>}</div>;
 }
@@ -30,6 +31,7 @@ export default function LessonPage(){
   const [lesson,setLesson]=useState<LessonPayload|null>(null);
   const [questions,setQuestions]=useState<Question[]>([]);
   const [progress,setProgress]=useState<Progress|null>(null);
+  const [session,setSession]=useState<SessionState|null>(null);
   const [selected,setSelected]=useState<Record<number,number>>({});
   const [feedback,setFeedback]=useState<Record<number,Feedback>>({});
   const [busyQuestion,setBusyQuestion]=useState<number|null>(null);
@@ -41,18 +43,27 @@ export default function LessonPage(){
 
   async function load(){
     try{
-      const [l,q,p]=await Promise.all([
+      const [l,q,p,s]=await Promise.all([
         apiJson<LessonPayload>('/demo/lesson',{},true),
         apiJson<Question[]>('/demo/questions',{},true),
         apiJson<Progress>('/demo/progress',{},true),
+        apiJson<SessionState>('/demo/session-state',{},true),
       ]);
-      setLesson(l);setQuestions(q);setProgress(p);
+      const restoredFeedback:Record<number,Feedback>={};
+      const restoredSelected:Record<number,number>={};
+      for(const row of s.questions){
+        const a=row.latest_attempt;
+        if(!a)continue;
+        if(typeof a.answer==='number')restoredSelected[row.question_id]=a.answer;
+        restoredFeedback[row.question_id]={correct:a.correct,attempt:a.attempt_number,restored:true,message:'تم استعادة محاولتك السابقة من سجل التعلم.'};
+      }
+      setLesson(l);setQuestions(q);setProgress(p);setSession(s);setSelected(restoredSelected);setFeedback(restoredFeedback);
     }catch(e:any){setError(e.message==='Authentication required'?'يجب تسجيل الدخول كطالب قبل فتح النسخة التجريبية':e.message||'تعذر تحميل الدرس');}
   }
   useEffect(()=>{void load();},[]);
 
   const answered=Object.keys(feedback).length;
-  const completedQuestions=questions.length>0&&answered===questions.length;
+  const completedQuestions=questions.length>0&&answered>=questions.length;
   const lessonUiProgress=lesson?.sections.length?Math.round(((lesson.sections.length+(questions.length?answered/questions.length:0))/(lesson.sections.length+1))*100):0;
 
   async function submit(q:Question){
@@ -62,7 +73,7 @@ export default function LessonPage(){
       const response=await fetch(`${process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000'}/demo/questions/${q.id}/attempt`,{method:'POST',headers:studentHeaders(true),body:JSON.stringify({answer,response_time_ms:9000,used_hint:false,used_ai_help:false})});
       const body=await response.json();if(!response.ok)throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message||'تعذر حفظ المحاولة');
       setFeedback(x=>({...x,[q.id]:{correct:body.correct,message:body.explanation||'',attempt:body.attempt_number}}));
-      const p=await apiJson<Progress>('/demo/progress',{},true);setProgress(p);
+      const [p,s]=await Promise.all([apiJson<Progress>('/demo/progress',{},true),apiJson<SessionState>('/demo/session-state',{},true)]);setProgress(p);setSession(s);
     }catch(e:any){setError(e.message||'تعذر حفظ المحاولة');}
     finally{setBusyQuestion(null);}
   }
@@ -70,7 +81,7 @@ export default function LessonPage(){
   async function tutor(action:string,freeQuestion?:string){
     setTutorOpen(true);setTutorBusy(true);setTutorAnswer('');
     try{
-      const body=await apiJson<{answer:string;notice:string}>('/demo/tutor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,question:freeQuestion||null})},true);
+      const body=await apiJson<{answer:string}>('/demo/tutor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,question:freeQuestion||null})},true);
       setTutorAnswer(body.answer);
     }catch(e:any){setTutorAnswer(e.message||'تعذر تشغيل مساعد الدرس');}
     finally{setTutorBusy(false);}
@@ -81,6 +92,7 @@ export default function LessonPage(){
     {!lesson&&!error&&<Notice>جارٍ تحميل الدرس التفاعلي…</Notice>}
 
     {lesson&&<>
+      {session&&session.answered_questions>0&&!session.completed_questions&&<div style={{marginBottom:14}}><Notice tone="info">استأنف من حيث توقفت: لديك <strong>{session.answered_questions}/{session.total_questions}</strong> أسئلة محفوظة، وبقي {session.remaining_questions}.</Notice></div>}
       <StudentCard style={{marginBottom:14,background:'linear-gradient(135deg,#f1fbf4,#f4f8ff)'}}>
         <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'flex-start',flexWrap:'wrap'}}><div><Pill tone="good">علوم · صف خامس</Pill><div style={{fontSize:13,color:'#667085',marginTop:8}}>{lesson.lesson.estimated_minutes} دقيقة · {lesson.sections.length} محطات تعلم · {questions.length} أسئلة</div></div><div style={{fontSize:42}}>🔬</div></div>
         <div style={{marginTop:14}}><div style={{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:5}}><strong>تقدم الجلسة</strong><span>{Math.min(100,lessonUiProgress)}%</span></div><ProgressBar value={lessonUiProgress}/></div>
@@ -94,9 +106,7 @@ export default function LessonPage(){
       </StudentCard>)}</div>
 
       <div id="questions" style={{scrollMarginTop:12}}/>
-      <StudentCard style={{marginTop:14,background:'#fffdf7',borderColor:'#eadca8'}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',alignItems:'center'}}><div><div style={{fontSize:12,color:'#667085',fontWeight:900}}>تحقق من فهمك</div><h2 style={{margin:'3px 0 0'}}>أسئلة الدرس</h2></div><Pill tone={completedQuestions?'good':'warn'}>{answered}/{questions.length} مجاب</Pill></div>
-      </StudentCard>
+      <StudentCard style={{marginTop:14,background:'#fffdf7',borderColor:'#eadca8'}}><div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',alignItems:'center'}}><div><div style={{fontSize:12,color:'#667085',fontWeight:900}}>تحقق من فهمك</div><h2 style={{margin:'3px 0 0'}}>أسئلة الدرس</h2></div><Pill tone={completedQuestions?'good':'warn'}>{answered}/{questions.length} مجاب</Pill></div></StudentCard>
 
       <div style={{display:'grid',gap:12,marginTop:12}}>{questions.map((q,index)=>{
         const f=feedback[q.id];
@@ -105,18 +115,12 @@ export default function LessonPage(){
           <h3 style={{fontSize:18,lineHeight:1.6,margin:'12px 0'}}>{q.prompt}</h3>
           <div style={{display:'grid',gap:8}}>{q.options.map((option,i)=><button key={i} onClick={()=>!f&&setSelected(s=>({...s,[q.id]:i}))} disabled={!!f} style={{textAlign:'right',padding:'12px 13px',borderRadius:12,border:selected[q.id]===i?'2px solid #176b3a':'1px solid #d7dde6',background:selected[q.id]===i?'#f1faf4':'#fff',fontSize:15,cursor:f?'default':'pointer'}}><span style={{display:'inline-grid',placeItems:'center',width:24,height:24,borderRadius:99,background:selected[q.id]===i?'#176b3a':'#f2f4f7',color:selected[q.id]===i?'#fff':'#344054',fontWeight:900,marginInlineEnd:8}}>{OPTION_LABELS[i]||String(i+1)}</span>{option}</button>)}</div>
           {!f&&<div style={{marginTop:11}}><PrimaryButton disabled={selected[q.id]===undefined||busyQuestion===q.id} onClick={()=>void submit(q)}>{busyQuestion===q.id?'جارٍ الحفظ…':'تحقق واحفظ التقدم'}</PrimaryButton></div>}
-          {f&&<div style={{marginTop:12}}><Notice tone={f.correct?'good':'warn'}><strong>{f.correct?'إجابة صحيحة ✓':'تحتاج مراجعة'}</strong><div style={{marginTop:4}}>{f.message}</div><div style={{fontSize:11,marginTop:5}}>المحاولة رقم {f.attempt}</div></Notice></div>}
+          {f&&<div style={{marginTop:12}}><Notice tone={f.correct?'good':'warn'}><strong>{f.correct?'إجابة صحيحة ✓':'تحتاج مراجعة'}</strong><div style={{marginTop:4}}>{f.message}</div><div style={{fontSize:11,marginTop:5}}>{f.restored?'محاولة محفوظة · ':''}المحاولة رقم {f.attempt}</div></Notice></div>}
         </StudentCard>})}</div>
 
-      {completedQuestions&&<StudentCard style={{marginTop:14,background:'linear-gradient(135deg,#effaf2,#eef5ff)',borderColor:'#bfe0ca'}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap'}}><div><Pill tone="good">أكملت الأسئلة ✓</Pill><h2 style={{margin:'8px 0 5px',fontSize:22}}>شاهد نتيجة الدرس</h2><p style={{margin:0,color:'#526071',lineHeight:1.7}}>سنجمّع آخر إجابة لكل سؤال مع Mastery حسب المهارة ونقترح الخطوة التالية.</p></div><PrimaryLink href="/student/result">عرض النتيجة</PrimaryLink></div>
-      </StudentCard>}
+      {completedQuestions&&<StudentCard style={{marginTop:14,background:'linear-gradient(135deg,#effaf2,#eef5ff)',borderColor:'#bfe0ca'}}><div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap'}}><div><Pill tone="good">أكملت الأسئلة ✓</Pill><h2 style={{margin:'8px 0 5px',fontSize:22}}>شاهد نتيجة الدرس</h2><p style={{margin:0,color:'#526071',lineHeight:1.7}}>سنجمّع آخر إجابة لكل سؤال مع Mastery حسب المهارة ونقترح الخطوة التالية.</p></div><PrimaryLink href="/student/result">عرض النتيجة</PrimaryLink></div></StudentCard>}
 
-      <StudentCard style={{marginTop:14}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap'}}><div><div style={{fontSize:12,color:'#667085',fontWeight:900}}>Mastery</div><h2 style={{margin:'3px 0 0'}}>تقدمك حسب المهارة</h2></div><strong style={{fontSize:26}}>{progress?.progress_percent||0}%</strong></div>
-        <div style={{marginTop:9}}><ProgressBar value={progress?.progress_percent||0}/></div>
-        <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/progress">تفاصيل المهارات</PrimaryLink><PrimaryLink href="/student/recovery" secondary>مراجعة ذكية</PrimaryLink></div>
-      </StudentCard>
+      <StudentCard style={{marginTop:14}}><div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap'}}><div><div style={{fontSize:12,color:'#667085',fontWeight:900}}>Mastery</div><h2 style={{margin:'3px 0 0'}}>تقدمك حسب المهارة</h2></div><strong style={{fontSize:26}}>{progress?.progress_percent||0}%</strong></div><div style={{marginTop:9}}><ProgressBar value={progress?.progress_percent||0}/></div><div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/progress">تفاصيل المهارات</PrimaryLink><PrimaryLink href="/student/recovery" secondary>مراجعة ذكية</PrimaryLink></div></StudentCard>
 
       <button onClick={()=>setTutorOpen(x=>!x)} aria-label="مساعد الدرس" style={{position:'fixed',left:16,bottom:84,zIndex:30,width:58,height:58,borderRadius:99,border:0,background:'#14213d',color:'#fff',fontSize:24,boxShadow:'0 10px 30px rgba(20,33,61,.25)',cursor:'pointer'}}>✦</button>
       {tutorOpen&&<div style={{position:'fixed',left:12,right:12,bottom:150,zIndex:29,maxWidth:540,margin:'0 auto',background:'#fff',border:'1px solid #dce2ea',borderRadius:18,padding:14,boxShadow:'0 18px 60px rgba(20,33,61,.22)'}}>

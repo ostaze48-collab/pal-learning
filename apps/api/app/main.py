@@ -20,6 +20,7 @@ from .importer.discovery_catalog import router as discovery_catalog_router
 from .importer.scope_evidence import router as scope_evidence_router
 from .importer.source_policy_router import router as source_policy_router
 from .importer.source_link_review import router as source_link_review_router
+from .importer.visual_assets import router as visual_assets_router
 from .learning.router import router as learning_router
 from .learning.runtime import router as lesson_runtime_router
 from .demo.router import router as demo_router
@@ -45,7 +46,7 @@ from .factory.release_transaction import router as release_transaction_router
 from .factory.staging_preview import router as staging_preview_router
 from .auth.router import router as auth_router
 
-VERSION = '1.22.0'
+VERSION = '1.23.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -104,7 +105,8 @@ def health():
             'curriculum', 'importer', 'source-chunks', 'lesson-source-provenance',
             'admin-verified-lesson-source-links',
             'solution-alignment', 'reference-answer-validation-console',
-            'durable-curriculum-source-storage',
+            'durable-curriculum-source-storage', 'textbook-visual-asset-extraction',
+            'admin-visual-rights-review', 'visual-first-generation-packet',
             'skills', 'mastery', 'diagnostic', 'recovery',
             'offline-sync', 'qa-gate', 'learning-health', 'content-factory-packets',
             'structured-ai-output', 'content-candidates', 'retention', 'daily-plan',
@@ -168,6 +170,7 @@ app.include_router(discovery_catalog_router)
 app.include_router(scope_evidence_router)
 app.include_router(source_policy_router)
 app.include_router(source_link_review_router)
+app.include_router(visual_assets_router)
 app.include_router(learning_router)
 app.include_router(lesson_runtime_router)
 app.include_router(demo_router)

@@ -35,8 +35,10 @@ jobs:
           engine = create_engine('sqlite:///./migration-ci.db')
           with engine.connect() as connection:
               revision = connection.execute(text('SELECT version_num FROM alembic_version')).scalar_one()
-          assert revision == '20261027_02', revision
-          assert 'release_transactions' in inspect(engine).get_table_names()
+          tables = inspect(engine).get_table_names()
+          assert revision == '20261027_03', revision
+          assert 'release_transactions' in tables
+          assert 'visual_assets' in tables
           print(f'Alembic head verified: {revision}')
           PY
       - name: Run API tests

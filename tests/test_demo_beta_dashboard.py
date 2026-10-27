@@ -56,6 +56,7 @@ def test_demo_health_and_scope_are_single_lesson():
     assert data['counts']['sections'] == 7
     assert data['counts']['questions'] == 5
     assert data['counts']['skills'] >= 4
+    assert data['checks']['microscope_zoom_activity_present'] is True
 
     info = client.get('/demo/info')
     assert info.status_code == 200
@@ -168,3 +169,29 @@ def test_completed_demo_has_result_summary_and_next_action():
     assert data['mastery']['weakest'] is not None
     assert data['next_action']['type'] in {'REVIEW', 'DONE'}
     assert 'ليست شهادة' in data['notice'] or 'ليست' in data['notice']
+
+
+def test_student_can_reset_beta_without_losing_feedback():
+    before = client.get('/demo/admin/dashboard', headers=ADMIN).json()
+    feedback_before = before['feedback']['total']
+    assert feedback_before >= 1
+
+    reset = client.post('/demo/reset-progress', headers=STUDENT)
+    assert reset.status_code == 200, reset.text
+    payload = reset.json()
+    assert payload['reset'] is True
+    assert payload['feedback_preserved'] is True
+    assert payload['deleted']['question_attempts'] >= 5
+    assert payload['deleted']['mastery_rows'] >= 1
+
+    state = client.get('/demo/session-state', headers=STUDENT)
+    assert state.status_code == 200
+    assert state.json()['answered_questions'] == 0
+    assert state.json()['completion_percent'] == 0
+
+    progress = client.get('/demo/progress', headers=STUDENT)
+    assert progress.status_code == 200
+    assert all(row['evidence_count'] == 0 for row in progress.json()['skills'])
+
+    after = client.get('/demo/admin/dashboard', headers=ADMIN).json()
+    assert after['feedback']['total'] == feedback_before

@@ -25,6 +25,23 @@ assert login.status_code == 200, login.text
 HEADERS = {'Authorization': f"Bearer {login.json()['access_token']}"}
 
 
+def _verify_teaching_links(lesson_id: int = 1):
+    response = client.get(f'/importer/lessons/{lesson_id}/source-links', headers=HEADERS)
+    assert response.status_code == 200, response.text
+    verified = 0
+    for link in response.json()['links']:
+        if not link['factual_grounding_authorized']:
+            continue
+        if link['status'] == 'VERIFIED':
+            verified += 1
+            continue
+        result = client.post(f"/importer/lesson-source-links/{link['id']}/verify", headers=HEADERS)
+        assert result.status_code == 200, result.text
+        assert result.json()['status'] == 'VERIFIED'
+        verified += 1
+    assert verified >= 1
+
+
 def _prepare_valid_candidate():
     source_text = '''
 العلوم والحياة — الصف الخامس — الفصل الثاني 2026
@@ -43,6 +60,7 @@ def _prepare_valid_candidate():
 
     linked = client.post('/importer/source-packages/1/link-lessons', headers=HEADERS)
     assert linked.status_code == 200, linked.text
+    _verify_teaching_links(1)
 
     queued = client.post('/factory/lessons/1/generate', headers=HEADERS)
     assert queued.status_code == 200, queued.text
@@ -127,5 +145,4 @@ def test_candidate_preflight_and_staging_do_not_publish():
     lesson_response = client.get('/curriculum/lessons/1', headers=HEADERS)
     assert lesson_response.status_code == 200, lesson_response.text
     lesson = lesson_response.json()
-    # Staging approval is intentionally separate from the live lesson state.
     assert lesson['status'] == 'DRAFT'

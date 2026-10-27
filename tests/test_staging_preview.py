@@ -1,3 +1,5 @@
+import base64
+
 import pytest
 from fastapi import HTTPException
 
@@ -31,6 +33,35 @@ def test_staging_preview_rejects_tampered_token(monkeypatch):
 
     with pytest.raises(HTTPException) as exc:
         decode_preview_token(tampered)
+    assert exc.value.status_code == 401
+
+
+def test_staging_preview_rejects_equivalent_noncanonical_signature(monkeypatch):
+    monkeypatch.setenv('JWT_SECRET', 'preview-secret-' + ('x' * 48))
+    token, _ = create_preview_token(11, 3)
+    header, payload, signature = token.split('.')
+    padding = '=' * ((4 - len(signature) % 4) % 4)
+    expected_bytes = base64.urlsafe_b64decode((signature + padding).encode('ascii'))
+    alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+
+    equivalent = None
+    for candidate in alphabet:
+        if candidate == signature[-1]:
+            continue
+        candidate_signature = signature[:-1] + candidate
+        try:
+            decoded = base64.urlsafe_b64decode((candidate_signature + padding).encode('ascii'))
+        except ValueError:
+            continue
+        if decoded == expected_bytes:
+            equivalent = candidate_signature
+            break
+
+    assert equivalent is not None
+    noncanonical = f'{header}.{payload}.{equivalent}'
+
+    with pytest.raises(HTTPException) as exc:
+        decode_preview_token(noncanonical)
     assert exc.value.status_code == 401
 
 

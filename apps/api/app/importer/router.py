@@ -86,6 +86,15 @@ class _SafeRedirectHandler(HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
+def _normalize_remote_content_type(reported_content_type: str | None, data: bytes) -> str:
+    # File signatures are stronger evidence than a generic HTTP MIME header.
+    if data.startswith(b'%PDF-'):
+        return 'application/pdf'
+    reported = (reported_content_type or '').lower()
+    if reported in {'text/plain', 'text/markdown'}:
+        return reported
+    raise ValueError(f'Unsupported remote curriculum content type: {reported or "unknown"}')
+
 def _download_registered_source(url: str) -> tuple[bytes, str | None, str]:
     _validate_source_url(url)
     opener = build_opener(_SafeRedirectHandler())
@@ -94,9 +103,7 @@ def _download_registered_source(url: str) -> tuple[bytes, str | None, str]:
         with opener.open(request, timeout=SOURCE_FETCH_TIMEOUT_SECONDS) as response:
             final_url = response.geturl()
             _validate_source_url(final_url)
-            content_type = (response.headers.get_content_type() or '').lower() or None
-            if content_type not in {'application/pdf', 'text/plain', 'text/markdown'}:
-                raise ValueError(f'Unsupported remote curriculum content type: {content_type or "unknown"}')
+            reported_content_type = (response.headers.get_content_type() or '').lower() or None
             length_header = response.headers.get('Content-Length')
             if length_header:
                 try:
@@ -108,6 +115,7 @@ def _download_registered_source(url: str) -> tuple[bytes, str | None, str]:
                     if 'exceeds' in str(exc):
                         raise
             data = response.read(MAX_SOURCE_BYTES + 1)
+            content_type = _normalize_remote_content_type(reported_content_type, data)
     except (HTTPError, URLError, TimeoutError) as exc:
         raise ValueError(f'Could not download registered curriculum source: {exc}') from exc
 

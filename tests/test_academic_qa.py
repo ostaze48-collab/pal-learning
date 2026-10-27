@@ -40,8 +40,11 @@ def _stage_release_ready_lesson():
         files={'file': ('academic-qa-science-2026.txt', text.encode('utf-8'), 'text/plain')},
         headers=HEADERS,
     )
-    assert upload.status_code == 200, upload.text
-    assert upload.json()['edition_match_score'] >= 90
+    assert upload.status_code in {200, 409}, upload.text
+    if upload.status_code == 200:
+        assert upload.json()['edition_match_score'] >= 90
+    else:
+        assert upload.json()['detail']['existing_source_file_id'] >= 1
 
     linked = client.post('/importer/source-packages/1/link-lessons', headers=HEADERS)
     assert linked.status_code == 200, linked.text

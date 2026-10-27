@@ -55,7 +55,7 @@ def queue_lesson_generation(lesson_id: int, db: Session = Depends(get_db)):
         status='QUEUED',
         priority=80,
         model_route='BALANCED',
-        prompt_version='lesson_generator/v1',
+        prompt_version='lesson_generator/v2',
         progress=0,
         input_json=packet,
     )

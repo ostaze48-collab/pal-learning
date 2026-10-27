@@ -26,6 +26,7 @@ from ..services.document_importer import (
     sha256_bytes,
     title_match_score,
 )
+from ..services.object_storage import persist_source_bytes, storage_configuration
 
 router = APIRouter(prefix='/importer', tags=['curriculum-importer'], dependencies=[Depends(require_admin)])
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', Path(__file__).resolve().parents[2] / 'data' / 'uploads'))
@@ -230,7 +231,15 @@ def _apply_extracted_source(
     path = save_upload(data, filename, UPLOAD_DIR)
     extracted = extract_document(path, content_type)
     extraction_quality = assess_extraction_quality(extracted)
-    row.file_key = str(path)
+    storage_config = storage_configuration()
+    storage_key = persist_source_bytes(
+        data=data,
+        filename=filename,
+        checksum=checksum,
+        content_type=content_type,
+        local_path=path,
+    )
+    row.file_key = storage_key
     row.original_filename = row.original_filename or filename
     row.mime_type = content_type
     row.page_count = extracted.page_count
@@ -255,6 +264,9 @@ def _apply_extracted_source(
         'text_coverage_percent': extraction_quality.text_coverage_percent,
         'average_characters_per_page': extraction_quality.average_characters_per_page,
         'needs_vision': extraction_quality.needs_vision,
+        'storage_backend': storage_config.backend,
+        'durable_storage': storage_config.durable and storage_config.configured,
+        'storage_key': storage_key,
     }
     db.query(SourceChunk).filter(SourceChunk.source_file_id == row.id).delete(synchronize_session=False)
     if not extraction_quality.needs_vision:
@@ -324,6 +336,9 @@ async def upload_source(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(415, str(exc)) from exc
+    except RuntimeError as exc:
+        db.rollback()
+        raise HTTPException(503, str(exc)) from exc
     db.commit()
     db.refresh(row)
     return {
@@ -331,6 +346,9 @@ async def upload_source(
         'status': row.status,
         'page_count': row.page_count,
         'checksum': row.checksum,
+        'file_key': row.file_key,
+        'storage_backend': (row.extraction_meta or {}).get('storage_backend'),
+        'durable_storage': (row.extraction_meta or {}).get('durable_storage', False),
         'edition_match_score': row.edition_match_score,
         'warnings': (row.extraction_meta or {}).get('warnings', []),
         'extraction_quality': {
@@ -376,6 +394,9 @@ def fetch_registered_source(source_file_id: int, db: Session = Depends(get_db)):
     except ValueError as exc:
         db.rollback()
         raise HTTPException(422, str(exc)) from exc
+    except RuntimeError as exc:
+        db.rollback()
+        raise HTTPException(503, str(exc)) from exc
 
     db.commit()
     db.refresh(row)
@@ -384,6 +405,9 @@ def fetch_registered_source(source_file_id: int, db: Session = Depends(get_db)):
         'status': row.status,
         'page_count': row.page_count,
         'checksum': row.checksum,
+        'file_key': row.file_key,
+        'storage_backend': (row.extraction_meta or {}).get('storage_backend'),
+        'durable_storage': (row.extraction_meta or {}).get('durable_storage', False),
         'edition_match_score': row.edition_match_score,
         'warnings': (row.extraction_meta or {}).get('warnings', []),
         'extraction_quality': {

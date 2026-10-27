@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.engine import Engine
 
-from .base import engine
+from .base import SessionLocal, engine
 from .migration_status import get_migration_status
 from .seed import run as seed_run
 
@@ -52,6 +52,14 @@ def ensure_schema_ready(db_engine: Engine = engine) -> dict:
     return validate_bootstrap_state(backend, migration)
 
 
+def normalize_seeded_source_catalog() -> dict:
+    # Imported lazily to keep bootstrap's migration guard independent from FastAPI routing.
+    from ..importer.official_catalog import quarantine_unverified_catalog_sources
+
+    with SessionLocal() as db:
+        return quarantine_unverified_catalog_sources(db)
+
+
 def run() -> None:
     state = ensure_schema_ready(engine)
     print(
@@ -60,6 +68,13 @@ def run() -> None:
         f"revision={state.get('migration_revision', 'n/a')}"
     )
     seed_run()
+    normalized = normalize_seeded_source_catalog()
+    print(
+        'Source catalog integrity: '
+        f"checked={normalized['checked']} "
+        f"quarantined={normalized['quarantined']} "
+        f"scope_verified={normalized['already_scope_verified']}"
+    )
 
 
 if __name__ == '__main__':

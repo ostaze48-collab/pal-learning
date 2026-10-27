@@ -18,14 +18,17 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.6.0'
+VERSION = '1.7.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    # Local/demo SQLite remains self-bootstrapping. Persistent databases are
+    # migration-managed and must be prepared with `alembic upgrade head` first.
+    if engine.url.get_backend_name() == 'sqlite':
+        Base.metadata.create_all(bind=engine)
     yield
 
 
@@ -64,7 +67,7 @@ def health():
             'safe-registered-source-fetch', 'provider-backed-content-factory',
             'candidate-preflight-qa', 'admin-staging-approval', 'immutable-staged-versions',
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
-            'production-readiness-diagnostics',
+            'production-readiness-diagnostics', 'alembic-migration-gate',
         ],
     }
 

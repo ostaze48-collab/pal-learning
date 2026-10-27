@@ -39,6 +39,44 @@ SOURCE_WEIGHTS = {
 PRIMARY_TEACHING_SOURCE_ORDER = ('OFFICIAL_PACKAGE', 'STUDENT_BOOK')
 
 
+def _bounded_score(value) -> float:
+    try:
+        return max(0.0, min(100.0, float(value or 0)))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def calculate_package_scores(files: list[SourceFile]) -> tuple[float, float]:
+    """Return (coverage, verified_quality) on a 0–100 scale.
+
+    Coverage only answers whether a useful source type is present. Verified quality
+    additionally requires reliability *and* evidence that the source matches the
+    target edition. For duplicate source types, only the best verified candidate
+    contributes, preventing repeated uploads from inflating the score.
+    """
+    by_type: dict[str, list[SourceFile]] = {}
+    for item in files:
+        by_type.setdefault(item.source_type, []).append(item)
+
+    coverage = 0.0
+    verified_quality = 0.0
+    for source_type, weight in SOURCE_WEIGHTS.items():
+        candidates = by_type.get(source_type, [])
+        if not candidates:
+            continue
+        coverage += weight
+        best_factor = max(
+            (
+                (_bounded_score(item.reliability_score) / 100.0)
+                * (_bounded_score(item.edition_match_score) / 100.0)
+            )
+            for item in candidates
+        )
+        verified_quality += weight * best_factor
+
+    return round(min(100.0, coverage), 1), round(min(100.0, verified_quality), 1)
+
+
 def select_primary_teaching_source(files: list[SourceFile]) -> SourceFile | None:
     """Prefer current official material and never silently mix editions.
 
@@ -61,10 +99,13 @@ def select_primary_teaching_source(files: list[SourceFile]) -> SourceFile | None
 
 
 def update_package_completeness(db: Session, package: SourcePackage) -> None:
-    types = {x.source_type for x in db.query(SourceFile).filter(SourceFile.package_id == package.id).all()}
-    package.completeness_score = float(sum(weight for key, weight in SOURCE_WEIGHTS.items() if key in types))
+    files = db.query(SourceFile).filter(SourceFile.package_id == package.id).all()
+    coverage, verified_quality = calculate_package_scores(files)
+    package.completeness_score = coverage
+    package.quality_score = verified_quality
+    types = {x.source_type for x in files}
     if 'STUDENT_BOOK' in types or 'OFFICIAL_PACKAGE' in types:
-        package.status = 'INGESTING' if package.completeness_score < 100 else 'READY_FOR_PROCESSING'
+        package.status = 'INGESTING' if coverage < 100 else 'READY_FOR_PROCESSING'
 
 
 @router.post('/source-packages/{package_id}/upload')
@@ -124,6 +165,7 @@ async def upload_source(
         'edition_match_score': row.edition_match_score,
         'warnings': row.extraction_meta.get('warnings', []),
         'package_completeness': package.completeness_score,
+        'package_quality': package.quality_score,
     }
 
 
@@ -170,6 +212,8 @@ def process_package(package_id: int, db: Session = Depends(get_db)):
             'primary_source_file_id': primary_source.id,
             'primary_source_type': primary_source.source_type,
             'primary_source_edition': primary_source.edition,
+            'package_completeness': package.completeness_score,
+            'package_quality': package.quality_score,
         },
         started_at=datetime.utcnow(),
         completed_at=datetime.utcnow(),

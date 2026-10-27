@@ -19,6 +19,10 @@ export default function ImporterPage(){
   const [busy,setBusy]=useState(false);
   const [pkg,setPkg]=useState<PackageInfo|null>(null);
 
+  function currentPackageId(){
+    return (document.querySelector('[name=package_id]') as HTMLInputElement)?.value || '1';
+  }
+
   async function loadPackage(packageId:string|number='1'){
     setBusy(true); setMessage('');
     try{
@@ -28,6 +32,19 @@ export default function ImporterPage(){
       setPkg(body);
     }catch(err){setMessage(err instanceof Error?err.message:'حدث خطأ');}
     finally{setBusy(false);}
+  }
+
+  async function syncOfficialCatalog(){
+    const packageId=currentPackageId();
+    setBusy(true); setMessage('');
+    try{
+      const res=await fetch(`${API}/importer/catalog/source-packages/${packageId}/sync`,{method:'POST',headers:adminHeaders()});
+      const body=await res.json();
+      if(!res.ok) throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message||'فشلت مزامنة الكتالوج الرسمي');
+      const first=body.sources?.[0];
+      setMessage(`مزامنة الكتالوج الرسمي ✓ · جديد ${body.created} · موجود مسبقًا ${body.existing}${first?` · ${first.authority}`:''}. هذا يثبت اكتشاف المصدر فقط ولا يثبت الطبعة.`);
+      await loadPackage(packageId);
+    }catch(err){setMessage(err instanceof Error?err.message:'حدث خطأ أثناء مزامنة المصدر الرسمي');setBusy(false);}
   }
 
   async function upload(e:FormEvent<HTMLFormElement>){
@@ -57,7 +74,7 @@ export default function ImporterPage(){
   }
 
   async function processPackage(){
-    const packageId=(document.querySelector('[name=package_id]') as HTMLInputElement)?.value || '1';
+    const packageId=currentPackageId();
     setBusy(true); setMessage('');
     try{
       const res=await fetch(`${API}/importer/source-packages/${packageId}/process`,{method:'POST',headers:adminHeaders()});
@@ -74,7 +91,11 @@ export default function ImporterPage(){
     <p>الرزمة الرسمية الحالية تُسجّل كمصدر مستقل، والكتاب الكامل والحلول ودليل المعلم تبقى مصادر منفصلة. <strong>Coverage</strong> يقيس توفر الأنواع، و<strong>Verified Quality</strong> لا يرتفع إلا عندما يجتمع توثيق المصدر مع تطابق الطبعة.</p>
     <form onSubmit={upload} style={{background:'white',padding:20,borderRadius:16,border:'1px solid #e8edf5',display:'grid',gap:14}}>
       <label>رقم الرزمة<input name="package_id" defaultValue="1" required style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
-      <button type="button" onClick={()=>loadPackage((document.querySelector('[name=package_id]') as HTMLInputElement)?.value||'1')} disabled={busy} style={{padding:10,borderRadius:10,border:'1px solid #ccd5e3',background:'white'}}>عرض حالة الرزمة</button>
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        <button type="button" onClick={()=>loadPackage(currentPackageId())} disabled={busy} style={{padding:10,borderRadius:10,border:'1px solid #ccd5e3',background:'white'}}>عرض حالة الرزمة</button>
+        <button type="button" onClick={syncOfficialCatalog} disabled={busy} style={{padding:10,borderRadius:10,border:'1px solid #b9d4ff',background:'#eef6ff',color:'#124b9b',fontWeight:700}}>مزامنة كتالوج الوزارة</button>
+      </div>
+      <div style={{fontSize:12,opacity:.65}}>مزامنة الكتالوج تسجّل الرابط الذي اختارته الوزارة للمبحث فقط؛ لا تمنح أي نقاط لتطابق الطبعة حتى يُجلب الملف ويُحلّل.</div>
       <label>نوع المصدر<select name="source_type" defaultValue="OFFICIAL_PACKAGE" style={{display:'block',width:'100%',padding:10,marginTop:5}}>{sourceTypes.map(x=><option key={x} value={x}>{sourceLabels[x]||x} — {x}</option>)}</select></label>
       <label>الطبعة/السنة<input name="edition" defaultValue="2026" style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
       <label>درجة موثوقية المصدر<input name="reliability_score" type="number" min="0" max="100" defaultValue="100" style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
@@ -103,7 +124,7 @@ export default function ImporterPage(){
 
     <section style={{marginTop:22,background:'white',padding:18,borderRadius:16,border:'1px solid #e8edf5'}}>
       <h2>ما يحدث عند الرفع أو الجلب</h2>
-      <ol style={{lineHeight:2}}><li>حساب SHA-256 ومنع الملف المكرر فعليًا.</li><li>تقييد جلب الروابط على نطاقات المصادر الموثوقة فقط.</li><li>رفض أي عنوان يتحول إلى IP داخلي/خاص.</li><li>استخراج النص من PDF النصي أو UTF-8.</li><li>تقسيمه إلى Source Chunks مع رقم الصفحة.</li><li>مطابقة السنة والعنوان دون منح نقاط تلقائية لملف قديم.</li><li>إعادة حساب Coverage وVerified Quality.</li></ol>
+      <ol style={{lineHeight:2}}><li>تثبيت مصدر الكتالوج الرسمي منفصلًا عن إثبات الطبعة.</li><li>حساب SHA-256 ومنع الملف المكرر فعليًا.</li><li>تقييد جلب الروابط على نطاقات المصادر الموثوقة فقط.</li><li>رفض أي عنوان يتحول إلى IP داخلي/خاص.</li><li>استخراج النص من PDF النصي أو UTF-8.</li><li>تقسيمه إلى Source Chunks مع رقم الصفحة.</li><li>مطابقة السنة والعنوان دون منح نقاط تلقائية لملف قديم.</li><li>إعادة حساب Coverage وVerified Quality.</li></ol>
     </section>
   </main>
 }

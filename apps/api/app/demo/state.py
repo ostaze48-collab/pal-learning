@@ -6,9 +6,29 @@ from sqlalchemy.orm import Session
 from ..auth.deps import require_student_profile
 from ..db.demo_experiment import DEMO_LESSON_CODE, DEMO_STATUS, demo_enabled
 from ..db.deps import get_db
-from ..db.models import Lesson, Question, QuestionAttempt, StudentProfile
+from ..db.models import (
+    LearningEvent,
+    Lesson,
+    LessonSkill,
+    Question,
+    QuestionAttempt,
+    StudentProfile,
+    StudentSkillMastery,
+)
 
 router = APIRouter(prefix='/demo', tags=['experimental-demo-state'])
+
+
+def _demo_lesson(db: Session) -> Lesson:
+    if not demo_enabled():
+        raise HTTPException(404, 'Experimental demo is disabled')
+    lesson = db.query(Lesson).filter(
+        Lesson.lesson_code == DEMO_LESSON_CODE,
+        Lesson.status == DEMO_STATUS,
+    ).first()
+    if not lesson:
+        raise HTTPException(503, 'Experimental lesson is not ready')
+    return lesson
 
 
 @router.get('/session-state')
@@ -16,15 +36,7 @@ def demo_session_state(
     profile: StudentProfile = Depends(require_student_profile),
     db: Session = Depends(get_db),
 ):
-    if not demo_enabled():
-        raise HTTPException(404, 'Experimental demo is disabled')
-
-    lesson = db.query(Lesson).filter(
-        Lesson.lesson_code == DEMO_LESSON_CODE,
-        Lesson.status == DEMO_STATUS,
-    ).first()
-    if not lesson:
-        raise HTTPException(503, 'Experimental lesson is not ready')
+    lesson = _demo_lesson(db)
 
     questions = db.query(Question).filter(
         Question.lesson_id == lesson.id,
@@ -63,4 +75,54 @@ def demo_session_state(
         'completed_questions': bool(total and answered >= total),
         'completion_percent': round((answered / total) * 100) if total else 0,
         'questions': rows,
+    }
+
+
+@router.post('/reset-progress')
+def reset_demo_progress(
+    profile: StudentProfile = Depends(require_student_profile),
+    db: Session = Depends(get_db),
+):
+    """Reset only this student's experimental lesson evidence.
+
+    Feedback is intentionally preserved so Beta reports are not lost.
+    No production or non-demo learning data is touched.
+    """
+    lesson = _demo_lesson(db)
+    question_ids = [row.id for row in db.query(Question).filter(Question.lesson_id == lesson.id).all()]
+    skill_ids = [row.skill_id for row in db.query(LessonSkill).filter(LessonSkill.lesson_id == lesson.id).all()]
+
+    deleted_attempts = 0
+    if question_ids:
+        deleted_attempts = db.query(QuestionAttempt).filter(
+            QuestionAttempt.student_id == profile.id,
+            QuestionAttempt.question_id.in_(question_ids),
+        ).delete(synchronize_session=False)
+
+    deleted_mastery = 0
+    if skill_ids:
+        deleted_mastery = db.query(StudentSkillMastery).filter(
+            StudentSkillMastery.student_id == profile.id,
+            StudentSkillMastery.skill_id.in_(skill_ids),
+        ).delete(synchronize_session=False)
+
+    # Preserve explicit BETA_FEEDBACK events; remove only learning/tutor/session evidence.
+    deleted_events = db.query(LearningEvent).filter(
+        LearningEvent.student_id == profile.id,
+        LearningEvent.lesson_id == lesson.id,
+        LearningEvent.event_type != 'BETA_FEEDBACK',
+    ).delete(synchronize_session=False)
+
+    db.commit()
+    return {
+        'experimental': True,
+        'reset': True,
+        'lesson_code': lesson.lesson_code,
+        'deleted': {
+            'question_attempts': int(deleted_attempts or 0),
+            'mastery_rows': int(deleted_mastery or 0),
+            'learning_events': int(deleted_events or 0),
+        },
+        'feedback_preserved': True,
+        'message': 'تمت إعادة تجربة الدرس من البداية مع الاحتفاظ بملاحظات Beta التي أرسلتها.',
     }

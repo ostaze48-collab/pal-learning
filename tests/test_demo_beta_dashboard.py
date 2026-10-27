@@ -107,3 +107,30 @@ def test_student_activity_appears_in_beta_operations_dashboard():
     assert data['learning']['question_attempts'] >= 1
     assert data['learning']['correct_answers'] >= 1
     assert data['ai_tutor']['requests'] >= 1
+
+
+def test_completed_demo_has_result_summary_and_next_action():
+    questions = client.get('/demo/questions', headers=STUDENT)
+    assert questions.status_code == 200
+    for question in questions.json():
+        response = client.post(
+            f"/demo/questions/{question['id']}/attempt",
+            json={'answer': 0, 'response_time_ms': 2500},
+            headers=STUDENT,
+        )
+        assert response.status_code == 200
+        assert response.json()['correct'] is True
+
+    result = client.get('/demo/result', headers=STUDENT)
+    assert result.status_code == 200
+    data = result.json()
+    assert data['lesson']['lesson_code'] == 'PS.G05.SCI.S1.U01.L01'
+    assert data['completion']['completed'] is True
+    assert data['completion']['answered_questions'] == 5
+    assert data['completion']['total_questions'] == 5
+    assert data['completion']['score_percent'] == 100
+    assert data['mastery']['assessed_skills'] >= 4
+    assert data['mastery']['strongest'] is not None
+    assert data['mastery']['weakest'] is not None
+    assert data['next_action']['type'] in {'REVIEW', 'DONE'}
+    assert 'ليست شهادة' in data['notice'] or 'ليست' in data['notice']

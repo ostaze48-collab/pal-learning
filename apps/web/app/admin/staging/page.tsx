@@ -46,11 +46,28 @@ export default function StagingConsole(){
   catch(e){setMessage(e instanceof Error?e.message:`فشل ${label}`);}
   finally{setBusy('');}
  }
+ async function runAcademicQa(stage:Staged){
+  setBusy(`academic-${stage.id}`);setMessage('');
+  try{
+   const queued=await api(`/factory/staged-versions/${stage.id}/academic-qa/queue`,{method:'POST'});
+   const executed=await api(`/factory/jobs/${queued.job_id}/execute`,{method:'POST'});
+   if(executed.status==='COMPLETED'){
+    const validated=await api(`/factory/academic-qa/jobs/${queued.job_id}/ingest-provider-output`,{method:'POST'});
+    setMessage(`Academic QA ✓ · ${validated.status} · ${validated.effective_recommendation}`);
+   }else if(executed.status==='WAITING_PROVIDER'){
+    setMessage(`Academic QA Job #${queued.job_id} جاهز لكنه ينتظر مزود AI حقيقي. AI_PROVIDER الحالي ما زال LOCAL_MOCK أو غير مكتمل.`);
+   }else{
+    setMessage(`Academic QA Job #${queued.job_id} · ${executed.status}${executed.error?` · ${executed.error}`:''}`);
+   }
+   await load();
+  }catch(e){setMessage(e instanceof Error?e.message:'فشل Academic QA');}
+  finally{setBusy('');}
+ }
 
  return <main style={{maxWidth:1000,margin:'28px auto',padding:18}}>
   <div style={{fontSize:13,opacity:.55}}>الإدارة ← Staging</div>
   <h1>Candidate QA & Staging</h1>
-  <p>هذه الشاشة لا تنشر أي محتوى. وظيفتها فصل التحقق البنيوي والمصدر عن الموافقة الداخلية على staging، ثم حفظ snapshot مستقل لا يتغير لاحقًا.</p>
+  <p>هذه الشاشة لا تنشر أي محتوى. تفصل التحقق البنيوي والمصدر، snapshot الـstaging، ثم Academic AI QA المستقل.</p>
   <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap',background:'white',padding:14,borderRadius:14,border:'1px solid #e8edf5'}}>
    <label>Lesson ID <input type="number" min="1" value={lessonId} onChange={e=>setLessonId(Number(e.target.value)||1)} style={{width:80,padding:8,marginInlineStart:6}}/></label>
    <button onClick={load} disabled={!!busy}>تحميل المرشحين وStaging</button>
@@ -86,9 +103,15 @@ export default function StagingConsole(){
   <section style={{...panel,marginTop:16}}>
    <h2>Immutable Staged Versions</h2>
    {!staged.length&&<p style={{opacity:.6}}>لا توجد نسخة staging محفوظة لهذا الدرس.</p>}
-   {staged.map(s=><div key={s.id} style={{borderTop:'1px solid #edf0f5',padding:'12px 0',display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}}>
-    <div><strong>Snapshot #{s.id}</strong> · {s.version_label} · {s.status} · Release {s.release_readiness}</div>
-    <button disabled={!!busy} onClick={async()=>{setBusy('preview-stage');try{setPreview(await api(`/factory/staged-versions/${s.id}`));}catch(e){setMessage(e instanceof Error?e.message:'فشل معاينة staging');}finally{setBusy('');}}}>Preview Snapshot</button>
+   {staged.map(s=><div key={s.id} style={{borderTop:'1px solid #edf0f5',padding:'12px 0'}}>
+    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+     <div><strong>Snapshot #{s.id}</strong> · {s.version_label} · <b>{s.status}</b> · Release <strong>{s.release_readiness}</strong></div>
+     <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+      <button disabled={!!busy} onClick={async()=>{setBusy('preview-stage');try{setPreview(await api(`/factory/staged-versions/${s.id}`));}catch(e){setMessage(e instanceof Error?e.message:'فشل معاينة staging');}finally{setBusy('');}}}>Preview Snapshot</button>
+      <button disabled={!!busy||s.release_readiness!=='READY'} onClick={()=>runAcademicQa(s)}>Run Academic AI QA</button>
+     </div>
+    </div>
+    {s.release_readiness!=='READY'&&<div style={{fontSize:12,color:'#8a4b00',marginTop:6}}>Academic QA محظورة حتى تصبح Source Evidence عند عتبة الإصدار.</div>}
    </div>)}
   </section>
 
@@ -96,12 +119,12 @@ export default function StagingConsole(){
    <div style={{display:'flex',justifyContent:'space-between',gap:12}}><strong>{preview.version_label||`Snapshot #${preview.id}`} · {preview.status}</strong><button onClick={()=>setPreview(null)}>إغلاق</button></div>
    {preview.output&&<div style={{marginTop:8}}>الأهداف {preview.output?.learning_objectives?.length||0} · الأقسام {preview.output?.sections?.length||0} · الأسئلة {preview.output?.questions?.length||0}</div>}
    {preview.snapshot&&<div style={{marginTop:8}}>Snapshot: الأقسام {preview.snapshot?.sections?.length||0} · الأسئلة {preview.snapshot?.questions?.length||0}</div>}
-   <details style={{marginTop:10}}><summary>QA / Validation</summary><pre style={pre}>{JSON.stringify(preview.validation||preview.qa_snapshot,null,2)}</pre></details>
+   <details style={{marginTop:10}} open={Boolean(preview.qa_snapshot?.academic_qa)}><summary>QA / Validation</summary><pre style={pre}>{JSON.stringify(preview.validation||preview.qa_snapshot,null,2)}</pre></details>
    <details><summary>Content</summary><pre style={pre}>{JSON.stringify(preview.output||preview.snapshot,null,2)}</pre></details>
   </section>}
 
   <section style={{...panel,marginTop:16,background:'#fffaf0'}}>
-   <strong>مهم:</strong> STAGING لا يعني PUBLISHED. النسخة المحفوظة مستقلة عن المحتوى الحي، وRelease Readiness يمكن أن يبقى BLOCKED حتى أثناء المعاينة الداخلية.
+   <strong>مهم:</strong> STAGING ولا Academic QA يعنيان PUBLISHED. حتى نتيجة Academic QA = PASS ستبقى بدون صلاحية نشر إلى أن نبني Release/Publish transaction مستقلة بعد ربط PostgreSQL والمصدر الحالي الموثق.
   </section>
  </main>
 }

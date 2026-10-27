@@ -17,6 +17,7 @@ from app.db.models import (
     SourcePackage,
     Unit,
 )
+from app.db.visual_models import VisualAsset
 from app.factory.router import (
     execute_factory_job,
     ingest_generated_output,
@@ -82,6 +83,23 @@ def _prepared_db():
     )
     db.add(link)
 
+    db.add(VisualAsset(
+        lesson_id=lesson.id,
+        source_file_id=source.id,
+        source_page=1,
+        asset_kind='TEXTBOOK_PAGE_CROP',
+        storage_key='s3://test-bucket/freshness/page-1.png',
+        public_url='https://cdn.example.test/freshness/page-1.png',
+        checksum='f' * 64,
+        width=1200,
+        height=1700,
+        rights_status='CLEARED',
+        status='APPROVED',
+        alt_text='صفحة موثقة لدرس المجهر واكتشاف الخلية.',
+        caption='أصل بصري اختباري موثق.',
+        hotspots_json=[],
+    ))
+
     skill = Skill(
         subject_id=4,
         skill_code='SK.SCI.AUTO.SCIENTIFIC_TOOLS.FRESHNESS01',
@@ -137,6 +155,7 @@ def test_execute_rejects_job_if_verified_source_link_was_revoked_after_queue(mon
         queued = queue_lesson_generation(lesson.id, db)
         job = db.query(AIJob).filter(AIJob.id == queued['job_id']).one()
         assert {x['source_chunk_id'] for x in job.input_json['source_context']} == {chunk.id}
+        assert len(job.input_json['visual_assets']) == 1
 
         link.status = 'REJECTED'
         db.commit()

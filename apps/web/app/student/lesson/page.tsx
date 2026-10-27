@@ -25,11 +25,14 @@ export default function LessonPage(){
         const first=await findFirstPublishedLesson();
         if(!first) throw new Error('لا يوجد درس منشور بعد');
         const [l,q]=await Promise.all([
-          apiJson<any>(`/curriculum/lessons/${first.lesson.id}`),
-          apiJson<Question[]>(`/curriculum/lessons/${first.lesson.id}/questions`)
+          apiJson<any>(`/curriculum/lessons/${first.lesson.id}`,{},true),
+          apiJson<Question[]>(`/curriculum/lessons/${first.lesson.id}/questions`,{},true)
         ]);
         setLesson({...l,book:first.book,unit:first.unit});setQuestions(q);
-      }catch(e:any){setError(e.message||'تعذر تحميل الدرس')}
+      }catch(e:any){
+        const message=e.message||'تعذر تحميل الدرس';
+        setError(message==='Authentication required'?'يجب تسجيل الدخول كطالب قبل فتح الدروس':message);
+      }
     })();
   },[]);
 
@@ -42,13 +45,13 @@ export default function LessonPage(){
         method:'POST',headers:studentHeaders(true),body:JSON.stringify({answer,response_time_ms:9000,used_hint:false,used_ai_help:false})
       });
       const body=await response.json();
-      if(!response.ok) throw new Error(body.detail||'تعذر الحفظ');
+      if(!response.ok) throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message||'تعذر الحفظ');
       setFeedback(x=>({...x,[q.id]:(body.correct?'إجابة صحيحة. ':'تحتاج مراجعة. ')+(body.explanation||'')}));
     }catch(e:any){setFeedback(x=>({...x,[q.id]:e.message||'تعذر حفظ المحاولة'}));}
   }
 
   return <main style={{maxWidth:860,margin:'28px auto',padding:18}}>
-    {error&&<div style={{padding:14,background:'#ffecec',borderRadius:12}}>{error}</div>}
+    {error&&<div style={{padding:14,background:'#ffecec',borderRadius:12}}>{error} {error.includes('تسجيل الدخول')&&<a href="/student/login" style={{marginInlineStart:8}}>تسجيل الدخول</a>}</div>}
     <div style={{fontSize:14,opacity:.7}}>{lesson?`${lesson.book.title} ← ${lesson.unit.title}`:'جارٍ التحميل…'}</div>
     <h1>{lesson?.title||'الدرس'}</h1><p style={{opacity:.75}}>{lesson?.estimated_minutes?`${lesson.estimated_minutes} دقيقة`:''}</p>
     <div style={{display:'grid',gap:14}}>{lesson?.sections?.map((section:any)=><article key={section.id} style={{background:'white',padding:20,borderRadius:18,border:'1px solid #e8edf5'}}><div style={{display:'flex',gap:12,alignItems:'center'}}><span style={{display:'grid',placeItems:'center',width:34,height:34,borderRadius:99,background:'#1f6feb',color:'white',fontWeight:700}}>{section.section_number}</span><h2 style={{margin:0,fontSize:20}}>{section.title}</h2></div><div style={{marginTop:12,display:'grid',gap:10}}>{section.blocks.map((b:any)=><Block key={b.id} block={b}/>)}</div></article>)}</div>

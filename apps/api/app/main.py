@@ -22,6 +22,7 @@ from .importer.source_policy_router import router as source_policy_router
 from .importer.source_link_review import router as source_link_review_router
 from .learning.router import router as learning_router
 from .demo.router import router as demo_router
+from .demo.health import router as demo_health_router
 from .qa.router import router as qa_router
 from .qa.reference_console import router as reference_console_router
 from .admin.router import router as admin_router
@@ -38,7 +39,7 @@ from .factory.release_transaction import router as release_transaction_router
 from .factory.staging_preview import router as staging_preview_router
 from .auth.router import router as auth_router
 
-VERSION = '1.18.1'
+VERSION = '1.18.2'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -118,6 +119,7 @@ def health():
             'source-authority-policy-enforcement', 'current-semester-1-priority-registry',
             'current-semester-admin-console', 'current-semester-production-matrix',
             'single-lesson-experimental-beta', 'single-lesson-beta-student-api',
+            'single-lesson-beta-health-diagnostics',
         ],
     }
 
@@ -159,6 +161,7 @@ app.include_router(source_policy_router)
 app.include_router(source_link_review_router)
 app.include_router(learning_router)
 app.include_router(demo_router)
+app.include_router(demo_health_router)
 app.include_router(qa_router)
 app.include_router(reference_console_router)
 app.include_router(admin_router)

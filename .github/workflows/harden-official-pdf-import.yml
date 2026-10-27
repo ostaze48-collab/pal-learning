@@ -18,64 +18,51 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Apply verified PDF hardening and idempotent test fixes
+      - name: Apply PDF hardening and idempotent fixtures
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           router = Path('apps/api/app/importer/router.py')
           text = router.read_text()
           if '_normalize_remote_content_type' not in text:
-              marker = """class _SafeRedirectHandler(HTTPRedirectHandler):
-              def redirect_request(self, req, fp, code, msg, headers, newurl):
-                  _validate_source_url(newurl)
-                  return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-          def _download_registered_source(url: str) -> tuple[bytes, str | None, str]:
-          """
-              replacement = """class _SafeRedirectHandler(HTTPRedirectHandler):
-              def redirect_request(self, req, fp, code, msg, headers, newurl):
-                  _validate_source_url(newurl)
-                  return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-          def _normalize_remote_content_type(reported_content_type: str | None, data: bytes) -> str:
+              anchor = '\ndef _download_registered_source(url: str) -> tuple[bytes, str | None, str]:\n'
+              helper = '''\ndef _normalize_remote_content_type(reported_content_type: str | None, data: bytes) -> str:
+              # File signatures are stronger evidence than a generic HTTP MIME header.
               if data.startswith(b'%PDF-'):
                   return 'application/pdf'
               reported = (reported_content_type or '').lower()
               if reported in {'text/plain', 'text/markdown'}:
                   return reported
               raise ValueError(f'Unsupported remote curriculum content type: {reported or "unknown"}')
+          '''
+              if anchor not in text:
+                  raise SystemExit('download function anchor not found')
+              text = text.replace(anchor, helper + anchor, 1)
 
+              mime_pattern = re.compile(
+                  r"(?m)^(\s*)content_type = \(response\.headers\.get_content_type\(\) or ''\)\.lower\(\) or None\n"
+                  r"\1if content_type not in \{'application/pdf', 'text/plain', 'text/markdown'\}:\n"
+                  r"\1    raise ValueError\(f'Unsupported remote curriculum content type: \{content_type or \"unknown\"\}'\)\n"
+              )
+              text, count = mime_pattern.subn(
+                  lambda m: f"{m.group(1)}reported_content_type = (response.headers.get_content_type() or '').lower() or None\n",
+                  text,
+                  count=1,
+              )
+              if count != 1:
+                  raise SystemExit(f'expected one MIME guard, found {count}')
 
-          def _download_registered_source(url: str) -> tuple[bytes, str | None, str]:
-          """
-              if marker not in text:
-                  raise SystemExit('download marker not found')
-              text = text.replace(marker, replacement, 1)
-              old = """            content_type = (response.headers.get_content_type() or '').lower() or None
-              if content_type not in {'application/pdf', 'text/plain', 'text/markdown'}:
-                  raise ValueError(f'Unsupported remote curriculum content type: {content_type or \"unknown\"}')
-              length_header = response.headers.get('Content-Length')
-          """
-              new = """            reported_content_type = (response.headers.get_content_type() or '').lower() or None
-              length_header = response.headers.get('Content-Length')
-          """
-              if old not in text:
-                  raise SystemExit('old MIME block not found')
-              text = text.replace(old, new, 1)
-              old_read = """            data = response.read(MAX_SOURCE_BYTES + 1)
-          except (HTTPError, URLError, TimeoutError) as exc:
-          """
-              new_read = """            data = response.read(MAX_SOURCE_BYTES + 1)
-              content_type = _normalize_remote_content_type(reported_content_type, data)
-          except (HTTPError, URLError, TimeoutError) as exc:
-          """
-              if old_read not in text:
-                  raise SystemExit('read block not found')
-              text = text.replace(old_read, new_read, 1)
+              read_line = '            data = response.read(MAX_SOURCE_BYTES + 1)\n'
+              if read_line not in text:
+                  raise SystemExit('bounded remote read line not found')
+              text = text.replace(
+                  read_line,
+                  read_line + '            content_type = _normalize_remote_content_type(reported_content_type, data)\n',
+                  1,
+              )
               router.write_text(text)
 
           factory = Path('apps/api/app/factory/router.py')
@@ -90,7 +77,7 @@ jobs:
                   'from app.importer.router import _validate_source_url',
                   'from app.importer.router import _normalize_remote_content_type, _validate_source_url',
               )
-              t += """
+              t += '''
 
           def test_remote_pdf_signature_overrides_generic_mime():
               assert _normalize_remote_content_type('application/octet-stream', b'%PDF-1.7\\nbody') == 'application/pdf'
@@ -100,29 +87,34 @@ jobs:
           def test_remote_binary_without_pdf_signature_is_rejected():
               with pytest.raises(ValueError, match='Unsupported remote curriculum content type'):
                   _normalize_remote_content_type('application/octet-stream', b'not-a-pdf')
-          """
+          '''
               fetch_test.write_text(t)
 
           academic = Path('tests/test_academic_qa.py')
           a = academic.read_text()
-          old_upload = """    assert upload.status_code == 200, upload.text
-              assert upload.json()['edition_match_score'] >= 90
-          """
-          new_upload = """    assert upload.status_code in {200, 409}, upload.text
-              if upload.status_code == 200:
-                  assert upload.json()['edition_match_score'] >= 90
-              else:
-                  assert upload.json()['detail']['existing_source_file_id'] >= 1
-          """
+          old_upload = "    assert upload.status_code == 200, upload.text\n    assert upload.json()['edition_match_score'] >= 90\n"
           if old_upload in a:
-              academic.write_text(a.replace(old_upload, new_upload, 1))
+              a = a.replace(
+                  old_upload,
+                  "    assert upload.status_code in {200, 409}, upload.text\n"
+                  "    if upload.status_code == 200:\n"
+                  "        assert upload.json()['edition_match_score'] >= 90\n"
+                  "    else:\n"
+                  "        assert upload.json()['detail']['existing_source_file_id'] >= 1\n",
+                  1,
+              )
+              academic.write_text(a)
 
           flow = Path('tests/test_api_flow.py')
           q = flow.read_text()
           brittle = "    assert linked['created_links'] >= 1\n"
-          robust = "    assert any(x.get('lesson_title') == 'الجهاز الهيكلي' and x.get('linked') for x in linked['candidates'])\n"
           if brittle in q:
-              flow.write_text(q.replace(brittle, robust, 1))
+              q = q.replace(
+                  brittle,
+                  "    assert any(x.get('lesson_title') == 'الجهاز الهيكلي' and x.get('linked') for x in linked['candidates'])\n",
+                  1,
+              )
+              flow.write_text(q)
           PY
       - name: Verify API tests
         run: |

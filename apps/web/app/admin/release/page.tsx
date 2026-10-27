@@ -1,6 +1,6 @@
 'use client';
 
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 
 const API=process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -21,6 +21,7 @@ type Gate={
  next_action:string;note:string;release_manifest:ReleaseManifest;
  release_policy:{direct_legacy_publish_enabled:boolean;direct_legacy_publish_disabled:boolean;audited_release_transaction_implemented:boolean;publication_authorized:boolean};
 };
+type ReleaseResult={release_transaction_id:number;staged_version_id:number;lesson_id:number;content_version_id:number;status:string;snapshot_sha256:string;manifest_sha256:string;released_at?:string;idempotent_replay:boolean;publication_authorized:boolean};
 
 async function api(path:string,init:RequestInit={}){
  const headers=new Headers(init.headers);
@@ -46,8 +47,8 @@ const labels:Record<string,string>={
  legacy_direct_publish_disabled:'مسار النشر المباشر القديم معطّل',
 };
 const actionLabels:Record<string,string>={
- BUILD_OR_ENABLE_AUDITED_RELEASE_TRANSACTION:'المحتوى اجتاز البوابات، لكن يجب أولًا بناء/تفعيل Audited Release Transaction.',
- RUN_AUDITED_RELEASE_TRANSACTION:'المحتوى جاهز لتمريره إلى معاملة الإصدار المدققة.',
+ BUILD_OR_ENABLE_AUDITED_RELEASE_TRANSACTION:'معاملة الإصدار المدققة مطبقة؛ راجع سبب عدم توفرها في هذه البيئة.',
+ RUN_AUDITED_RELEASE_TRANSACTION:'المحتوى جاهز لتنفيذ معاملة الإصدار الذرّية المدققة.',
  RESOLVE_RELEASE_GATE_BLOCKERS:'يجب معالجة Release Gate blockers قبل أي معاملة إصدار.',
 };
 
@@ -55,15 +56,21 @@ export default function ReleaseConsole(){
  const [lessonId,setLessonId]=useState(1);
  const [rows,setRows]=useState<Staged[]>([]);
  const [gates,setGates]=useState<Record<number,Gate>>({});
+ const [releaseResults,setReleaseResults]=useState<Record<number,ReleaseResult>>({});
  const [busy,setBusy]=useState('');
  const [message,setMessage]=useState('');
 
- async function load(){
+ async function load(targetLessonId?:number){
+  const id=targetLessonId||lessonId;
   setBusy('load');setMessage('');
-  try{setRows(await api(`/factory/lessons/${lessonId}/staged-versions`));}
+  try{setRows(await api(`/factory/lessons/${id}/staged-versions`));}
   catch(e){setMessage(e instanceof Error?e.message:'تعذر تحميل نسخ staging');}
   finally{setBusy('');}
  }
+ useEffect(()=>{
+  const requested=Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
+  if(requested>0){setLessonId(requested);void load(requested);}
+ },[]);
  async function runGate(id:number){
   setBusy(`gate-${id}`);setMessage('');
   try{
@@ -73,15 +80,26 @@ export default function ReleaseConsole(){
   }catch(e){setMessage(e instanceof Error?e.message:'فشل Release Gate');}
   finally{setBusy('');}
  }
+ async function release(id:number){
+  setBusy(`release-${id}`);setMessage('');
+  try{
+   const result:ReleaseResult=await api(`/factory/staged-versions/${id}/release`,{method:'POST'});
+   setReleaseResults(old=>({...old,[id]:result}));
+   setMessage(`Audited Release Transaction #${result.release_transaction_id} · ${result.status}${result.idempotent_replay?' · idempotent replay':''}`);
+   await load();
+  }catch(e){setMessage(e instanceof Error?e.message:'فشلت معاملة الإصدار');}
+  finally{setBusy('');}
+ }
 
  return <main style={{maxWidth:1000,margin:'28px auto',padding:18}}>
   <div style={{fontSize:13,opacity:.55}}>الإدارة ← Release Readiness</div>
-  <h1>Final Release Gate</h1>
-  <p>هذه الشاشة تقيس جاهزية نسخة Staging فقط. لا تحتوي على Publish، ولا تعدّل الدرس الحي، ولا تعطي صلاحية نشر.</p>
+  <h1>Final Release Gate & Audited Release</h1>
+  <p>Final Gate لا تنشر شيئًا. إذا أصبحت READY_FOR_RELEASE_TRANSACTION فقط، يمكن تشغيل معاملة الإصدار المدققة؛ والخادم يفرض PostgreSQL ويعيد التحقق من المصدر والمهارات لحظة الإصدار.</p>
   <div style={panel}>
    <label>Lesson ID <input type="number" min="1" value={lessonId} onChange={e=>setLessonId(Number(e.target.value)||1)} style={{width:80,padding:8,marginInlineStart:6}}/></label>
-   <button style={{marginInlineStart:8}} onClick={load} disabled={!!busy}>تحميل Staged Versions</button>
-   <a style={{marginInlineStart:12}} href="/admin/staging">العودة إلى Staging</a>
+   <button style={{marginInlineStart:8}} onClick={()=>load()} disabled={!!busy}>تحميل Staged Versions</button>
+   <a style={{marginInlineStart:12}} href={`/admin/staging?lesson_id=${lessonId}`}>العودة إلى Staging</a>
+   <a style={{marginInlineStart:12}} href="/admin/current-semester/matrix">مصفوفة الفصل</a>
   </div>
   {message&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#eef6ff'}}>{message}</div>}
 
@@ -89,6 +107,7 @@ export default function ReleaseConsole(){
    {!rows.length&&<div style={panel}>لا توجد Staged Versions محملة لهذا الدرس.</div>}
    {rows.map(row=>{
     const gate=gates[row.id];
+    const released=releaseResults[row.id];
     return <article key={row.id} style={panel}>
      <div style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap'}}>
       <div><strong>Snapshot #{row.id}</strong> · {row.version_label}</div><b>{row.status}</b>
@@ -110,12 +129,14 @@ export default function ReleaseConsole(){
        <div>Direct legacy publish disabled: <strong>{String(gate.release_policy.direct_legacy_publish_disabled)}</strong></div>
        <div>publication_authorized: <strong>{String(gate.publication_authorized)}</strong></div>
        <div style={{marginTop:7}}><strong>الخطوة التالية:</strong> {actionLabels[gate.next_action]||gate.next_action}</div>
+       {gate.decision==='READY_FOR_RELEASE_TRANSACTION'&&<button style={{marginTop:10,padding:'9px 13px',fontWeight:800}} disabled={!!busy} onClick={()=>release(row.id)}>تنفيذ Audited Release Transaction</button>}
       </div>
      </div>}
+     {released&&<div style={{marginTop:12,padding:12,borderRadius:10,background:'#ecfdf3'}}><strong>{released.status} ✓</strong><div>Transaction #{released.release_transaction_id} · Content Version #{released.content_version_id}</div><div style={{fontSize:12,marginTop:5}}>Manifest {released.manifest_sha256}</div></div>}
     </article>
    })}
   </section>
-  <section style={{...panel,marginTop:16,background:'#fffaf0'}}><strong>قاعدة ثابتة:</strong> عبارة READY_FOR_RELEASE_TRANSACTION تعني أن النسخة اجتازت بوابات الجاهزية فقط. بصمة SHA-256 تثبت أي Snapshot اجتازت المراجعة، لكنها لا تنشرها. لا تصبح النسخة مرئية للطلاب إلا عبر Audited Release Transaction منفصلة ومدققة، وهي غير مبنية حاليًا.</section>
+  <section style={{...panel,marginTop:16,background:'#fffaf0'}}><strong>قاعدة ثابتة:</strong> READY_FOR_RELEASE_TRANSACTION لا تعني أن الدرس نُشر. النشر يحدث فقط عند نجاح endpoint معاملة الإصدار المدققة، التي تتطلب PostgreSQL وتعيد التحقق من Evidence وSkill Codes داخل transaction واحدة.</section>
  </main>
 }
 

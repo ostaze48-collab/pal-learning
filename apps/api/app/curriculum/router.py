@@ -8,8 +8,15 @@ from ..db.models import (
     SourcePackage, SourceFile, SourceChunk, AIJob, Question, QuestionSkill, Skill
 )
 from ..schemas.curriculum import SourcePackageCreate, SourceFileCreate, AIJobCreate
+from ..importer.router import calculate_package_scores
 
 router = APIRouter(prefix='/curriculum', tags=['curriculum'])
+
+
+def package_scores(db: Session, package_id: int) -> tuple[float, float, list[SourceFile]]:
+    files = db.query(SourceFile).filter(SourceFile.package_id == package_id).order_by(SourceFile.id).all()
+    coverage, quality = calculate_package_scores(files)
+    return coverage, quality, files
 
 
 @router.get('/grades')
@@ -83,13 +90,15 @@ def get_lesson(lesson_id: int, db: Session = Depends(get_db)):
 @router.get('/source-packages')
 def list_source_packages(db: Session = Depends(get_db), admin=Depends(require_admin)):
     rows = db.query(SourcePackage).order_by(SourcePackage.id.desc()).all()
-    return [
-        {
-            'id': x.id, 'book_id': x.book_id, 'package_code': x.package_code,
-            'status': x.status, 'completeness_score': x.completeness_score,
-            'quality_score': x.quality_score,
-        } for x in rows
-    ]
+    result = []
+    for row in rows:
+        coverage, quality, files = package_scores(db, row.id)
+        result.append({
+            'id': row.id, 'book_id': row.book_id, 'package_code': row.package_code,
+            'status': row.status, 'completeness_score': coverage,
+            'quality_score': quality, 'source_count': len(files),
+        })
+    return result
 
 
 @router.get('/lessons/{lesson_id}/questions')
@@ -138,10 +147,10 @@ def get_source_package(package_id: int, db: Session = Depends(get_db), admin=Dep
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
         raise HTTPException(404, 'Package not found')
-    files = db.query(SourceFile).filter(SourceFile.package_id == package_id).order_by(SourceFile.id).all()
+    coverage, quality, files = package_scores(db, package_id)
     return {
         'id': package.id, 'package_code': package.package_code, 'status': package.status,
-        'completeness_score': package.completeness_score, 'quality_score': package.quality_score,
+        'completeness_score': coverage, 'quality_score': quality,
         'files': [
             {
                 'id': x.id, 'source_type': x.source_type, 'original_filename': x.original_filename,

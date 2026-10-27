@@ -10,6 +10,7 @@ from ..db.base import engine
 from ..db.deps import get_db
 from ..db.models import User
 from ..db.staging_models import StagedLessonVersion
+from ..services.release_policy import release_policy_status
 
 router = APIRouter(prefix='/factory', tags=['content-factory-release-gate'])
 
@@ -20,7 +21,12 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
     academic_result = academic.get('result') or {}
     confidence = float(academic_result.get('confidence') or 0)
     recommendation = academic.get('effective_recommendation')
+    release_policy = release_policy_status()
 
+    # This gate answers only whether the immutable staged snapshot is ready to be
+    # handed to a future audited release transaction. Transaction availability is
+    # intentionally NOT one of these checks; otherwise the gate could never say
+    # READY_FOR_RELEASE_TRANSACTION before that mechanism exists.
     checks = {
         'deterministic_release_ready': staged.release_readiness == 'READY',
         'academic_qa_present': bool(academic),
@@ -31,6 +37,7 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
         'no_unsupported_claims': int(academic.get('unsupported_claim_count') or 0) == 0,
         'persistent_production_database': database_backend in {'postgresql', 'postgres'},
         'immutable_staging_snapshot_present': bool(staged.snapshot_json),
+        'legacy_direct_publish_disabled': bool(release_policy['direct_legacy_publish_disabled']),
     }
     ready = all(checks.values())
     blockers = [key for key, passed in checks.items() if not passed]
@@ -42,7 +49,18 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
         'release_readiness': staged.release_readiness,
         'academic_recommendation': recommendation,
         'academic_confidence': confidence,
+        'release_policy': release_policy,
+        'release_transaction_available': bool(release_policy['audited_release_transaction_implemented']),
+        # The gate is deliberately non-mutating. Even when a transaction is built,
+        # this endpoint will remain an assessment endpoint rather than a publisher.
         'publication_authorized': False,
+        'next_action': (
+            'RUN_AUDITED_RELEASE_TRANSACTION'
+            if ready and release_policy['audited_release_transaction_implemented']
+            else 'BUILD_OR_ENABLE_AUDITED_RELEASE_TRANSACTION'
+            if ready
+            else 'RESOLVE_RELEASE_GATE_BLOCKERS'
+        ),
         'note': 'This gate never publishes content. A separate audited release transaction is required.',
     }
 

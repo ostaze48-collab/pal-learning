@@ -37,6 +37,11 @@ def _provider_readiness() -> dict:
     }
 
 
+def _database_backend(db: Session) -> str:
+    bind = db.get_bind()
+    return bind.url.get_backend_name() if bind is not None else 'unknown'
+
+
 def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
@@ -61,6 +66,12 @@ def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
         else:
             blockers.append('NO_AUTHORIZED_FACTUAL_SOURCE_LINKED')
 
+    database_backend = _database_backend(db)
+    production_database = database_backend in {'postgresql', 'postgres'}
+    storage_gate = packet.get('storage_gate') or {}
+    if production_database and packet['source_context'] and not storage_gate.get('all_factual_sources_durable'):
+        blockers.append('NON_DURABLE_FACTUAL_SOURCE_STORAGE')
+
     provider = _provider_readiness()
     discoveries = discoveries_for_package(package.package_code) if package else []
     queue_ready = not blockers
@@ -74,6 +85,8 @@ def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
         next_actions.append('REPLACE_OR_RECLASSIFY_UNAUTHORIZED_TEACHING_SOURCE')
     if 'LEGACY_TEACHING_SOURCE_REQUIRES_CURRENT_SCOPE_EVIDENCE' in blockers:
         next_actions.extend(['OBTAIN_CURRENT_CURRICULUM_PLAN', 'UPLOAD_CURRICULUM_PLAN', 'VERIFY_CURRENT_PLAN_SCOPE'])
+    if 'NON_DURABLE_FACTUAL_SOURCE_STORAGE' in blockers:
+        next_actions.append('REIMPORT_FACTUAL_SOURCE_TO_DURABLE_OBJECT_STORAGE')
     if queue_ready and not provider['execution_ready']:
         next_actions.append('CONFIGURE_REAL_AI_PROVIDER_FOR_EXECUTION')
     if queue_ready and provider['execution_ready']:
@@ -92,6 +105,12 @@ def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
         'scope_evidence_count': len(packet.get('scope_evidence') or []),
         'scope_gate': packet.get('scope_gate') or {},
         'authority_gate': packet.get('authority_gate') or {},
+        'storage_gate': {
+            **storage_gate,
+            'database_backend': database_backend,
+            'production_database': production_database,
+            'durable_storage_required_for_queue': production_database,
+        },
         'provider': provider,
         'discovery_candidates': [asdict(item) for item in discoveries],
         'policy': {

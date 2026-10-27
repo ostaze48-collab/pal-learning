@@ -6,6 +6,7 @@ from ..db.models import (
     Lesson, LessonSection, LessonSkill, LessonSourceLink, Question, Skill, SourceChunk, SourceFile
 )
 from ..importer.source_policy import can_ground_facts, can_prove_current_scope
+from .visual_asset_pipeline import generation_visual_assets
 
 
 def _source_payload(db: Session, link: LessonSourceLink) -> dict | None:
@@ -73,10 +74,6 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         for link, skill in skill_rows
     ]
 
-    # Production generation is intentionally stricter than discovery/linking.
-    # Auto-linking may create CANDIDATE / VERIFIED_CANDIDATE links, but only an
-    # explicit Admin verification promotes a teaching link to VERIFIED. Lesson
-    # generation never receives unreviewed factual chunks.
     unverified_teaching_links = db.query(LessonSourceLink).filter(
         LessonSourceLink.lesson_id == lesson_id,
         LessonSourceLink.relation == 'TEACHING_SOURCE',
@@ -131,8 +128,6 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
                 'reason': 'SOURCE_TYPE_NOT_AUTHORIZED_FOR_CURRENT_SCOPE',
             })
             continue
-        # Scope evidence is metadata/context for gating only. It must not be
-        # included in the source_chunk allowlist used by generated facts.
         scope_evidence.append({
             'source_file_id': item['source_file_id'],
             'source_type': item['source_type'],
@@ -154,9 +149,16 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         effective_source_context = []
         scope_block_reason = 'LEGACY_TEACHING_SOURCE_REQUIRES_CURRENT_SCOPE_EVIDENCE'
 
+    allowed_source_pages = {
+        (int(item['source_file_id']), int(item['page_number']))
+        for item in effective_source_context
+        if item.get('source_file_id') is not None and item.get('page_number') is not None
+    }
+    visual_assets = generation_visual_assets(db, lesson_id, allowed_source_pages)
+
     existing_questions = db.query(Question).filter(Question.lesson_id == lesson_id).all()
     return {
-        'contract_version': 'lesson-generation-packet/v6',
+        'contract_version': 'lesson-generation-packet/v7',
         'lesson': {
             'id': lesson.id,
             'lesson_code': lesson.lesson_code,
@@ -166,6 +168,7 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         'section_blueprint': section_blueprint,
         'skills': skills,
         'source_context': effective_source_context,
+        'visual_assets': visual_assets,
         'scope_evidence': scope_evidence,
         'authority_gate': {
             'rejected_teaching_sources': rejected_teaching_sources,
@@ -189,6 +192,12 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
                 item.get('source_file_id') for item in effective_source_context if not item.get('durable_storage')
             ],
         },
+        'visual_gate': {
+            'cleared_asset_count': len(visual_assets),
+            'only_effective_source_pages_allowed': True,
+            'admin_rights_clearance_required': True,
+            'public_delivery_url_required': True,
+        },
         'existing_questions': [
             {
                 'question_code': q.question_code,
@@ -207,12 +216,15 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
             'source_authority_enforced': True,
             'admin_verified_teaching_source_required': True,
             'durable_source_storage_tracked': True,
+            'visual_first_when_cleared_asset_exists': True,
+            'visual_assets_are_server_allowlisted': True,
             'section_blueprint_enforced': bool(section_blueprint),
             'section_blueprint_rule': 'When section_blueprint is non-empty, preserve its section count, order, and pedagogical intent. Do not merge, delete, or invent stages.',
             'lesson_loop': ['EXPLORE', 'UNDERSTAND', 'TRY', 'CHECK', 'DEEPEN', 'MASTERY', 'SUMMARY'],
-            'interactive_block_types': ['MATCHING', 'CLASSIFY', 'COMPARE_GRID'],
+            'interactive_block_types': ['IMAGE', 'MATCHING', 'CLASSIFY', 'COMPARE_GRID'],
             'avoid': [
                 'invented curriculum facts',
+                'invented image URLs, page numbers, rights decisions, or hotspot coordinates',
                 'using unreviewed lesson-source candidates as factual context',
                 'using curriculum-plan text as factual lesson explanation',
                 'using solution/reference-answer sources as factual lesson explanation',

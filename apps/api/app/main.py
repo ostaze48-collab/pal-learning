@@ -18,6 +18,7 @@ from .importer.official_catalog import (
 from .importer.discovery_catalog import router as discovery_catalog_router
 from .importer.scope_evidence import router as scope_evidence_router
 from .importer.source_policy_router import router as source_policy_router
+from .importer.source_link_review import router as source_link_review_router
 from .learning.router import router as learning_router
 from .qa.router import router as qa_router
 from .qa.reference_console import router as reference_console_router
@@ -32,7 +33,7 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.14.0'
+VERSION = '1.14.1'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -82,6 +83,7 @@ def health():
         },
         'capabilities': [
             'curriculum', 'importer', 'source-chunks', 'lesson-source-provenance',
+            'admin-verified-lesson-source-links',
             'solution-alignment', 'reference-answer-validation-console',
             'durable-curriculum-source-storage',
             'skills', 'mastery', 'diagnostic', 'recovery',
@@ -138,6 +140,7 @@ app.include_router(official_catalog_router)
 app.include_router(discovery_catalog_router)
 app.include_router(scope_evidence_router)
 app.include_router(source_policy_router)
+app.include_router(source_link_review_router)
 app.include_router(learning_router)
 app.include_router(qa_router)
 app.include_router(reference_console_router)

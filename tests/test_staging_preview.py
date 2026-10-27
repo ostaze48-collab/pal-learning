@@ -20,7 +20,7 @@ def test_staging_preview_token_is_short_lived_and_scoped(monkeypatch):
     assert claims['approved_by_user_id'] == 7
     assert claims['sub'] == 'staged:42'
     assert 0 < claims['exp'] - claims['iat'] <= 120
-    assert expires_at.timestamp() == claims['exp']
+    assert int(expires_at.timestamp()) == claims['exp']
 
 
 def test_staging_preview_rejects_tampered_token(monkeypatch):

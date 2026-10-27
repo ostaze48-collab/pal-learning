@@ -23,6 +23,7 @@ from .qa.router import router as qa_router
 from .qa.reference_console import router as reference_console_router
 from .admin.router import router as admin_router
 from .admin.readiness import router as readiness_router
+from .admin.current_semester import router as current_semester_router
 from .factory.router import router as factory_router
 from .factory.generation_readiness import router as generation_readiness_router
 from .factory.candidate_qa import router as candidate_qa_router
@@ -30,27 +31,19 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.13.0'
+VERSION = '1.13.1'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Local/demo SQLite remains self-bootstrapping. Persistent databases are
-    # migration-managed and must be prepared with `alembic upgrade head` first.
     if engine.url.get_backend_name() == 'sqlite':
         Base.metadata.create_all(bind=engine)
-        # Repair legacy demo state on every local/demo startup. Catalog links do
-        # not become semester-specific sources until scope is proven, and seeded
-        # prototype lessons remain DRAFT until a future audited release transaction.
         with SessionLocal() as db:
             quarantine_unverified_catalog_sources(db)
             quarantine_unreleased_demo_content(db)
 
-    # Current academic priority is semester 1. This registry step is idempotent
-    # and preserves the existing semester-2 prototype as backlog rather than
-    # rewriting historical IDs.
     with SessionLocal() as db:
         ensure_current_semester_registry(db)
     yield
@@ -105,6 +98,7 @@ def health():
             'official-source-catalog', 'source-discovery-catalog', 'catalog-scope-quarantine',
             'unreleased-demo-publication-quarantine', 'current-curriculum-plan-scope-evidence',
             'source-authority-policy-enforcement', 'current-semester-1-priority-registry',
+            'current-semester-admin-console',
         ],
     }
 
@@ -147,6 +141,7 @@ app.include_router(qa_router)
 app.include_router(reference_console_router)
 app.include_router(admin_router)
 app.include_router(readiness_router)
+app.include_router(current_semester_router)
 app.include_router(factory_router)
 app.include_router(generation_readiness_router)
 app.include_router(candidate_qa_router)

@@ -20,10 +20,12 @@ The API and database must remain in the same Render region so the internal conne
 Set the API Start Command to:
 
 ```bash
-cd apps/api && alembic upgrade head && python -m app.db.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+cd apps/api && alembic upgrade head && python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 ```
 
-The application intentionally refuses to consider PostgreSQL ready when its Alembic revision is behind the code migration head.
+`app.db.bootstrap` is a fail-closed guard: SQLite is allowed for local/demo use, but PostgreSQL seed execution is blocked unless the database is already at the current Alembic head.
+
+The application also refuses to report PostgreSQL `/ready` when its Alembic revision is behind the code migration head.
 
 Current migration head:
 
@@ -61,4 +63,4 @@ Do not commit provider keys, database credentials, JWT secrets, or admin passwor
 
 ## 5. Rollback rule
 
-If migration or seed fails, do not point production back to SQLite as a silent fallback. Restore the prior Render deploy or fix the database migration, then redeploy. Production data must stay on the persistent database.
+If migration or guarded bootstrap fails, do not point production back to SQLite as a silent fallback. Restore the prior Render deploy or fix the database migration, then redeploy. Production data must stay on the persistent database.

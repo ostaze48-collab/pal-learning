@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import ipaddress
 import os
+import socket
 from pathlib import Path
 from datetime import datetime
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -24,6 +29,8 @@ from ..services.document_importer import (
 router = APIRouter(prefix='/importer', tags=['curriculum-importer'], dependencies=[Depends(require_admin)])
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', Path(__file__).resolve().parents[2] / 'data' / 'uploads'))
 MAX_SOURCE_BYTES = int(os.getenv('MAX_SOURCE_BYTES', str(70 * 1024 * 1024)))
+SOURCE_FETCH_TIMEOUT_SECONDS = int(os.getenv('SOURCE_FETCH_TIMEOUT_SECONDS', '45'))
+DEFAULT_SOURCE_HOSTS = 'moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com'
 
 SOURCE_WEIGHTS = {
     # 100 total. Current official learning packages are distinct from full textbooks.
@@ -46,6 +53,69 @@ def _bounded_score(value) -> float:
         return max(0.0, min(100.0, float(value or 0)))
     except (TypeError, ValueError):
         return 0.0
+
+
+def _allowed_source_hosts() -> set[str]:
+    raw = os.getenv('CURRICULUM_SOURCE_HOSTS', DEFAULT_SOURCE_HOSTS)
+    return {x.strip().lower() for x in raw.split(',') if x.strip()}
+
+
+def _validate_source_url(url: str) -> str:
+    parsed = urlparse(url or '')
+    if parsed.scheme != 'https' or not parsed.hostname:
+        raise ValueError('Only HTTPS curriculum source URLs are allowed')
+    host = parsed.hostname.lower().rstrip('.')
+    if host not in _allowed_source_hosts():
+        raise ValueError(f'Curriculum source host is not allowlisted: {host}')
+    try:
+        addresses = {item[4][0] for item in socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)}
+    except socket.gaierror as exc:
+        raise ValueError(f'Could not resolve curriculum source host: {host}') from exc
+    if not addresses:
+        raise ValueError(f'Could not resolve curriculum source host: {host}')
+    for raw_ip in addresses:
+        ip = ipaddress.ip_address(raw_ip)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified:
+            raise ValueError('Curriculum source resolved to a non-public address')
+    return host
+
+
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _validate_source_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _download_registered_source(url: str) -> tuple[bytes, str | None, str]:
+    _validate_source_url(url)
+    opener = build_opener(_SafeRedirectHandler())
+    request = Request(url, headers={'User-Agent': 'PalLearningCurriculumImporter/1.0'})
+    try:
+        with opener.open(request, timeout=SOURCE_FETCH_TIMEOUT_SECONDS) as response:
+            final_url = response.geturl()
+            _validate_source_url(final_url)
+            content_type = (response.headers.get_content_type() or '').lower() or None
+            if content_type not in {'application/pdf', 'text/plain', 'text/markdown'}:
+                raise ValueError(f'Unsupported remote curriculum content type: {content_type or "unknown"}')
+            length_header = response.headers.get('Content-Length')
+            if length_header:
+                try:
+                    if int(length_header) > MAX_SOURCE_BYTES:
+                        raise ValueError(
+                            f'Remote source exceeds the {MAX_SOURCE_BYTES // (1024 * 1024)} MiB limit'
+                        )
+                except ValueError as exc:
+                    if 'exceeds' in str(exc):
+                        raise
+            data = response.read(MAX_SOURCE_BYTES + 1)
+    except (HTTPError, URLError, TimeoutError) as exc:
+        raise ValueError(f'Could not download registered curriculum source: {exc}') from exc
+
+    if not data:
+        raise ValueError('Registered curriculum source returned an empty body')
+    if len(data) > MAX_SOURCE_BYTES:
+        raise ValueError(f'Remote source exceeds the {MAX_SOURCE_BYTES // (1024 * 1024)} MiB limit')
+    return data, content_type, final_url
 
 
 def calculate_package_scores(files: list[SourceFile]) -> tuple[float, float]:
@@ -110,6 +180,57 @@ def update_package_completeness(db: Session, package: SourcePackage) -> None:
         package.status = 'INGESTING' if coverage < 100 else 'READY_FOR_PROCESSING'
 
 
+def _apply_extracted_source(
+    db: Session,
+    package: SourcePackage,
+    row: SourceFile,
+    data: bytes,
+    content_type: str | None,
+    filename: str,
+    target_edition: str | None,
+    expected_title: str | None,
+    source_url: str | None = None,
+) -> None:
+    checksum = sha256_bytes(data)
+    duplicate = db.query(SourceFile).filter(
+        SourceFile.package_id == package.id,
+        SourceFile.checksum == checksum,
+        SourceFile.id != row.id,
+    ).first()
+    if duplicate:
+        raise HTTPException(
+            409,
+            detail={
+                'message': 'This exact source file is already registered in the package',
+                'existing_source_file_id': duplicate.id,
+                'checksum': checksum,
+            },
+        )
+
+    path = save_upload(data, filename, UPLOAD_DIR)
+    extracted = extract_document(path, content_type)
+    row.file_key = str(path)
+    row.original_filename = row.original_filename or filename
+    row.mime_type = content_type
+    row.page_count = extracted.page_count
+    row.edition_match_score = edition_match_score(extracted.text, target_edition, expected_title)
+    row.checksum = extracted.checksum
+    row.status = 'EXTRACTED' if extracted.text else 'NEEDS_REVIEW'
+    row.extracted_text = extracted.text
+    row.source_url = source_url or row.source_url
+    row.extraction_meta = {
+        'method': extracted.extraction_method,
+        'warnings': extracted.warnings,
+        'characters': len(extracted.text),
+        'bytes': len(data),
+        'final_source_url': source_url,
+    }
+    db.query(SourceChunk).filter(SourceChunk.source_file_id == row.id).delete(synchronize_session=False)
+    for chunk in chunk_pages(extracted.pages):
+        db.add(SourceChunk(source_file_id=row.id, **chunk, metadata_json={'source_type': row.source_type}))
+    update_package_completeness(db, package)
+
+
 @router.post('/source-packages/{package_id}/upload')
 async def upload_source(
     package_id: int,
@@ -147,38 +268,30 @@ async def upload_source(
             },
         )
 
-    try:
-        path = save_upload(data, file.filename or 'source', UPLOAD_DIR)
-        extracted = extract_document(path, file.content_type)
-    except ValueError as exc:
-        raise HTTPException(415, str(exc)) from exc
-
-    score = edition_match_score(extracted.text, edition or (book.edition if book else None), book.title if book else None)
     row = SourceFile(
         package_id=package_id,
         source_type=source_type,
-        file_key=str(path),
         original_filename=file.filename,
         edition=edition,
-        mime_type=file.content_type,
-        page_count=extracted.page_count,
         reliability_score=max(0, min(100, reliability_score)),
-        edition_match_score=score,
-        checksum=extracted.checksum,
-        status='EXTRACTED' if extracted.text else 'NEEDS_REVIEW',
-        extracted_text=extracted.text,
-        extraction_meta={
-            'method': extracted.extraction_method,
-            'warnings': extracted.warnings,
-            'characters': len(extracted.text),
-            'bytes': len(data),
-        },
+        status='DISCOVERED',
     )
     db.add(row)
     db.flush()
-    for chunk in chunk_pages(extracted.pages):
-        db.add(SourceChunk(source_file_id=row.id, **chunk, metadata_json={'source_type': source_type}))
-    update_package_completeness(db, package)
+    try:
+        _apply_extracted_source(
+            db,
+            package,
+            row,
+            data,
+            file.content_type,
+            file.filename or 'source',
+            edition or (book.edition if book else None),
+            book.title if book else None,
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(415, str(exc)) from exc
     db.commit()
     db.refresh(row)
     return {
@@ -187,9 +300,58 @@ async def upload_source(
         'page_count': row.page_count,
         'checksum': row.checksum,
         'edition_match_score': row.edition_match_score,
-        'warnings': row.extraction_meta.get('warnings', []),
+        'warnings': (row.extraction_meta or {}).get('warnings', []),
         'package_completeness': package.completeness_score,
         'package_quality': package.quality_score,
+    }
+
+
+@router.post('/source-files/{source_file_id}/fetch-registered')
+def fetch_registered_source(source_file_id: int, db: Session = Depends(get_db)):
+    row = db.query(SourceFile).filter(SourceFile.id == source_file_id).first()
+    if not row:
+        raise HTTPException(404, 'Source file not found')
+    if not row.source_url:
+        raise HTTPException(409, 'Source file has no registered source_url')
+    package = db.query(SourcePackage).filter(SourcePackage.id == row.package_id).first()
+    if not package:
+        raise HTTPException(404, 'Source package not found')
+    book = db.query(Book).filter(Book.id == package.book_id).first()
+
+    try:
+        data, content_type, final_url = _download_registered_source(row.source_url)
+        parsed = urlparse(final_url)
+        filename = Path(parsed.path).name or f'source-{row.id}'
+        _apply_extracted_source(
+            db,
+            package,
+            row,
+            data,
+            content_type,
+            filename,
+            book.edition if book else None,
+            book.title if book else None,
+            source_url=final_url,
+        )
+    except HTTPException:
+        db.rollback()
+        raise
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(422, str(exc)) from exc
+
+    db.commit()
+    db.refresh(row)
+    return {
+        'source_file_id': row.id,
+        'status': row.status,
+        'page_count': row.page_count,
+        'checksum': row.checksum,
+        'edition_match_score': row.edition_match_score,
+        'warnings': (row.extraction_meta or {}).get('warnings', []),
+        'package_completeness': package.completeness_score,
+        'package_quality': package.quality_score,
+        'final_source_url': (row.extraction_meta or {}).get('final_source_url'),
     }
 
 

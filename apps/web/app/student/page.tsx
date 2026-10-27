@@ -1,19 +1,25 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {apiJson} from '../../lib/api';
-import {BottomNav,Metric,Notice,Pill,PrimaryLink,ProgressBar,StudentCard,StudentShell} from './_components/StudentUI';
+import {API,apiJson,studentHeaders} from '../../lib/api';
+import {BottomNav,Metric,Notice,Pill,PrimaryButton,PrimaryLink,ProgressBar,StudentCard,StudentShell} from './_components/StudentUI';
 
 type Home={experimental:boolean;student:{display_name:string};course:{grade:number;subject:string;semester:number};book:{title:string;book_code:string};unit:{title:string;unit_number:number};lesson:{id:number;title:string;lesson_code:string;estimated_minutes:number};progress_percent:number;attempts:number;skills_count:number;plan:Array<{type:string;title:string;minutes:number;href:string}>};
 
 export default function Student(){
-  const [home,setHome]=useState<Home|null>(null);
-  const [error,setError]=useState('');
+  const [home,setHome]=useState<Home|null>(null);const [error,setError]=useState('');const [logoutBusy,setLogoutBusy]=useState(false);
   useEffect(()=>{
     if(!localStorage.getItem('pal_student_token')){setError('سجّل الدخول أو أنشئ حسابًا لتبدأ النسخة التجريبية.');return;}
     apiJson<Home>('/demo/home',{},true).then(setHome).catch(e=>setError(e.message||'تعذر تحميل النسخة التجريبية'));
   },[]);
 
+  async function logout(){
+    setLogoutBusy(true);
+    try{await fetch(`${API}/auth/logout`,{method:'POST',headers:studentHeaders()});}catch{}
+    localStorage.removeItem('pal_student_token');window.location.href='/student/login';
+  }
+
   return <StudentShell title={home?`مرحبًا ${home.student.display_name} 👋`:'مرحبًا 👋'} subtitle="نسخة تجريبية كاملة للصف الخامس — العلوم والحياة — الدرس الأول فقط">
+    {home&&<div style={{display:'flex',justifyContent:'flex-end',margin:'-6px 0 12px'}}><PrimaryButton secondary disabled={logoutBusy} onClick={()=>void logout()}>{logoutBusy?'جارٍ الخروج…':'تسجيل الخروج'}</PrimaryButton></div>}
     {error&&<div style={{marginBottom:14}}><Notice tone="warn">{error}<div style={{marginTop:10,display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/login">دخول الطالب</PrimaryLink><PrimaryLink href="/student/register" secondary>إنشاء حساب</PrimaryLink></div></Notice></div>}
     {!home&&!error&&<Notice>جارٍ إعداد مسارك التعليمي…</Notice>}
 

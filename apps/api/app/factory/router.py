@@ -13,6 +13,7 @@ from ..services.ai_gateway import AIGateway
 from ..services.generation_packet import build_lesson_generation_packet
 from ..schemas.factory import GeneratedLessonPayload
 from .generation_readiness import calculate_generation_readiness
+from .output_validation import validate_section_blueprint
 
 router = APIRouter(prefix='/factory', tags=['content-factory'], dependencies=[Depends(require_admin)])
 EXECUTABLE_JOB_STATUSES = {'QUEUED', 'WAITING_PROVIDER'}
@@ -263,6 +264,7 @@ def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -
     allowed_chunks = {x.get('source_chunk_id') for x in packet.get('source_context', []) if x.get('source_chunk_id')}
     allowed_skills = {x.get('skill_code') for x in packet.get('skills', []) if x.get('skill_code')}
     output = payload.model_dump()
+    section_blueprint_validation = validate_section_blueprint(packet, payload)
 
     invalid_chunks = []
     unknown_skills = []
@@ -298,7 +300,12 @@ def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -
         validate_artifact(item, 'remediation', check_skills=True)
 
     provenance_score = round(100 * cited / total_citable, 1) if total_citable else 0.0
-    valid = not invalid_chunks and not unknown_skills and provenance_score == 100.0
+    valid = (
+        not invalid_chunks
+        and not unknown_skills
+        and provenance_score == 100.0
+        and section_blueprint_validation['valid']
+    )
     count = db.query(ContentCandidate).filter(ContentCandidate.lesson_id == job.source_id).count() + 1
     candidate = ContentCandidate(
         lesson_id=job.source_id, ai_job_id=job.id, version_label=f'candidate-{count}',
@@ -311,6 +318,7 @@ def _store_candidate(job: AIJob, payload: GeneratedLessonPayload, db: Session) -
             'citable_items': total_citable,
             'cited_items': cited,
             'all_citable_items_have_refs': provenance_score == 100.0,
+            'section_blueprint': section_blueprint_validation,
             'input_revalidated_before_ingest': True,
         },
     )

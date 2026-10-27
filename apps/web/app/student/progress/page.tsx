@@ -31,7 +31,7 @@ export default function ProgressPage(){
         </StudentCard>})}</div>
 
       {data.skills.every(x=>x.evidence_count===0)&&<div style={{marginTop:14}}><Notice tone="warn">لم تُسجل إجابات بعد. افتح الدرس وأجب عن الأسئلة لتبدأ درجات Mastery بالتحرك.</Notice></div>}
-      <StudentCard style={{marginTop:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/lesson">العودة إلى الدرس</PrimaryLink><PrimaryLink href="/student/recovery" secondary>مراجعة ذكية</PrimaryLink></div></StudentCard>
+      <StudentCard style={{marginTop:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/result">نتيجة الدرس</PrimaryLink><PrimaryLink href="/student/lesson" secondary>العودة إلى الدرس</PrimaryLink><PrimaryLink href="/student/recovery" secondary>مراجعة ذكية</PrimaryLink></div></StudentCard>
       <BottomNav active="progress"/>
     </>}
   </StudentShell>;

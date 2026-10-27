@@ -17,8 +17,18 @@ type Result={
 export default function ResultPage(){
   const [data,setData]=useState<Result|null>(null);
   const [error,setError]=useState('');
+  const [resetting,setResetting]=useState(false);
 
   useEffect(()=>{apiJson<Result>('/demo/result',{},true).then(setData).catch(e=>setError(e.message||'تعذر تحميل النتيجة'))},[]);
+
+  async function resetProgress(){
+    if(!window.confirm('هل تريد إعادة تجربة الدرس من البداية؟ ستُحذف محاولاتك وMastery لهذا الدرس فقط، وستبقى ملاحظات Beta محفوظة.'))return;
+    setResetting(true);setError('');
+    try{
+      await apiJson('/demo/reset-progress',{method:'POST'},true);
+      window.location.href='/student/lesson';
+    }catch(e:any){setError(e.message||'تعذر إعادة التجربة');setResetting(false);}
+  }
 
   return <StudentShell title="نتيجة الدرس" subtitle="ملخص تجريبي يجمع الأسئلة وMastery حسب المهارة." backHref="/student">
     {error&&<div style={{marginBottom:14}}><Notice tone="bad">{error}</Notice></div>}
@@ -58,7 +68,7 @@ export default function ResultPage(){
       </StudentCard>
 
       <Notice tone="info">{data.notice}</Notice>
-      <StudentCard style={{marginTop:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/lesson">إعادة الدرس</PrimaryLink><PrimaryLink href="/student/progress" secondary>تفاصيل المهارات</PrimaryLink><PrimaryLink href="/student/feedback" secondary>أبلغ عن مشكلة</PrimaryLink><PrimaryLink href="/student" secondary>الرئيسية</PrimaryLink></div></StudentCard>
+      <StudentCard style={{marginTop:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/lesson">إعادة الدرس</PrimaryLink><PrimaryLink href="/student/progress" secondary>تفاصيل المهارات</PrimaryLink><PrimaryLink href="/student/feedback" secondary>أبلغ عن مشكلة</PrimaryLink><PrimaryLink href="/student" secondary>الرئيسية</PrimaryLink><button onClick={()=>void resetProgress()} disabled={resetting} style={{padding:'10px 13px',borderRadius:10,border:'1px solid #f0c7c2',background:'#fff7f6',color:'#b42318',fontWeight:900,cursor:resetting?'wait':'pointer'}}>{resetting?'جارٍ الإعادة…':'إعادة التجربة من البداية'}</button></div></StudentCard>
       <BottomNav active="progress"/>
     </>}
   </StudentShell>;

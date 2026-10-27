@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..auth.deps import require_admin
@@ -35,11 +35,17 @@ def _current_official_source(db: Session, package_id: int) -> SourceFile | None:
     return None
 
 
-def _first_lesson(db: Session, book_id: int) -> Lesson | None:
-    unit = db.query(Unit).filter(Unit.book_id == book_id).order_by(Unit.order_no, Unit.unit_number).first()
-    if not unit:
+def _pipeline_lesson(db: Session, book_id: int, lesson_id: int | None) -> Lesson | None:
+    unit_ids = [row.id for row in db.query(Unit).filter(Unit.book_id == book_id).all()]
+    if not unit_ids:
         return None
-    return db.query(Lesson).filter(Lesson.unit_id == unit.id).order_by(Lesson.lesson_number).first()
+    query = db.query(Lesson).filter(Lesson.unit_id.in_(unit_ids))
+    if lesson_id is not None:
+        lesson = query.filter(Lesson.id == lesson_id).first()
+        if not lesson:
+            raise HTTPException(404, 'Selected lesson is not part of the current semester')
+        return lesson
+    return query.join(Unit, Unit.id == Lesson.unit_id).order_by(Unit.order_no, Unit.unit_number, Lesson.lesson_number).first()
 
 
 def _stage(key: str, label: str, status: str, *, detail: str, action: str | None = None) -> dict:
@@ -97,17 +103,22 @@ def current_semester(db: Session = Depends(get_db)):
 
 
 @router.get('/current-semester/pipeline')
-def current_semester_pipeline(db: Session = Depends(get_db)):
+def current_semester_pipeline(
+    db: Session = Depends(get_db),
+    lesson_id: int | None = Query(default=None, ge=1),
+):
     book, package = _registry(db)
-    lesson = _first_lesson(db, book.id)
+    selected_lesson_id = lesson_id if isinstance(lesson_id, int) else None
+    lesson = _pipeline_lesson(db, book.id, selected_lesson_id)
     source = _current_official_source(db, package.id)
     database_backend = _database_backend(db)
     production_database = database_backend in {'postgresql', 'postgres'}
     storage = storage_configuration()
     storage_ready = (not production_database) or (storage.durable and storage.configured)
+    lesson_label = lesson.title if lesson else '—'
 
     stages: list[dict] = []
-    stages.append(_stage('REGISTRY', 'سجل الفصل الأول', 'DONE', detail=f'{book.book_code} · {package.package_code}'))
+    stages.append(_stage('REGISTRY', 'سجل الفصل الأول', 'DONE', detail=f'{book.book_code} · {package.package_code} · {lesson_label}'))
     stages.append(_stage(
         'DURABLE_STORAGE', 'تخزين ملفات المنهاج', 'DONE' if storage_ready else 'BLOCKED',
         detail=(
@@ -124,7 +135,6 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
             detail='مصدر الوزارة غير مسجل في الحزمة الحالية.',
             action='SYNC_OR_REGISTER_OFFICIAL_SOURCE' if storage_ready else None,
         ))
-        source_fetched = False
         source_ready = False
         scope_verified = False
     else:
@@ -184,7 +194,7 @@ def current_semester_pipeline(db: Session = Depends(get_db)):
     stages.append(_stage(
         'LESSON_LINKING', 'ربط المصدر بالدرس',
         'DONE' if link_done else ('READY' if scope_verified else 'BLOCKED'),
-        detail=(f'{candidate_links} مرشح + {verified_links} موثّق للدرس الأول.' if link_done else 'لم تُنشأ Lesson Source candidates بعد.'),
+        detail=(f'{candidate_links} مرشح + {verified_links} موثّق للدرس «{lesson_label}».' if link_done else f'لم تُنشأ Source candidates للدرس «{lesson_label}» بعد.'),
         action=None if link_done else ('AUTO_LINK_LESSONS' if scope_verified else None),
     ))
     stages.append(_stage(

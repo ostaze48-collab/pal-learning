@@ -26,7 +26,7 @@ def _payload():
             }],
         }],
         'questions': [],
-        'summary': ['الجهاز الهيكلي يساعد على دعامة الجسم.'],
+        'summary': [{'text': 'الجهاز الهيكلي يساعد على دعامة الجسم.', 'source_chunk_ids': [1]}],
         'flashcards': [],
         'misconceptions': [],
         'remediation_candidates': [],

@@ -151,7 +151,7 @@ def _valid_generated_payload(chunk_id: int, skill_code: str):
             'skill_codes': [skill_code],
             'source_chunk_ids': [chunk_id],
         }],
-        'summary': ['الجهاز الهيكلي يساعد على دعامة الجسم.'],
+        'summary': [{'text': 'الجهاز الهيكلي يساعد على دعامة الجسم.', 'source_chunk_ids': [chunk_id]}],
         'flashcards': [],
         'misconceptions': [],
         'remediation_candidates': [],
@@ -183,6 +183,25 @@ def test_structured_output_rejects_out_of_packet_source():
     data = r.json()
     assert data['status'] == 'REJECTED'
     assert data['validation']['invalid_chunk_refs']
+
+
+def test_structured_output_rejects_out_of_packet_flashcard_source():
+    client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS)
+    queued = client.post('/factory/lessons/1/generate', headers=ADMIN_HEADERS).json()
+    job = client.get(f"/factory/jobs/{queued['job_id']}", headers=ADMIN_HEADERS).json()
+    chunk_id = job['input']['source_context'][0]['source_chunk_id']
+    skill_code = job['input']['skills'][0]['skill_code']
+    payload = _valid_generated_payload(chunk_id, skill_code)
+    payload['flashcards'] = [{
+        'front': 'ما وظيفة الدعامة؟',
+        'back': 'يساعد الهيكل على دعامة الجسم.',
+        'source_chunk_ids': [999999],
+    }]
+    r = client.post(f"/factory/jobs/{queued['job_id']}/ingest-output", json=payload, headers=ADMIN_HEADERS)
+    assert r.status_code == 200
+    data = r.json()
+    assert data['status'] == 'REJECTED'
+    assert any(x['where'] == 'flashcard' for x in data['validation']['invalid_chunk_refs'])
 
 
 def test_retention_review_and_daily_plan():

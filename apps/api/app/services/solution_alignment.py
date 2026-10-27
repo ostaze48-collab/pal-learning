@@ -32,12 +32,16 @@ def align_questions(question_prompts: list[str], solution_items: list[dict], thr
             if best is None or score > best['score']:
                 best = {'score': score, 'item': item}
         if best and best['score'] >= threshold:
+            item = best['item']
             results.append({
                 'question': q,
                 'matched': True,
                 'score': best['score'],
-                'reference_answer': best['item'].get('answer'),
-                'source_page': best['item'].get('page'),
+                'reference_answer': item.get('answer'),
+                'source_page': item.get('page'),
+                'source_line': item.get('line'),
+                'source_answer_line': item.get('answer_line'),
+                'source_file_id': item.get('source_file_id') or item.get('_source_file_id'),
             })
         else:
             results.append({'question': q, 'matched': False, 'score': best['score'] if best else 0.0})

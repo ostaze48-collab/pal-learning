@@ -30,7 +30,7 @@ export default function Student(){
           <div style={{fontSize:34}}>🔬</div>
         </div>
         <div style={{marginTop:16}}><div style={{display:'flex',justifyContent:'space-between',marginBottom:6,fontSize:13}}><strong>تقدمك في الدرس</strong><strong>{home.progress_percent}%</strong></div><ProgressBar value={home.progress_percent}/></div>
-        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:16}}><PrimaryLink href="/student/lesson">{home.attempts?'متابعة الدرس':'ابدأ الدرس'}</PrimaryLink><PrimaryLink href="/student/progress" secondary>عرض التقدم</PrimaryLink><PrimaryLink href="/student/feedback" secondary>أرسل ملاحظة</PrimaryLink></div>
+        <div style={{display:'flex',gap:8,flexWrap:'wrap',marginTop:16}}><PrimaryLink href="/student/lesson">{home.attempts?'متابعة الدرس':'ابدأ الدرس'}</PrimaryLink><PrimaryLink href="/student/activity" secondary>نشاط المطابقة</PrimaryLink><PrimaryLink href="/student/progress" secondary>عرض التقدم</PrimaryLink><PrimaryLink href="/student/feedback" secondary>أرسل ملاحظة</PrimaryLink></div>
       </StudentCard>
 
       <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginBottom:14}}>
@@ -46,6 +46,7 @@ export default function Student(){
         <div style={{fontSize:12,color:'#667085',fontWeight:800}}>ما المتاح في هذه النسخة؟</div>
         <div style={{display:'grid',gap:8,marginTop:10}}>
           <div>✓ درس تفاعلي كامل عن المجهر واكتشاف الخلية</div>
+          <div>✓ نشاط مطابقة تفاعلي يسجل النتيجة</div>
           <div>✓ أسئلة تحفظ تقدمك وتحدّث Mastery حسب المهارة</div>
           <div>✓ مساعد درس تجريبي مقيد بمحتوى الدرس</div>
           <div>✓ مراجعة قصيرة مبنية على أضعف مهارة لديك</div>

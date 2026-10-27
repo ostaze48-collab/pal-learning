@@ -10,6 +10,13 @@ from pypdf import PdfReader
 
 
 ARABIC_DIACRITICS = re.compile(r'[\u0617-\u061A\u064B-\u0652\u0670\u06D6-\u06ED]')
+DIGIT_TRANSLATION = str.maketrans({
+    '٠': '0', '١': '1', '٢': '2', '٣': '3', '٤': '4',
+    '٥': '5', '٦': '6', '٧': '7', '٨': '8', '٩': '9',
+    '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
+    '۵': '5', '۶': '6', '۷': '7', '۸': '8', '۹': '9',
+})
+YEAR_RE = re.compile(r'(?<!\d)(?:19|20)\d{2}(?!\d)')
 
 
 @dataclass
@@ -106,6 +113,7 @@ def chunk_pages(pages: Iterable[str], max_chars: int = 1800, overlap: int = 180)
 
 
 def normalize_heading(text: str) -> str:
+    text = (text or '').translate(DIGIT_TRANSLATION)
     text = ARABIC_DIACRITICS.sub('', text)
     text = text.replace('أ', 'ا').replace('إ', 'ا').replace('آ', 'ا')
     return re.sub(r'\s+', ' ', text).strip()
@@ -154,18 +162,39 @@ def detect_curriculum_structure(text: str) -> dict:
     }
 
 
+def _expected_year(expected_year: str | None) -> str | None:
+    if not expected_year:
+        return None
+    normalized = normalize_heading(str(expected_year))
+    match = YEAR_RE.search(normalized)
+    return match.group(0) if match else None
+
+
 def edition_match_score(extracted_text: str, expected_year: str | None, expected_title: str | None = None) -> float:
+    """Score evidence that a source matches the requested edition.
+
+    An exact target year is the dominant signal (70 points). Matching the title can
+    contribute at most 30 points. There is deliberately no baseline score merely
+    for having extractable text, so an older book with the same title cannot look
+    like a current edition.
+    """
     if not extracted_text:
         return 0.0
-    score = 35.0
-    normalized = normalize_heading(extracted_text[:15000]).lower()
-    if expected_year and str(expected_year) in normalized:
-        score += 35
+
+    normalized = normalize_heading(extracted_text[:20000]).lower()
+    score = 0.0
+
+    target_year = _expected_year(expected_year)
+    if target_year and target_year in set(YEAR_RE.findall(normalized)):
+        score += 70.0
+
     if expected_title:
         tokens = [t for t in normalize_heading(expected_title).lower().split() if len(t) >= 3]
-        if tokens:
-            hits = sum(1 for token in set(tokens) if token in normalized)
-            score += 30 * (hits / len(set(tokens)))
+        unique_tokens = set(tokens)
+        if unique_tokens:
+            hits = sum(1 for token in unique_tokens if token in normalized)
+            score += 30.0 * (hits / len(unique_tokens))
+
     return round(min(100.0, score), 1)
 
 

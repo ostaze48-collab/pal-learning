@@ -70,6 +70,37 @@ export default function CurriculumAdmin(){
   const map:Record<string,PackageFile[]>={}; for(const f of pkg?.files||[])(map[f.source_type]??=[]).push(f); return map;
  },[pkg]);
 
+ async function fetchRegisteredSource(file:PackageFile){
+  return action(`جلب ${sourceLabels[file.source_type]||file.source_type}`,()=>api(`/importer/source-files/${file.id}/fetch-registered`,{method:'POST'}));
+ }
+
+ async function preparePackage(){
+  return action('تهيئة الرزمة تلقائيًا',async()=>{
+   const current:PackageData=await api(`/curriculum/source-packages/${packageId}`);
+   const official=current.files.find(f=>f.source_type==='OFFICIAL_PACKAGE'&&f.source_url);
+   if(official&&official.chunk_count===0){
+    await api(`/importer/source-files/${official.id}/fetch-registered`,{method:'POST'});
+   }
+   const processed=await api(`/importer/source-packages/${packageId}/process`,{method:'POST'});
+   const linked=await api(`/importer/source-packages/${packageId}/link-lessons`,{method:'POST'});
+   return {status:`${processed.package_status} · ${linked.created_links||0} روابط جديدة`};
+  });
+ }
+
+ async function generateExecuteValidate(){
+  if(!lessonId)return;
+  return action('Generate → Execute → Validate',async()=>{
+   const queued=await api(`/factory/lessons/${lessonId}/generate`,{method:'POST'});
+   const executed=await api(`/factory/jobs/${queued.job_id}/execute`,{method:'POST'});
+   if(executed.status==='WAITING_PROVIDER'){
+    return {status:`WAITING_PROVIDER · Job #${queued.job_id}`};
+   }
+   if(executed.status==='FAILED')throw new Error(executed.error||'فشل تنفيذ AI Job');
+   const candidate=await api(`/factory/jobs/${queued.job_id}/ingest-provider-output`,{method:'POST'});
+   return {status:`${candidate.status} · ${candidate.version_label} · Provenance ${candidate.provenance_score}%`};
+  });
+ }
+
  if(!tokenPresent)return <main style={{maxWidth:700,margin:'60px auto',padding:20}}><h1>مصنع المنهاج</h1><p>يجب تسجيل الدخول كإدارة أولًا.</p><a href="/admin/login">الانتقال إلى تسجيل الدخول</a></main>;
 
  return <main style={{maxWidth:1180,margin:'24px auto',padding:16}}>
@@ -88,13 +119,17 @@ export default function CurriculumAdmin(){
   </div>
 
   <section style={panel}>
-   <h2>المصادر</h2>
+   <div style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center',flexWrap:'wrap'}}><h2>المصادر</h2><button disabled={!!busy} onClick={preparePackage} style={primaryButton}>{busy==='تهيئة الرزمة تلقائيًا'?'جارٍ التهيئة…':'تهيئة الرزمة تلقائيًا'}</button></div>
    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:10}}>
     {Object.entries(sourceLabels).map(([code,label])=>{
      const files=sourcesByType[code]||[]; return <div key={code} style={{border:'1px solid #e8edf5',borderRadius:12,padding:13}}>
       <strong>{label}</strong><div style={{fontSize:11,opacity:.5}}>{code}</div>
       {files.length?files.map(f=><div key={f.id} style={{marginTop:9,fontSize:13,lineHeight:1.7}}>
        <div>{f.original_filename||`Source #${f.id}`}</div><div>Reliability {f.reliability_score}% · Edition {f.edition_match_score}%</div><div>{f.page_count||0} صفحة · {f.chunk_count} chunks · {f.status}</div>
+       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:7}}>
+        {f.source_url&&f.chunk_count===0&&<button disabled={!!busy} onClick={()=>fetchRegisteredSource(f)}>جلب من الرابط</button>}
+        {f.chunk_count>0&&<button disabled={!!busy} onClick={()=>action(`تحليل Source #${f.id}`,()=>api(`/importer/source-files/${f.id}/analyze`,{method:'POST'}))}>تحليل البنية</button>}
+       </div>
       </div>):<div style={{marginTop:8,opacity:.5}}>غير موجود</div>}
      </div>
     })}
@@ -112,7 +147,9 @@ export default function CurriculumAdmin(){
     <Action disabled={!!busy} onClick={()=>action('ربط الدروس بالمصدر',()=>api(`/importer/source-packages/${packageId}/link-lessons`,{method:'POST'}))}>2. ربط المصدر</Action>
     <Action disabled={!!busy} onClick={()=>action('مطابقة الحلول',()=>api(`/qa/source-packages/${packageId}/align-solutions`,{method:'POST'}))}>3. مطابقة الحلول</Action>
     <Action disabled={!!busy||!lessonId} onClick={()=>action('إنشاء AI Job',()=>api(`/factory/lessons/${lessonId}/generate`,{method:'POST'}))}>4. Generate Job</Action>
+    <button disabled={!!busy||!lessonId} onClick={generateExecuteValidate} style={primaryButton}>تشغيل المسار AI كاملًا</button>
    </div>
+   {factory&&!factory.generation_ready&&<div style={{marginTop:12,padding:11,borderRadius:10,background:'#fff7e6'}}>التوليد الحقيقي غير مفعّل بعد. جميع مراحل المصدر والربط والـQA تعمل، لكن Execute سيصل إلى WAITING_PROVIDER حتى يتم إعداد مزوّد AI في Render.</div>}
   </section>
 
   <section style={panel}>
@@ -149,5 +186,6 @@ export default function CurriculumAdmin(){
 }
 
 const panel:React.CSSProperties={background:'white',padding:18,borderRadius:16,border:'1px solid #e8edf5',marginTop:16};
+const primaryButton:React.CSSProperties={border:0,borderRadius:10,padding:'10px 12px',background:'#14213d',color:'white',fontWeight:700};
 function Metric({title,value,sub}:{title:string;value:string;sub:string}){return <div style={{background:'white',padding:16,borderRadius:14,border:'1px solid #e8edf5'}}><div style={{fontSize:12,opacity:.55}}>{title}</div><div style={{fontSize:21,fontWeight:800,margin:'5px 0'}}>{value}</div><div style={{fontSize:12,opacity:.65}}>{sub}</div></div>}
 function Action({children,onClick,disabled}:{children:React.ReactNode;onClick:()=>void;disabled?:boolean}){return <button disabled={disabled} onClick={onClick} style={{border:0,borderRadius:10,padding:'10px 12px',background:'#1f6feb',color:'white',fontWeight:700,opacity:disabled?0.6:1}}>{children}</button>}

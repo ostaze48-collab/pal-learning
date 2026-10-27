@@ -6,11 +6,13 @@ const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
 type Health={version:string;database:{backend:string;persistent:boolean;production_recommended:boolean}};
 type LearningHealth={students:number;books:number;lessons:number;source_packages:number;ai_jobs:number;question_attempts:number;correct_rate_percent:number;root_gaps_found:number;skills_needing_support_rows:number};
-type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;migration_revision?:string|null;migration_head?:string|null;migration_reason?:string|null;ai_provider?:string;production_origins?:string[];bootstrap_password_present?:boolean;release_policy?:{direct_legacy_publish_enabled?:boolean;audited_release_transaction_implemented?:boolean}}};
+type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;migration_revision?:string|null;migration_head?:string|null;migration_reason?:string|null;ai_provider?:string;production_origins?:string[];bootstrap_password_present?:boolean;storage_backend?:string;storage_durable?:boolean;storage_configured?:boolean;storage_bucket?:string|null;storage_missing?:string[];release_policy?:{direct_legacy_publish_enabled?:boolean;audited_release_transaction_implemented?:boolean}}};
 
 const readinessLabels:Record<string,string>={
   persistent_database:'قاعدة بيانات PostgreSQL دائمة',
   database_migration_current:'قاعدة البيانات على Alembic migration head الحالي',
+  durable_source_storage:'تخزين دائم لملفات المنهاج (R2/S3)',
+  source_storage_configured:'إعدادات تخزين الملفات كاملة',
   jwt_secret_configured:'JWT_SECRET قوي ومُعد',
   cors_has_production_origin:'CORS يحتوي نطاق الإنتاج',
   cors_has_no_wildcard:'CORS بدون wildcard',
@@ -46,13 +48,14 @@ export default function Admin(){
     {readiness&&<section style={{padding:16,borderRadius:14,background:readiness.ready?'#ecfdf3':'#fff4e5',border:`1px solid ${readiness.ready?'#b8e7ca':'#ffd59a'}`,marginBottom:16}}>
       <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'center',flexWrap:'wrap'}}>
         <strong>{readiness.ready?'Production Ready ✓':'Beta Readiness: BLOCKED'}</strong>
-        <span>{readiness.details.database_backend||'—'} · {readiness.details.ai_provider||'—'}</span>
+        <span>{readiness.details.database_backend||'—'} · {readiness.details.storage_backend||'LOCAL'} · {readiness.details.ai_provider||'—'}</span>
       </div>
-      <div style={{fontSize:12,opacity:.7,marginTop:6}}>Migration: {readiness.details.migration_revision||'none'} / head {readiness.details.migration_head||'—'}</div>
+      <div style={{fontSize:12,opacity:.7,marginTop:6}}>Migration: {readiness.details.migration_revision||'none'} / head {readiness.details.migration_head||'—'} · Storage bucket: {readiness.details.storage_bucket||'—'}</div>
       {!readiness.ready&&<p style={{margin:'8px 0 10px'}}>لن نعتبر المنصة جاهزة للـBeta حتى تُغلق العقبات التالية:</p>}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:8}}>
         {Object.entries(readiness.checks).map(([key,ok])=><div key={key} style={{padding:'9px 10px',borderRadius:9,background:'rgba(255,255,255,.7)'}}>{ok?'✓':'✗'} {readinessLabels[key]||key}</div>)}
       </div>
+      {!!readiness.details.storage_missing?.length&&<div style={{marginTop:10,fontSize:13}}>Storage missing: {readiness.details.storage_missing.join(' · ')}</div>}
       {readiness.details.release_policy&&!readiness.details.release_policy.audited_release_transaction_implemented&&<div style={{marginTop:10,fontSize:13}}>النشر الحقيقي ما زال مغلقًا عمدًا: Final Release Gate يقيس الجاهزية فقط، ولا يوجد حتى الآن transaction مدقق ينقل Staging إلى Live.</div>}
     </section>}
     {!health?.database?.persistent&&health&&!readiness&&<div style={{padding:15,borderRadius:14,background:'#fff4e5',border:'1px solid #ffd59a',marginBottom:16}}><strong>تنبيه جاهزية:</strong> الـAPI يعمل حاليًا على SQLite. هذا مناسب للعرض التجريبي فقط؛ قبل Beta يجب ربط DATABASE_URL بقاعدة PostgreSQL الموجودة على Render.</div>}

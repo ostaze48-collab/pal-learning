@@ -1,6 +1,7 @@
 import os
 import sys
 from pathlib import Path
+from uuid import uuid4
 
 ROOT = Path(__file__).resolve().parents[1]
 DB = ROOT / 'tests' / 'academic_qa.db'
@@ -32,6 +33,7 @@ def _stage_release_ready_lesson():
 الدرس الأول: الجهاز الهيكلي
 يساعد الجهاز الهيكلي على دعامة الجسم وحماية بعض الأعضاء والمساعدة على الحركة.
 '''.strip()
+    text += f'\nTEST_NONCE {uuid4()}'
     upload = client.post(
         '/importer/source-packages/1/upload',
         data={'source_type': 'STUDENT_BOOK', 'edition': '2026', 'reliability_score': '100'},

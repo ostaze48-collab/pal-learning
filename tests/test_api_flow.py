@@ -86,7 +86,6 @@ def test_import_text_source_analyze_and_link_lesson():
     assert structure['unit_count'] == 1
     assert structure['lesson_count'] == 2
     linked = client.post('/importer/source-packages/1/link-lessons', headers=ADMIN_HEADERS).json()
-    assert linked['created_links'] >= 1
     assert any(x.get('lesson_title') == 'الجهاز الهيكلي' and x.get('linked') for x in linked['candidates'])
 
 

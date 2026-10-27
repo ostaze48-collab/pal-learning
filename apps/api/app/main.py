@@ -26,7 +26,7 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.9.1'
+VERSION = '1.10.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -77,10 +77,13 @@ def health():
             'offline-sync', 'qa-gate', 'learning-health', 'content-factory-packets',
             'structured-ai-output', 'content-candidates', 'retention', 'daily-plan',
             'improvement-queue', 'admin-auth', 'revocable-sessions',
-            'student-session-binding', 'official-package-priority', 'readiness-check',
-            'safe-registered-source-fetch', 'provider-backed-content-factory',
-            'candidate-preflight-qa', 'admin-staging-approval', 'immutable-staged-versions',
+            'student-session-binding', 'student-publication-visibility-gate',
+            'published-question-attempt-gate', 'published-learning-event-reference-gate',
+            'official-package-priority', 'readiness-check', 'safe-registered-source-fetch',
+            'provider-backed-content-factory', 'candidate-preflight-qa',
+            'admin-staging-approval', 'immutable-staged-versions',
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
+            'release-manifest-sha256', 'direct-legacy-publish-disabled',
             'production-readiness-diagnostics', 'alembic-migration-gate',
             'official-source-catalog', 'catalog-scope-quarantine',
             'unreleased-demo-publication-quarantine', 'current-curriculum-plan-scope-evidence',

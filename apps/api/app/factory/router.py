@@ -15,6 +15,7 @@ from ..schemas.factory import GeneratedLessonPayload
 from .generation_readiness import calculate_generation_readiness
 
 router = APIRouter(prefix='/factory', tags=['content-factory'], dependencies=[Depends(require_admin)])
+EXECUTABLE_JOB_STATUSES = {'QUEUED', 'WAITING_PROVIDER'}
 
 
 @router.get('/status')
@@ -203,11 +204,29 @@ def _require_fresh_job_input(job: AIJob, db: Session) -> dict:
     )
 
 
+def _require_executable_job_state(job: AIJob) -> None:
+    if job.status in EXECUTABLE_JOB_STATUSES:
+        return
+    raise HTTPException(
+        409,
+        detail={
+            'message': 'Job cannot be executed from its current lifecycle state',
+            'job_id': job.id,
+            'status': job.status,
+            'allowed_statuses': sorted(EXECUTABLE_JOB_STATUSES),
+            'next_action': 'CREATE_NEW_JOB' if job.status in {
+                'FAILED', 'STALE_INPUT', 'OUTPUT_REJECTED', 'OUTPUT_SCHEMA_INVALID'
+            } else 'USE_CURRENT_OUTPUT',
+        },
+    )
+
+
 @router.post('/jobs/{job_id}/execute')
 def execute_factory_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(AIJob).filter(AIJob.id == job_id).first()
     if not job:
         raise HTTPException(404, 'Job not found')
+    _require_executable_job_state(job)
     _require_fresh_job_input(job, db)
 
     provider = os.getenv('AI_PROVIDER', 'LOCAL_MOCK')
@@ -224,6 +243,7 @@ def execute_factory_job(job_id: int, db: Session = Depends(get_db)):
         if response.output.get('requires_provider_for_generation'):
             job.status = 'WAITING_PROVIDER'
             job.progress = 25
+            job.completed_at = None
         else:
             job.status = 'COMPLETED'
             job.progress = 100
@@ -322,6 +342,16 @@ def ingest_provider_output(job_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, 'Job not found')
     if job.job_type != 'GENERATE_LESSON' or job.source_type != 'LESSON' or not job.source_id:
         raise HTTPException(409, 'Job is not a lesson-generation job')
+    if job.status != 'COMPLETED':
+        raise HTTPException(
+            409,
+            detail={
+                'message': 'Provider output can only be ingested from a COMPLETED job',
+                'job_id': job.id,
+                'status': job.status,
+                'required_status': 'COMPLETED',
+            },
+        )
     _require_fresh_job_input(job, db)
 
     output = ((job.result_json or {}).get('output') or {})

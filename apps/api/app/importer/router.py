@@ -32,7 +32,10 @@ router = APIRouter(prefix='/importer', tags=['curriculum-importer'], dependencie
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', Path(__file__).resolve().parents[2] / 'data' / 'uploads'))
 MAX_SOURCE_BYTES = int(os.getenv('MAX_SOURCE_BYTES', str(70 * 1024 * 1024)))
 SOURCE_FETCH_TIMEOUT_SECONDS = int(os.getenv('SOURCE_FETCH_TIMEOUT_SECONDS', '45'))
-DEFAULT_SOURCE_HOSTS = 'moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com'
+DEFAULT_SOURCE_HOSTS = (
+    'moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com,'
+    'elearn.edu.ps,elearnps.blob.core.windows.net'
+)
 
 SOURCE_WEIGHTS = {
     # 100 total. Current official learning packages are distinct from full textbooks.
@@ -142,66 +145,31 @@ def calculate_package_scores(files: list[SourceFile]) -> tuple[float, float]:
         by_type.setdefault(item.source_type, []).append(item)
 
     coverage = 0.0
-    verified_quality = 0.0
+    quality = 0.0
     for source_type, weight in SOURCE_WEIGHTS.items():
-        candidates = by_type.get(source_type, [])
-        if not candidates:
+        rows = by_type.get(source_type, [])
+        if not rows:
             continue
         coverage += weight
-        best_factor = max(
-            (
-                0.0
-                if getattr(item, 'status', None) == 'NEEDS_VISION'
-                else (
-                    (_bounded_score(item.reliability_score) / 100.0)
-                    * (_bounded_score(item.edition_match_score) / 100.0)
-                )
-            )
-            for item in candidates
-        )
-        verified_quality += weight * best_factor
-
-    return round(min(100.0, coverage), 1), round(min(100.0, verified_quality), 1)
-
-
-def select_primary_teaching_source(files: list[SourceFile]) -> SourceFile | None:
-    """Prefer current official material and never silently mix editions.
-
-    A usable OFFICIAL_PACKAGE is the first teaching source. If none is available,
-    a usable STUDENT_BOOK is used. NEEDS_VISION/NEEDS_REVIEW sources are never
-    allowed to become the factual teaching backbone.
-    """
-    usable_statuses = {'EXTRACTED', 'ANALYZED'}
-    for source_type in PRIMARY_TEACHING_SOURCE_ORDER:
-        candidates = [
-            x for x in files
-            if x.source_type == source_type
-            and x.extracted_text
-            and getattr(x, 'status', 'EXTRACTED') in usable_statuses
-        ]
-        if candidates:
-            return max(
-                candidates,
-                key=lambda x: (
-                    float(x.reliability_score or 0),
-                    float(x.edition_match_score or 0),
-                    int(x.id or 0),
-                ),
-            )
-    return None
+        best = 0.0
+        for row in rows:
+            if row.status in {'NEEDS_VISION', 'SCOPE_UNVERIFIED', 'SCOPE_REJECTED'}:
+                continue
+            reliability = _bounded_score(row.reliability_score) / 100.0
+            edition = _bounded_score(row.edition_match_score) / 100.0
+            best = max(best, reliability * edition)
+        quality += weight * best
+    return round(coverage, 2), round(quality, 2)
 
 
 def update_package_completeness(db: Session, package: SourcePackage) -> None:
     files = db.query(SourceFile).filter(SourceFile.package_id == package.id).all()
-    coverage, verified_quality = calculate_package_scores(files)
+    coverage, quality = calculate_package_scores(files)
     package.completeness_score = coverage
-    package.quality_score = verified_quality
-    types = {x.source_type for x in files}
-    if 'STUDENT_BOOK' in types or 'OFFICIAL_PACKAGE' in types:
-        package.status = 'INGESTING' if coverage < 100 else 'READY_FOR_PROCESSING'
+    package.quality_score = quality
 
 
-def _apply_extracted_source(
+def _persist_extracted_source(
     db: Session,
     package: SourcePackage,
     row: SourceFile,
@@ -252,12 +220,19 @@ def _apply_extracted_source(
     else:
         row.status = 'NEEDS_REVIEW'
     row.extracted_text = extracted.text
-    row.source_url = source_url or row.source_url
+    # Preserve the registered/catalog URL as the stable source identity. Redirect
+    # destinations are stored separately for auditability because signed/CDN URLs
+    # may change without changing the curriculum source record.
+    registered_url = row.source_url
+    if not registered_url and source_url:
+        row.source_url = source_url
     row.extraction_meta = {
+        **dict(row.extraction_meta or {}),
         'method': extracted.extraction_method,
         'warnings': extracted.warnings,
         'characters': len(extracted.text),
         'bytes': len(data),
+        'registered_source_url': registered_url or row.source_url,
         'final_source_url': source_url,
         'text_page_count': extraction_quality.text_page_count,
         'empty_page_count': extraction_quality.empty_page_count,
@@ -286,76 +261,59 @@ async def upload_source(
 ):
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
-        raise HTTPException(404, 'Package not found')
-    if source_type not in SOURCE_WEIGHTS:
-        raise HTTPException(422, f'Unsupported source_type: {source_type}')
-
-    book = db.query(Book).filter(Book.id == package.book_id).first()
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, 'Empty file')
+        raise HTTPException(404, 'Source package not found')
+    if source_type not in set(SOURCE_WEIGHTS) | {'CURRICULUM_PLAN', 'CATALOG_CANDIDATE'}:
+        raise HTTPException(422, f'Unknown source type: {source_type}')
+    data = await file.read(MAX_SOURCE_BYTES + 1)
     if len(data) > MAX_SOURCE_BYTES:
         raise HTTPException(413, f'Source file exceeds the {MAX_SOURCE_BYTES // (1024 * 1024)} MiB limit')
-
-    checksum = sha256_bytes(data)
-    duplicate = db.query(SourceFile).filter(
-        SourceFile.package_id == package_id,
-        SourceFile.checksum == checksum,
+    existing = db.query(SourceFile).filter(
+        SourceFile.package_id == package.id,
+        SourceFile.checksum == sha256_bytes(data),
     ).first()
-    if duplicate:
+    if existing:
         raise HTTPException(
             409,
             detail={
                 'message': 'This exact source file is already registered in the package',
-                'existing_source_file_id': duplicate.id,
-                'checksum': checksum,
+                'existing_source_file_id': existing.id,
             },
         )
 
+    book = db.query(Book).filter(Book.id == package.book_id).first()
     row = SourceFile(
-        package_id=package_id,
+        package_id=package.id,
         source_type=source_type,
         original_filename=file.filename,
         edition=edition,
-        reliability_score=max(0, min(100, reliability_score)),
-        status='DISCOVERED',
+        reliability_score=reliability_score,
+        edition_match_score=0,
+        status='UPLOADED',
     )
     db.add(row)
     db.flush()
     try:
-        _apply_extracted_source(
-            db,
-            package,
-            row,
-            data,
-            file.content_type,
-            file.filename or 'source',
-            edition or (book.edition if book else None),
-            book.title if book else None,
+        _persist_extracted_source(
+            db, package, row, data, file.content_type, file.filename or f'source-{row.id}.bin',
+            book.edition if book else None, book.title if book else None,
         )
-    except ValueError as exc:
+        db.commit()
+    except HTTPException:
         db.rollback()
-        raise HTTPException(415, str(exc)) from exc
-    except RuntimeError as exc:
+        raise
+    except Exception as exc:
         db.rollback()
-        raise HTTPException(503, str(exc)) from exc
-    db.commit()
-    db.refresh(row)
+        raise HTTPException(422, str(exc)) from exc
+
     return {
         'source_file_id': row.id,
         'status': row.status,
+        'source_type': row.source_type,
         'page_count': row.page_count,
+        'edition_match_score': row.edition_match_score,
         'checksum': row.checksum,
         'file_key': row.file_key,
-        'storage_backend': (row.extraction_meta or {}).get('storage_backend'),
-        'durable_storage': (row.extraction_meta or {}).get('durable_storage', False),
-        'edition_match_score': row.edition_match_score,
-        'warnings': (row.extraction_meta or {}).get('warnings', []),
-        'extraction_quality': {
-            'text_coverage_percent': (row.extraction_meta or {}).get('text_coverage_percent'),
-            'average_characters_per_page': (row.extraction_meta or {}).get('average_characters_per_page'),
-            'needs_vision': (row.extraction_meta or {}).get('needs_vision', False),
-        },
+        'extraction_meta': row.extraction_meta,
         'package_completeness': package.completeness_score,
         'package_quality': package.quality_score,
     }
@@ -367,187 +325,188 @@ def fetch_registered_source(source_file_id: int, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(404, 'Source file not found')
     if not row.source_url:
-        raise HTTPException(409, 'Source file has no registered source_url')
+        raise HTTPException(409, 'Source file has no registered source URL')
     package = db.query(SourcePackage).filter(SourcePackage.id == row.package_id).first()
     if not package:
         raise HTTPException(404, 'Source package not found')
     book = db.query(Book).filter(Book.id == package.book_id).first()
-
     try:
         data, content_type, final_url = _download_registered_source(row.source_url)
         parsed = urlparse(final_url)
-        filename = Path(parsed.path).name or f'source-{row.id}'
-        _apply_extracted_source(
-            db,
-            package,
-            row,
-            data,
-            content_type,
-            filename,
-            book.edition if book else None,
-            book.title if book else None,
-            source_url=final_url,
+        filename = Path(parsed.path).name or row.original_filename or f'source-{row.id}.pdf'
+        _persist_extracted_source(
+            db, package, row, data, content_type, filename,
+            book.edition if book else None, book.title if book else None, source_url=final_url,
         )
+        db.commit()
     except HTTPException:
         db.rollback()
         raise
-    except ValueError as exc:
+    except Exception as exc:
         db.rollback()
         raise HTTPException(422, str(exc)) from exc
-    except RuntimeError as exc:
-        db.rollback()
-        raise HTTPException(503, str(exc)) from exc
 
-    db.commit()
-    db.refresh(row)
     return {
         'source_file_id': row.id,
         'status': row.status,
+        'source_type': row.source_type,
         'page_count': row.page_count,
+        'edition_match_score': row.edition_match_score,
         'checksum': row.checksum,
         'file_key': row.file_key,
-        'storage_backend': (row.extraction_meta or {}).get('storage_backend'),
-        'durable_storage': (row.extraction_meta or {}).get('durable_storage', False),
-        'edition_match_score': row.edition_match_score,
-        'warnings': (row.extraction_meta or {}).get('warnings', []),
-        'extraction_quality': {
-            'text_coverage_percent': (row.extraction_meta or {}).get('text_coverage_percent'),
-            'average_characters_per_page': (row.extraction_meta or {}).get('average_characters_per_page'),
-            'needs_vision': (row.extraction_meta or {}).get('needs_vision', False),
-        },
+        'extraction_meta': row.extraction_meta,
         'package_completeness': package.completeness_score,
         'package_quality': package.quality_score,
-        'final_source_url': (row.extraction_meta or {}).get('final_source_url'),
     }
 
 
-@router.post('/source-files/{source_file_id}/analyze')
-def analyze_source(source_file_id: int, db: Session = Depends(get_db)):
-    row = db.query(SourceFile).filter(SourceFile.id == source_file_id).first()
-    if not row:
-        raise HTTPException(404, 'Source file not found')
-    if row.status == 'NEEDS_VISION':
-        raise HTTPException(409, 'Source requires vision review before curriculum analysis')
-    structure = detect_curriculum_structure(row.extracted_text or '')
-    meta = dict(row.extraction_meta or {})
-    meta['structure'] = structure
-    row.extraction_meta = meta
-    row.status = 'ANALYZED' if structure['unit_count'] or structure['lesson_count'] else row.status
-    db.commit()
-    return structure
-
-
-@router.post('/source-packages/{package_id}/process')
-def process_package(package_id: int, db: Session = Depends(get_db)):
+@router.get('/source-packages/{package_id}')
+def get_source_package(package_id: int, db: Session = Depends(get_db)):
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
-        raise HTTPException(404, 'Package not found')
-    files = db.query(SourceFile).filter(SourceFile.package_id == package_id).order_by(SourceFile.id).all()
-    primary_source = select_primary_teaching_source(files)
-    if not primary_source:
-        raise HTTPException(409, 'A verified text-extractable OFFICIAL_PACKAGE or STUDENT_BOOK is required before processing')
-
-    structure = detect_curriculum_structure(primary_source.extracted_text or '')
-    gateway = AIGateway()
-    ai_result = gateway.run('EXTRACT_STRUCTURE', {'text': primary_source.extracted_text or ''}, 'FAST')
-    job = AIJob(
-        job_type='PROCESS_PACKAGE',
-        source_type='SOURCE_PACKAGE',
-        source_id=package.id,
-        status='COMPLETED',
-        priority=100,
-        model_route='FAST',
-        prompt_version='curriculum_parser/v1',
-        progress=100,
-        result_json={
-            'structure': structure,
-            'ai_gateway': ai_result.output,
-            'files_processed': len(files),
-            'primary_source_file_id': primary_source.id,
-            'primary_source_type': primary_source.source_type,
-            'primary_source_edition': primary_source.edition,
-            'package_completeness': package.completeness_score,
-            'package_quality': package.quality_score,
-        },
-        started_at=datetime.utcnow(),
-        completed_at=datetime.utcnow(),
-    )
-    db.add(job)
-    package.status = 'STRUCTURED'
+        raise HTTPException(404, 'Source package not found')
+    files = db.query(SourceFile).filter(SourceFile.package_id == package.id).order_by(SourceFile.id).all()
+    coverage, quality = calculate_package_scores(files)
+    package.completeness_score = coverage
+    package.quality_score = quality
     db.commit()
-    db.refresh(job)
-    return {'job_id': job.id, 'status': job.status, 'package_status': package.status, 'result': job.result_json}
-
-
-@router.get('/source-files/{source_file_id}/chunks')
-def list_source_chunks(source_file_id: int, db: Session = Depends(get_db)):
-    row = db.query(SourceFile).filter(SourceFile.id == source_file_id).first()
-    if not row:
-        raise HTTPException(404, 'Source file not found')
-    chunks = db.query(SourceChunk).filter(SourceChunk.source_file_id == source_file_id).order_by(SourceChunk.chunk_index).all()
-    return [
-        {
-            'id': x.id, 'chunk_index': x.chunk_index, 'page_number': x.page_number,
-            'text_preview': x.text[:500], 'metadata': x.metadata_json,
-        } for x in chunks
-    ]
+    return {
+        'id': package.id,
+        'package_code': package.package_code,
+        'status': package.status,
+        'completeness_score': coverage,
+        'quality_score': quality,
+        'coverage_score': coverage,
+        'verified_quality_score': quality,
+        'source_count': len(files),
+        'files': [
+            {
+                'id': f.id,
+                'source_type': f.source_type,
+                'filename': f.original_filename,
+                'edition': f.edition,
+                'source_url': f.source_url,
+                'status': f.status,
+                'pages': f.page_count,
+                'reliability': f.reliability_score,
+                'edition_match': f.edition_match_score,
+                'checksum': f.checksum,
+                'file_key': f.file_key,
+                'durable_storage': bool((f.extraction_meta or {}).get('durable_storage')),
+                'extraction_meta': f.extraction_meta,
+            } for f in files
+        ],
+    }
 
 
 @router.post('/source-packages/{package_id}/link-lessons')
-def link_lessons_to_sources(package_id: int, db: Session = Depends(get_db)):
+def link_source_pack_to_lessons(package_id: int, db: Session = Depends(get_db)):
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
-        raise HTTPException(404, 'Package not found')
-    unit_ids = [x.id for x in db.query(Unit).filter(Unit.book_id == package.book_id).all()]
-    lessons = db.query(Lesson).filter(Lesson.unit_id.in_(unit_ids)).all() if unit_ids else []
-    files = db.query(SourceFile).filter(SourceFile.package_id == package_id).order_by(SourceFile.id).all()
-    primary_source = select_primary_teaching_source(files)
-    if not primary_source:
-        raise HTTPException(409, 'No verified text-extractable official package or student book is available for lesson linking')
-    chunks = db.query(SourceChunk).filter(SourceChunk.source_file_id == primary_source.id).all()
-    created = 0
-    candidates = []
-    for lesson in lessons:
-        scored = sorted(
-            [(title_match_score(lesson.title, chunk.text), chunk) for chunk in chunks],
-            key=lambda x: x[0], reverse=True
-        )
-        if not scored or scored[0][0] < 0.5:
-            candidates.append({
-                'lesson_id': lesson.id,
-                'lesson_title': lesson.title,
-                'linked': False,
-                'primary_source_type': primary_source.source_type,
-            })
+        raise HTTPException(404, 'Source package not found')
+    book = db.query(Book).filter(Book.id == package.book_id).first()
+    lessons = db.query(Lesson).join(Unit, Lesson.unit_id == Unit.id).filter(Unit.book_id == book.id).all()
+    files = db.query(SourceFile).filter(SourceFile.package_id == package.id).all()
+
+    # Prefer official/current factual sources with usable extracted text. A catalog
+    # registration does not count until its text has been extracted and its scope has
+    # been promoted to OFFICIAL_PACKAGE. Historical STUDENT_BOOK is a fallback.
+    usable_by_type: dict[str, list[SourceFile]] = {}
+    for source in files:
+        if source.source_type not in PRIMARY_TEACHING_SOURCE_ORDER:
             continue
-        best_score = scored[0][0]
-        selected = [pair for pair in scored if pair[0] >= max(0.5, best_score - 0.08)][:3]
-        for score, chunk in selected:
-            existing = db.query(LessonSourceLink).filter_by(
-                lesson_id=lesson.id, source_chunk_id=chunk.id, relation='TEACHING_SOURCE'
+        if source.status in {'NEEDS_VISION', 'NEEDS_REVIEW', 'SCOPE_UNVERIFIED', 'SCOPE_REJECTED'}:
+            continue
+        if not (source.extracted_text or '').strip():
+            continue
+        usable_by_type.setdefault(source.source_type, []).append(source)
+
+    primary = None
+    for source_type in PRIMARY_TEACHING_SOURCE_ORDER:
+        candidates = usable_by_type.get(source_type, [])
+        if candidates:
+            primary = max(
+                candidates,
+                key=lambda item: (_bounded_score(item.edition_match_score), _bounded_score(item.reliability_score)),
+            )
+            break
+    if not primary:
+        return {'created': 0, 'updated': 0, 'links': [], 'note': 'No extracted teaching source is available yet'}
+
+    chunks = db.query(SourceChunk).filter(SourceChunk.source_file_id == primary.id).all()
+    created = 0
+    updated = 0
+    links = []
+    for lesson in lessons:
+        ranked = []
+        for chunk in chunks:
+            score = title_match_score(lesson.title, chunk.text)
+            if score >= 0.45:
+                ranked.append((score, chunk))
+        ranked.sort(key=lambda x: x[0], reverse=True)
+        for score, chunk in ranked[:4]:
+            existing = db.query(LessonSourceLink).filter(
+                LessonSourceLink.lesson_id == lesson.id,
+                LessonSourceLink.source_chunk_id == chunk.id,
+                LessonSourceLink.relation == 'TEACHING_SOURCE',
             ).first()
-            if not existing:
-                db.add(LessonSourceLink(
-                    lesson_id=lesson.id, source_chunk_id=chunk.id, relation='TEACHING_SOURCE',
-                    confidence=score, source_method='PRIMARY_SOURCE_TITLE_MATCH_V1',
-                    status='VERIFIED_CANDIDATE' if score >= 0.9 else 'CANDIDATE'
-                ))
-                created += 1
-            candidates.append({
+            next_status = 'VERIFIED_CANDIDATE' if score >= 0.85 else 'CANDIDATE'
+            if existing:
+                existing.confidence = max(existing.confidence, score)
+                existing.source_method = 'AUTO_TITLE_MATCH'
+                if existing.status not in {'VERIFIED', 'REJECTED'}:
+                    existing.status = next_status
+                updated += 1
+                row = existing
+            else:
+                row = LessonSourceLink(
+                    lesson_id=lesson.id,
+                    source_chunk_id=chunk.id,
+                    relation='TEACHING_SOURCE',
+                    confidence=score,
+                    source_method='AUTO_TITLE_MATCH',
+                    status=next_status,
+                )
+                db.add(row); db.flush(); created += 1
+            links.append({
                 'lesson_id': lesson.id,
+                'lesson_code': lesson.lesson_code,
                 'lesson_title': lesson.title,
-                'linked': True,
-                'source_file_id': primary_source.id,
-                'source_type': primary_source.source_type,
+                'source_file_id': primary.id,
+                'source_type': primary.source_type,
                 'source_chunk_id': chunk.id,
                 'page_number': chunk.page_number,
-                'confidence': score,
+                'confidence': round(score, 3),
+                'status': row.status,
             })
     db.commit()
     return {
-        'package_id': package_id,
-        'primary_source_file_id': primary_source.id,
-        'primary_source_type': primary_source.source_type,
-        'created_links': created,
-        'candidates': candidates,
+        'created': created,
+        'updated': updated,
+        'primary_source_file_id': primary.id,
+        'primary_source_type': primary.source_type,
+        'links': links,
     }
+
+
+@router.post('/source-packages/{package_id}/process')
+def process_source_package(package_id: int, db: Session = Depends(get_db)):
+    package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
+    if not package:
+        raise HTTPException(404, 'Source package not found')
+    job = AIJob(
+        job_type='IMPORT_PACKAGE',
+        source_id=package.id,
+        status='QUEUED',
+        priority=10,
+        model_route='FAST',
+        prompt_version='curriculum-parser-v1',
+    )
+    db.add(job)
+    db.commit()
+    return {'job_id': job.id, 'status': job.status, 'pipeline': [
+        'CLASSIFY_SOURCES', 'MATCH_EDITION', 'PARSE_DOCUMENTS', 'ALIGN_SOURCES',
+        'EXTRACT_CONCEPTS', 'EXTRACT_SKILLS', 'MAP_PREREQUISITES',
+        'GENERATE_LESSONS', 'GENERATE_QUESTIONS', 'VALIDATE_ANSWERS',
+        'GENERATE_REMEDIATION', 'AI_QA'
+    ]}

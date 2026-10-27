@@ -9,6 +9,7 @@ from .db.base import Base, SessionLocal, engine
 from .db.migration_status import get_migration_status
 from .db.publication_integrity import quarantine_unreleased_demo_content
 from .db.current_semester import ensure_current_semester_registry
+from .db.demo_experiment import ensure_experimental_demo, demo_enabled, DEMO_BOOK_CODE, DEMO_LESSON_CODE
 from .curriculum.router import router as curriculum_router
 from .importer.router import router as importer_router
 from .importer.official_catalog import (
@@ -36,7 +37,7 @@ from .factory.release_transaction import router as release_transaction_router
 from .factory.staging_preview import router as staging_preview_router
 from .auth.router import router as auth_router
 
-VERSION = '1.17.0'
+VERSION = '1.18.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -51,6 +52,7 @@ async def lifespan(app: FastAPI):
 
     with SessionLocal() as db:
         ensure_current_semester_registry(db)
+        ensure_experimental_demo(db)
     yield
 
 
@@ -79,6 +81,12 @@ def health():
         'status': 'ok',
         'version': VERSION,
         'database': database_health(),
+        'experimental_demo': {
+            'enabled': demo_enabled(),
+            'book_code': DEMO_BOOK_CODE,
+            'lesson_code': DEMO_LESSON_CODE,
+            'student_scope': 'single-lesson-beta',
+        },
         'current_semester': {
             'semester': 1,
             'priority_book_code': 'PS.G05.SCI.S1',
@@ -108,6 +116,7 @@ def health():
             'unreleased-demo-publication-quarantine', 'current-curriculum-plan-scope-evidence',
             'source-authority-policy-enforcement', 'current-semester-1-priority-registry',
             'current-semester-admin-console', 'current-semester-production-matrix',
+            'single-lesson-experimental-beta',
         ],
     }
 
@@ -136,6 +145,7 @@ def ready():
         'status': 'ready',
         'version': VERSION,
         'database': database_health(),
+        'experimental_demo': demo_enabled(),
     }
 
 

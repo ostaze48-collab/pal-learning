@@ -42,6 +42,11 @@ def _database_backend(db: Session) -> str:
     return bind.url.get_backend_name() if bind is not None else 'unknown'
 
 
+def _visual_required_for_lesson(lesson: Lesson) -> bool:
+    """Science content is visual-first; other subjects may define their own rule later."""
+    return '.SCI.' in (lesson.lesson_code or '').upper()
+
+
 def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
@@ -66,6 +71,11 @@ def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
         else:
             blockers.append('NO_AUTHORIZED_FACTUAL_SOURCE_LINKED')
 
+    visual_required = _visual_required_for_lesson(lesson)
+    visual_assets = packet.get('visual_assets') or []
+    if visual_required and not visual_assets:
+        blockers.append('NO_CLEARED_VISUAL_ASSET')
+
     database_backend = _database_backend(db)
     production_database = database_backend in {'postgresql', 'postgres'}
     storage_gate = packet.get('storage_gate') or {}
@@ -85,6 +95,8 @@ def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
         next_actions.append('REPLACE_OR_RECLASSIFY_UNAUTHORIZED_TEACHING_SOURCE')
     if 'LEGACY_TEACHING_SOURCE_REQUIRES_CURRENT_SCOPE_EVIDENCE' in blockers:
         next_actions.extend(['OBTAIN_CURRENT_CURRICULUM_PLAN', 'UPLOAD_CURRICULUM_PLAN', 'VERIFY_CURRENT_PLAN_SCOPE'])
+    if 'NO_CLEARED_VISUAL_ASSET' in blockers:
+        next_actions.append('EXTRACT_REVIEW_AND_CLEAR_VISUAL_ASSET')
     if 'NON_DURABLE_FACTUAL_SOURCE_STORAGE' in blockers:
         next_actions.append('REIMPORT_FACTUAL_SOURCE_TO_DURABLE_OBJECT_STORAGE')
     if queue_ready and not provider['execution_ready']:
@@ -105,6 +117,12 @@ def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
         'scope_evidence_count': len(packet.get('scope_evidence') or []),
         'scope_gate': packet.get('scope_gate') or {},
         'authority_gate': packet.get('authority_gate') or {},
+        'visual_gate': {
+            **(packet.get('visual_gate') or {}),
+            'required_for_generation': visual_required,
+            'cleared_asset_count': len(visual_assets),
+            'ready': (not visual_required) or bool(visual_assets),
+        },
         'storage_gate': {
             **storage_gate,
             'database_backend': database_backend,
@@ -117,6 +135,7 @@ def calculate_generation_readiness(db: Session, lesson_id: int) -> dict:
             'diagnostic_only': True,
             'creates_ai_job': False,
             'publishes_content': False,
+            'science_visual_first_required': True,
         },
     }
 

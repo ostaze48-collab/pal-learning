@@ -23,6 +23,7 @@ from app.db.models import (
     SourcePackage,
     Subject,
 )
+from app.db.visual_models import VisualAsset
 from app.factory.router import queue_lesson_generation
 
 
@@ -61,6 +62,7 @@ def test_pipeline_starts_fail_closed_and_points_to_source_fetch():
         assert stages['SEMESTER_SCOPE']['status'] == 'BLOCKED'
         assert stages['LESSON_LINKING']['status'] == 'BLOCKED'
         assert stages['SOURCE_REVIEW']['status'] == 'BLOCKED'
+        assert stages['VISUAL_ASSETS']['status'] == 'BLOCKED'
         assert stages['SKILL_MAPPING']['status'] == 'BLOCKED'
         assert stages['LESSON_GENERATION']['status'] == 'BLOCKED'
         assert payload['next_stage']['key'] == 'SOURCE_FETCH'
@@ -68,9 +70,14 @@ def test_pipeline_starts_fail_closed_and_points_to_source_fetch():
             'candidate_source_links': 0,
             'verified_source_links': 0,
             'linked_skills': 0,
+            'visual_assets': 0,
+            'visual_pending': 0,
+            'visual_cleared': 0,
+            'visual_redraw': 0,
         }
         assert payload['generation_readiness']['queue_ready'] is False
         assert 'NO_SKILLS_LINKED' in payload['generation_readiness']['blockers']
+        assert 'NO_CLEARED_VISUAL_ASSET' in payload['generation_readiness']['blockers']
     finally:
         db.close()
 
@@ -119,6 +126,23 @@ def test_pipeline_marks_generation_done_only_after_output_validated(monkeypatch)
             status='VERIFIED',
         ))
 
+        db.add(VisualAsset(
+            lesson_id=lesson.id,
+            source_file_id=source.id,
+            source_page=1,
+            asset_kind='TEXTBOOK_PAGE_CROP',
+            storage_key='s3://test-curriculum/visuals/page-1.png',
+            public_url='https://cdn.example.test/visuals/page-1.png',
+            checksum='d' * 64,
+            width=1200,
+            height=1700,
+            rights_status='CLEARED',
+            status='APPROVED',
+            alt_text='صفحة موثقة من درس المجهر واكتشاف الخلية.',
+            caption='شكل تعليمي مرتبط بالمصدر الرسمي.',
+            hotspots_json=[],
+        ))
+
         skill = Skill(
             subject_id=subject.id,
             skill_code='SK.SCI.AUTO.SCIENTIFIC_TOOLS.PIPELINE01',
@@ -144,10 +168,12 @@ def test_pipeline_marks_generation_done_only_after_output_validated(monkeypatch)
         assert ready_stages['SEMESTER_SCOPE']['status'] == 'DONE'
         assert ready_stages['LESSON_LINKING']['status'] == 'DONE'
         assert ready_stages['SOURCE_REVIEW']['status'] == 'DONE'
+        assert ready_stages['VISUAL_ASSETS']['status'] == 'DONE'
         assert ready_stages['SKILL_MAPPING']['status'] == 'DONE'
         assert ready_stages['LESSON_GENERATION']['status'] == 'READY'
         assert ready_stages['LESSON_GENERATION']['action'] == 'QUEUE_GENERATION'
         assert ready_payload['generation_readiness']['queue_ready'] is True
+        assert ready_payload['counts']['visual_cleared'] == 1
 
         queued = queue_lesson_generation(lesson.id, db)
         queued_payload = current_semester_pipeline(db)
@@ -168,6 +194,7 @@ def test_pipeline_marks_generation_done_only_after_output_validated(monkeypatch)
         assert completed_stage['action'] is None
         assert completed_payload['next_stage'] is None
         assert completed_payload['counts']['verified_source_links'] == 1
+        assert completed_payload['counts']['visual_cleared'] == 1
         assert completed_payload['counts']['linked_skills'] == 1
     finally:
         db.close()

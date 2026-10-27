@@ -1,8 +1,11 @@
+import pytest
+from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from app.db.base import Base
 from app.db.models import (
+    AIJob,
     Book,
     Lesson,
     LessonSkill,
@@ -14,6 +17,7 @@ from app.db.models import (
     Unit,
 )
 from app.factory.generation_readiness import calculate_generation_readiness
+from app.factory.router import queue_lesson_generation
 
 
 def _db_with_lesson():
@@ -134,7 +138,7 @@ def test_verified_current_plan_makes_queue_ready_but_mock_provider_blocks_execut
     db, lesson, package = _db_with_lesson()
     try:
         _add_skill(db, lesson)
-        teaching = _add_link(
+        _add_link(
             db, package, lesson,
             source_type='STUDENT_BOOK',
             edition='2020 third edition',
@@ -155,5 +159,48 @@ def test_verified_current_plan_makes_queue_ready_but_mock_provider_blocks_execut
         assert result['next_actions'] == ['CONFIGURE_REAL_AI_PROVIDER_FOR_EXECUTION']
         assert result['provider']['provider'] == 'LOCAL_MOCK'
         assert result['authority_gate']['factual_sources_authorized'] is True
+    finally:
+        db.close()
+
+
+def test_generate_endpoint_cannot_bypass_readiness_blockers(monkeypatch):
+    monkeypatch.setenv('AI_PROVIDER', 'LOCAL_MOCK')
+    db, lesson, _ = _db_with_lesson()
+    try:
+        with pytest.raises(HTTPException) as exc:
+            queue_lesson_generation(lesson.id, db)
+        assert exc.value.status_code == 409
+        assert exc.value.detail['message'] == 'Lesson is not ready for generation'
+        assert 'NO_SKILLS_LINKED' in exc.value.detail['blockers']
+        assert 'NO_AUTHORIZED_FACTUAL_SOURCE_LINKED' in exc.value.detail['blockers']
+        assert db.query(AIJob).count() == 0
+    finally:
+        db.close()
+
+
+def test_generate_endpoint_queues_after_all_non_provider_gates_pass(monkeypatch):
+    monkeypatch.setenv('AI_PROVIDER', 'LOCAL_MOCK')
+    db, lesson, package = _db_with_lesson()
+    try:
+        _add_skill(db, lesson)
+        _add_link(
+            db, package, lesson,
+            source_type='STUDENT_BOOK',
+            edition='2020 third edition',
+            relation='TEACHING_SOURCE',
+        )
+        _add_link(
+            db, package, lesson,
+            source_type='CURRICULUM_PLAN',
+            edition='2025/2026 emergency plan',
+            relation='CURRENT_SCOPE_EVIDENCE',
+        )
+        queued = queue_lesson_generation(lesson.id, db)
+        assert queued['status'] == 'QUEUED'
+        assert queued['skills'] == 1
+        assert queued['source_chunks'] == 1
+        assert queued['generation_readiness']['queue_ready'] is True
+        assert queued['generation_readiness']['execution_ready'] is False
+        assert db.query(AIJob).count() == 1
     finally:
         db.close()

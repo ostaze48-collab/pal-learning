@@ -63,6 +63,21 @@ export default function StagingConsole(){
   }catch(e){setMessage(e instanceof Error?e.message:'فشل Academic QA');}
   finally{setBusy('');}
  }
+ async function openMobilePreview(stage:Staged){
+  setBusy(`mobile-preview-${stage.id}`);setMessage('');
+  try{
+   const issued=await api(`/factory/staged-versions/${stage.id}/preview-token`,{method:'POST'});
+   const url=`${window.location.origin}${issued.web_preview_fragment}`;
+   const opened=window.open(url,'_blank','noopener,noreferrer');
+   if(!opened){
+    await navigator.clipboard?.writeText(url);
+    setMessage(`تعذر فتح تبويب جديد؛ تم نسخ رابط المعاينة إن سمح المتصفح. الصلاحية ${issued.expires_in_seconds} ثانية.`);
+   }else{
+    setMessage(`تم فتح معاينة الهاتف لـ Snapshot #${stage.id}. الرابط قصير العمر (${issued.expires_in_seconds} ثانية) ولا ينشر المحتوى.`);
+   }
+  }catch(e){setMessage(e instanceof Error?e.message:'فشل إنشاء رابط المعاينة');}
+  finally{setBusy('');}
+ }
 
  return <main style={{maxWidth:1000,margin:'28px auto',padding:18}}>
   <div style={{fontSize:13,opacity:.55}}>الإدارة ← Staging</div>
@@ -73,7 +88,7 @@ export default function StagingConsole(){
    <button onClick={load} disabled={!!busy}>تحميل المرشحين وStaging</button>
    <a href="/admin/curriculum">العودة لمصنع المنهاج</a>
   </div>
-  {message&&<div style={{marginTop:12,padding:12,borderRadius:10,background:message.includes('✓')?'#ecfdf3':'#fff4e5'}}>{message}</div>}
+  {message&&<div style={{marginTop:12,padding:12,borderRadius:10,background:message.includes('✓')||message.includes('تم فتح')?'#ecfdf3':'#fff4e5'}}>{message}</div>}
 
   <section style={{marginTop:16,display:'grid',gap:12}}>
    {!rows.length&&<div style={panel}>لا توجد Candidates محملة لهذا الدرس.</div>}
@@ -107,7 +122,8 @@ export default function StagingConsole(){
     <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}}>
      <div><strong>Snapshot #{s.id}</strong> · {s.version_label} · <b>{s.status}</b> · Release <strong>{s.release_readiness}</strong></div>
      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-      <button disabled={!!busy} onClick={async()=>{setBusy('preview-stage');try{setPreview(await api(`/factory/staged-versions/${s.id}`));}catch(e){setMessage(e instanceof Error?e.message:'فشل معاينة staging');}finally{setBusy('');}}}>Preview Snapshot</button>
+      <button disabled={!!busy} onClick={async()=>{setBusy('preview-stage');try{setPreview(await api(`/factory/staged-versions/${s.id}`));}catch(e){setMessage(e instanceof Error?e.message:'فشل معاينة staging');}finally{setBusy('');}}}>Preview Snapshot JSON</button>
+      <button disabled={!!busy} onClick={()=>openMobilePreview(s)}>فتح معاينة الهاتف</button>
       <button disabled={!!busy||s.release_readiness!=='READY'} onClick={()=>runAcademicQa(s)}>Run Academic AI QA</button>
      </div>
     </div>
@@ -124,7 +140,7 @@ export default function StagingConsole(){
   </section>}
 
   <section style={{...panel,marginTop:16,background:'#fffaf0'}}>
-   <strong>مهم:</strong> STAGING ولا Academic QA يعنيان PUBLISHED. حتى نتيجة Academic QA = PASS ستبقى بدون صلاحية نشر إلى أن نبني Release/Publish transaction مستقلة بعد ربط PostgreSQL والمصدر الحالي الموثق.
+   <strong>مهم:</strong> STAGING ولا Academic QA يعنيان PUBLISHED. حتى نتيجة Academic QA = PASS ستبقى بدون صلاحية نشر إلى أن تكتمل Release/Publish transaction مع PostgreSQL والمصدر الحالي الموثق.
   </section>
  </main>
 }

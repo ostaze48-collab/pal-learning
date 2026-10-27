@@ -1,0 +1,43 @@
+from typing import Literal
+from pydantic import BaseModel, Field
+
+
+BlockType = Literal['TEXT','INFO_CARD','IMAGE','AUDIO','VIDEO','MATCHING','DRAG_DROP','QUESTION','FLASHCARD','SUMMARY','ACTIVITY']
+QuestionPurpose = Literal['DIAGNOSTIC','PRACTICE','MASTERY','REMEDIATION','RETENTION','TRANSFER']
+
+
+class GeneratedBlock(BaseModel):
+    block_type: BlockType
+    title: str | None = None
+    body: str | None = None
+    content: dict = Field(default_factory=dict)
+    source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
+
+
+class GeneratedSection(BaseModel):
+    title: str
+    learning_goal: str | None = None
+    blocks: list[GeneratedBlock] = Field(min_length=1, max_length=20)
+
+
+class GeneratedQuestion(BaseModel):
+    question_type: str = 'MCQ'
+    prompt: str
+    options: list[str] | None = None
+    correct_answer: str | int | float | list | dict
+    explanation: str
+    purpose: QuestionPurpose = 'PRACTICE'
+    difficulty: float = Field(default=0.5, ge=0, le=1)
+    skill_codes: list[str] = Field(min_length=1, max_length=6)
+    source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
+
+
+class GeneratedLessonPayload(BaseModel):
+    learning_objectives: list[str] = Field(min_length=1, max_length=20)
+    concepts: list[str] = Field(min_length=1, max_length=40)
+    sections: list[GeneratedSection] = Field(min_length=1, max_length=20)
+    questions: list[GeneratedQuestion] = Field(default_factory=list, max_length=120)
+    summary: list[str] = Field(min_length=1, max_length=20)
+    flashcards: list[dict] = Field(default_factory=list, max_length=60)
+    misconceptions: list[dict] = Field(default_factory=list, max_length=40)
+    remediation_candidates: list[dict] = Field(default_factory=list, max_length=40)

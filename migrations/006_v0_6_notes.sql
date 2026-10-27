@@ -1,0 +1,4 @@
+-- V0.6 migration note
+-- ai_jobs gains input_json to persist provider-neutral generation packets.
+-- PWA service worker foundation added to web app.
+-- Content Factory now refuses to queue a lesson without source provenance.

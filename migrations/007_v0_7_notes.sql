@@ -1,0 +1,4 @@
+-- V0.7 migration note
+-- content_candidates stores AI outputs separately from published lesson content.
+-- Candidate ingestion requires structured JSON and validates every block/question source_chunk_id.
+-- Unknown skill codes or out-of-packet source references cause REJECTED status.

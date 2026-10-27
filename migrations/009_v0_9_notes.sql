@@ -1,0 +1,5 @@
+-- V0.9 migration note
+-- users: email, password_hash, role, status
+-- auth_sessions: hashed opaque bearer token, expiry and revocation
+-- student_profiles gains optional unique user_id
+-- importer/qa/factory/admin APIs require ADMIN session

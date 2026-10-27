@@ -1,0 +1,1 @@
+export default function Home(){return <main style={{maxWidth:900,margin:'60px auto',padding:24}}><div style={{fontSize:14,opacity:.6}}>V1.0</div><h1>منصة التعلم الفلسطينية</h1><p>منهاج رقمي + مهارات + تشخيص الفجوات + Learning Recovery.</p><div style={{display:'flex',gap:12,flexWrap:'wrap'}}><a href="/student">دخول الطالب</a><a href="/admin">لوحة الإدارة</a></div></main>}

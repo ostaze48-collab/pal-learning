@@ -1,0 +1,8 @@
+-- V0.5 migration note (production migration tool to be introduced before public beta)
+-- New logical entities:
+-- lesson_source_links: lesson -> source_chunk provenance with page-level lineage
+-- content_versions: lesson content versions
+-- qa_results: persisted QA gates
+-- source_files: extracted_text/extraction_meta/mime_type fields
+-- source_chunks: page-aware source chunks
+-- skills / skill_edges / question_skills / mastery / diagnostics / remediation / learning_events

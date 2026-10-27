@@ -1,0 +1,4 @@
+-- V0.2 schema additions are currently managed through SQLAlchemy create_all for Alpha development.
+-- Tables added in V0.2:
+-- source_packages, source_files, lesson_sections, content_blocks, ai_jobs
+-- Before public beta, migrate to Alembic and replace create_all-based schema evolution.

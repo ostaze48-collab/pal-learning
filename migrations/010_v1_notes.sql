@@ -1,0 +1,4 @@
+-- V1.0 internal milestone
+-- Student learning writes no longer accept caller-supplied student_id.
+-- The server derives student profile from the authenticated STUDENT session.
+-- Learning payload models forbid unknown fields to prevent identity override attempts.

@@ -32,6 +32,7 @@ def demo_health(db: Session = Depends(get_db)):
         'target_lesson_is_beta': bool(lesson and lesson.status == DEMO_STATUS),
         'seven_learning_sections': len(sections) == 7,
         'interactive_blocks_present': len(blocks) >= 7,
+        'microscope_zoom_activity_present': any(block.block_type == 'MICROSCOPE_ZOOM' for block in blocks),
         'five_demo_questions': len(questions) == 5,
         'four_demo_skills': len(skills) >= 4,
     }

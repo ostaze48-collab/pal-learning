@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class ProductionReadiness:
+    ready: bool
+    checks: dict[str, bool]
+    blockers: list[str]
+    details: dict
+
+
+def evaluate_production_readiness(*, database_backend: str, allowed_origins: list[str]) -> ProductionReadiness:
+    provider = os.getenv('AI_PROVIDER', 'LOCAL_MOCK').upper()
+    ai_key = bool(os.getenv('OPENAI_API_KEY')) if provider == 'OPENAI' else False
+    ai_model = bool(os.getenv('OPENAI_MODEL') or os.getenv('OPENAI_MODEL_BALANCED')) if provider == 'OPENAI' else False
+    jwt_secret = os.getenv('JWT_SECRET', '')
+    bootstrap_password = os.getenv('BOOTSTRAP_ADMIN_PASSWORD', '')
+
+    production_origins = [x for x in allowed_origins if x.startswith('https://')]
+    wildcard_origin = '*' in allowed_origins
+
+    checks = {
+        'persistent_database': database_backend in {'postgresql', 'postgres'},
+        'jwt_secret_configured': len(jwt_secret) >= 32 and jwt_secret.lower() not in {'change-me', 'changeme'},
+        'cors_has_production_origin': bool(production_origins),
+        'cors_has_no_wildcard': not wildcard_origin,
+        'admin_bootstrap_password_configured': len(bootstrap_password) >= 12,
+        'ai_provider_is_real': provider != 'LOCAL_MOCK',
+        'ai_provider_configured': provider == 'OPENAI' and ai_key and ai_model,
+    }
+    # AI is required for the curriculum factory Beta, but not for basic lesson playback.
+    ready = all(checks.values())
+    blockers = [name for name, passed in checks.items() if not passed]
+    return ProductionReadiness(
+        ready=ready,
+        checks=checks,
+        blockers=blockers,
+        details={
+            'database_backend': database_backend,
+            'ai_provider': provider,
+            'production_origins': production_origins,
+            'bootstrap_password_present': bool(bootstrap_password),
+        },
+    )

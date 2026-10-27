@@ -6,10 +6,11 @@ const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
 type Health={version:string;database:{backend:string;persistent:boolean;production_recommended:boolean}};
 type LearningHealth={students:number;books:number;lessons:number;source_packages:number;ai_jobs:number;question_attempts:number;correct_rate_percent:number;root_gaps_found:number;skills_needing_support_rows:number};
-type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;ai_provider?:string;production_origins?:string[];bootstrap_password_present?:boolean}};
+type ProductionReadiness={ready:boolean;checks:Record<string,boolean>;blockers:string[];details:{database_backend?:string;migration_revision?:string|null;migration_head?:string|null;migration_reason?:string|null;ai_provider?:string;production_origins?:string[];bootstrap_password_present?:boolean}};
 
 const readinessLabels:Record<string,string>={
   persistent_database:'قاعدة بيانات PostgreSQL دائمة',
+  database_migration_current:'قاعدة البيانات على Alembic migration head الحالي',
   jwt_secret_configured:'JWT_SECRET قوي ومُعد',
   cors_has_production_origin:'CORS يحتوي نطاق الإنتاج',
   cors_has_no_wildcard:'CORS بدون wildcard',
@@ -44,6 +45,7 @@ export default function Admin(){
         <strong>{readiness.ready?'Production Ready ✓':'Beta Readiness: BLOCKED'}</strong>
         <span>{readiness.details.database_backend||'—'} · {readiness.details.ai_provider||'—'}</span>
       </div>
+      <div style={{fontSize:12,opacity:.7,marginTop:6}}>Migration: {readiness.details.migration_revision||'none'} / head {readiness.details.migration_head||'—'}</div>
       {!readiness.ready&&<p style={{margin:'8px 0 10px'}}>لن نعتبر المنصة جاهزة للـBeta حتى تُغلق العقبات التالية:</p>}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(230px,1fr))',gap:8}}>
         {Object.entries(readiness.checks).map(([key,ok])=><div key={key} style={{padding:'9px 10px',borderRadius:9,background:'rgba(255,255,255,.7)'}}>{ok?'✓':'✗'} {readinessLabels[key]||key}</div>)}

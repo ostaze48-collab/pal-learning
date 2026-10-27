@@ -21,9 +21,11 @@ SUBJECTS = [
 
 
 def add_block(db, section_id: int, order_no: int, block_type: str, content: dict):
+    # Seeded lesson material is prototype/staging material only. It must not be
+    # student-visible until an audited release transaction is implemented.
     db.add(ContentBlock(
         lesson_section_id=section_id, block_type=block_type,
-        content_json=content, order_no=order_no, version=1, status='PUBLISHED'
+        content_json=content, order_no=order_no, version=1, status='DRAFT'
     ))
 
 
@@ -120,7 +122,7 @@ def seed_skill_graph(db, sci_subject, math_subject, skeleton_lesson):
     return {'science': (support, protection, axial), 'math': (fraction_concept, equivalence, common_den, fraction_add)}
 
 
-def seed_questions(db, skeleton_lesson, science_skills, source_file=None):
+def seed_questions(db, skeleton_lesson, science_skills):
     support, protection, axial = science_skills
     questions = [
         ('PS.G05.SCI.S2.U04.L01.Q001', 'ما الجزء الذي يعطي جسم الإنسان دعامة أساسية؟', ['الجلد', 'العظام', 'الشعر', 'الدم'], 1, support, 'العظام تكوّن الجهاز الهيكلي وتمنح الجسم الدعامة والشكل.'),
@@ -133,16 +135,11 @@ def seed_questions(db, skeleton_lesson, science_skills, source_file=None):
             q = Question(
                 lesson_id=skeleton_lesson.id, question_code=code, question_type='MCQ',
                 prompt=prompt, options_json=options, correct_answer_json={'value': correct},
-                difficulty=0.45, purpose='PRACTICE', explanation=explanation, status='PUBLISHED'
+                difficulty=0.45, purpose='PRACTICE', explanation=explanation, status='DRAFT'
             )
             db.add(q); db.flush()
         if not db.query(QuestionSkill).filter_by(question_id=q.id, skill_id=skill.id).first():
             db.add(QuestionSkill(question_id=q.id, skill_id=skill.id, weight=1.0))
-        if source_file and not db.query(ReferenceAnswer).filter_by(question_id=q.id).first():
-            db.add(ReferenceAnswer(
-                question_id=q.id, answer_text=options[correct], source_file_id=source_file.id,
-                confidence=0.55, validation_status='DEMO_REQUIRES_SOURCE_VERIFICATION'
-            ))
 
 
 def run():
@@ -155,7 +152,6 @@ def run():
         if not db.query(Subject).count():
             db.add_all([Subject(code=c, name_ar=a, name_en=e) for c, a, e in SUBJECTS])
         db.commit()
-
 
         admin_email = os.getenv('BOOTSTRAP_ADMIN_EMAIL')
         admin_password = os.getenv('BOOTSTRAP_ADMIN_PASSWORD')
@@ -200,7 +196,7 @@ def run():
             if not row:
                 row = Lesson(
                     unit_id=unit.id, lesson_number=n, lesson_code=code, title=title,
-                    status='PUBLISHED' if n == 1 else 'DRAFT', estimated_minutes=45 if n == 1 else None
+                    status='DRAFT', estimated_minutes=45 if n == 1 else None
                 )
                 db.add(row); db.commit(); db.refresh(row)
             lessons[n] = row
@@ -213,26 +209,28 @@ def run():
                 status='DISCOVERED', completeness_score=0, quality_score=0
             )
             db.add(package); db.commit(); db.refresh(package)
-        # Official current learning-package source from the Palestinian Ministry of Education.
-        # It is authoritative for the current Gaza package, but does not by itself prove
-        # that the complete 2026 textbook edition has been verified.
-        official_package = db.query(SourceFile).filter_by(package_id=package.id, source_type='OFFICIAL_PACKAGE').first()
+
+        # Ministry catalog discovery proves grade/subject authority only. Fresh
+        # databases therefore start as CATALOG_CANDIDATE; scope verification may
+        # later promote this exact row to OFFICIAL_PACKAGE.
+        ministry_url = 'https://moe.edu.ps/m/4070'
+        official_package = db.query(SourceFile).filter_by(
+            package_id=package.id, source_url=ministry_url
+        ).first()
         if not official_package:
             official_package = SourceFile(
-                package_id=package.id, source_type='OFFICIAL_PACKAGE',
-                source_url='https://moe.edu.ps/m/4070',
+                package_id=package.id, source_type='CATALOG_CANDIDATE',
+                source_url=ministry_url,
                 original_filename='moe-current-grade5-science-learning-package',
-                edition='current official Gaza learning package',
-                reliability_score=100, edition_match_score=0, status='DISCOVERED'
+                edition='CURRENT_GAZA_LEARNING_PACKAGE_EDITION_TO_VERIFY',
+                reliability_score=100, edition_match_score=0, status='SCOPE_UNVERIFIED'
             )
             db.add(official_package); db.flush()
-        # Authority and edition evidence are separate. Until the file itself is
-        # imported and analyzed, edition match remains unknown (0), even for an
-        # authoritative Ministry source. Normalize existing seeded databases too.
-        official_package.source_url = 'https://moe.edu.ps/m/4070'
-        official_package.edition = 'current official Gaza learning package'
+        elif not official_package.extracted_text:
+            official_package.source_type = 'CATALOG_CANDIDATE'
+            official_package.status = 'SCOPE_UNVERIFIED'
+            official_package.edition_match_score = 0
         official_package.reliability_score = 100
-        official_package.edition_match_score = 0
 
         # Historical full student book remains only a structure/reference fallback.
         source_file = db.query(SourceFile).filter_by(package_id=package.id, source_type='STUDENT_BOOK').first()
@@ -296,7 +294,9 @@ def run():
         db.flush()
 
         skill_sets = seed_skill_graph(db, sci, math, lessons[1])
-        seed_questions(db, lessons[1], skill_sets['science'], source_file)
+        # Reference answers are deliberately not seeded. They are created only
+        # after a policy-authorized SOLUTIONS source is parsed and aligned.
+        seed_questions(db, lessons[1], skill_sets['science'])
 
         student = db.query(StudentProfile).filter_by(display_name='أحمد — حساب تجريبي').first()
         if not student:

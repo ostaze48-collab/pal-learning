@@ -129,7 +129,7 @@ export default function CurrentSemesterPage(){
 
   function nextActionControl(){
     const action=pipeline?.next_stage?.action;
-    if(!pipeline?.next_stage) return <div style={{padding:12,borderRadius:10,background:'#edf9f1',fontWeight:800}}>اكتملت بوابات ما قبل التوليد لهذه المرحلة ✓</div>;
+    if(!pipeline?.next_stage) return <div style={{padding:12,borderRadius:10,background:'#edf9f1',fontWeight:800}}>اكتملت بوابات التوليد ووصل خرج الدرس إلى OUTPUT_VALIDATED ✓</div>;
     if(!action) return <div style={{padding:12,borderRadius:10,background:'#fff1f1'}}>المرحلة الحالية محجوبة. راجع تفاصيلها قبل المتابعة.</div>;
     if(action==='SYNC_OR_REGISTER_OFFICIAL_SOURCE') return <button disabled={busy===-20} onClick={syncOfficial} style={primaryStyle}>تسجيل مصدر الوزارة</button>;
     if(action==='FETCH_OFFICIAL_SOURCE') return pipeline.source?.id?<button disabled={busy===pipeline.source.id} onClick={()=>fetchOfficial(pipeline.source!.id)} style={primaryStyle}>جلب المصدر الرسمي الآن</button>:null;
@@ -138,6 +138,7 @@ export default function CurrentSemesterPage(){
     if(action==='REVIEW_SOURCE_LINKS') return <a href="/admin/source-link-review" style={linkStyle}>راجع Source Chunks واعتمد الصحيح</a>;
     if(action==='OPEN_SKILL_MAPPING') return <a href="/admin/skill-mapping" style={linkStyle}>افتح Skill Mapping واعتمد المهارات</a>;
     if(action==='QUEUE_GENERATION') return <button disabled={busy===firstLesson?.id} onClick={queueGeneration} style={primaryStyle}>إنشاء Generation Job</button>;
+    if(action==='OPEN_LESSON_GENERATION') return <a href="/admin/lesson-generation" style={linkStyle}>افتح Lesson Generation Console</a>;
     return <div style={{padding:12,borderRadius:10,background:'#fff4e5'}}>الإجراء التالي: {action}</div>;
   }
 
@@ -155,7 +156,7 @@ export default function CurrentSemesterPage(){
       </section>
 
       {pipeline&&<section style={{marginTop:18,background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:18}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',alignItems:'center'}}><h2 style={{margin:0}}>Production Pipeline</h2><strong>{pipeline.next_stage?`التالي: ${pipeline.next_stage.label}`:'المسار مكتمل حتى Generation Job ✓'}</strong></div>
+        <div style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',alignItems:'center'}}><h2 style={{margin:0}}>Production Pipeline</h2><strong>{pipeline.next_stage?`التالي: ${pipeline.next_stage.label}`:'وصل الدرس إلى OUTPUT_VALIDATED ✓'}</strong></div>
         <p>كل مرحلة لا تصبح متاحة إلا بعد نجاح السابقة؛ Source Review وSkill Approval بوابتان إلزاميتان.</p>
         <div style={{display:'grid',gap:8}}>{pipeline.stages.map((stage,index)=><div key={stage.key} style={{display:'grid',gridTemplateColumns:'42px minmax(170px,230px) 1fr',gap:10,alignItems:'center',padding:11,borderRadius:11,background:stageBg[stage.status]||'#f7f8fa'}}>
           <div style={{width:30,height:30,borderRadius:99,display:'grid',placeItems:'center',background:'white',fontWeight:800}}>{stageMark[stage.status]||index+1}</div>
@@ -168,7 +169,7 @@ export default function CurrentSemesterPage(){
 
       <section style={{marginTop:18,background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:18}}><h2 style={{marginTop:0}}>الوحدات والدروس الحالية</h2><div style={{display:'grid',gap:12}}>{data.units.map(unit=><div key={unit.id} style={{border:'1px solid #edf0f5',borderRadius:12,padding:14}}><strong>الوحدة {unit.unit_number}: {unit.title}</strong><div style={{marginTop:8,display:'grid',gap:6}}>{unit.lessons.map(lesson=><div key={lesson.id} style={{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap'}}><span>{lesson.lesson_number}. {lesson.title}</span><code>{lesson.lesson_code}</code></div>)}</div></div>)}</div></section>
 
-      {firstLesson&&<section style={{marginTop:18,background:'#fffdf5',border:'1px solid #eadca8',borderRadius:14,padding:18}}><h2 style={{marginTop:0}}>أول درس إنتاجي: {firstLesson.title}</h2><p>التحكم الأساسي أصبح من زر «الخطوة التالية» في الـPipeline. الروابط التالية مخصصة للفحص المتقدم فقط.</p><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><a href="/admin/source-link-review">Source Review</a><a href="/admin/skill-mapping">Skill Mapping</a><button disabled={busy===firstLesson.id} onClick={checkReadiness} style={{padding:'7px 10px'}}>إعادة فحص Readiness</button></div>{readiness&&!!readiness.blockers?.length&&<div style={{marginTop:10,padding:10,borderRadius:9,background:'#fff0f0'}}>Blockers: {readiness.blockers.join(' · ')}</div>}</section>}
+      {firstLesson&&<section style={{marginTop:18,background:'#fffdf5',border:'1px solid #eadca8',borderRadius:14,padding:18}}><h2 style={{marginTop:0}}>أول درس إنتاجي: {firstLesson.title}</h2><p>التحكم الأساسي أصبح من زر «الخطوة التالية» في الـPipeline. الروابط التالية مخصصة للفحص المتقدم فقط.</p><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><a href="/admin/source-link-review">Source Review</a><a href="/admin/skill-mapping">Skill Mapping</a><a href="/admin/lesson-generation">Lesson Generation</a><button disabled={busy===firstLesson.id} onClick={checkReadiness} style={{padding:'7px 10px'}}>إعادة فحص Readiness</button></div>{readiness&&!!readiness.blockers?.length&&<div style={{marginTop:10,padding:10,borderRadius:9,background:'#fff0f0'}}>Blockers: {readiness.blockers.join(' · ')}</div>}</section>}
 
       <section style={{marginTop:18,background:'white',border:'1px solid #e6ebf2',borderRadius:14,padding:18}}><h2 style={{marginTop:0}}>المصادر المسجلة</h2>{data.sources.length===0?<p>لا توجد مصادر بعد.</p>:<div style={{display:'grid',gap:8}}>{data.sources.map(source=><div key={source.id} style={{padding:12,borderRadius:10,background:'#f8fafc'}}><strong>#{source.id} · {source.source_type}</strong> · {source.status}<br/><small>Reliability {source.reliability_score}% · Edition Match {source.edition_match_score}%</small>{source.source_url&&<div style={{fontSize:12,wordBreak:'break-all',marginTop:4}}>{source.source_url}</div>}</div>)}</div>}</section>
       <section style={{marginTop:18,padding:14,borderRadius:12,background:'#f7f8fa'}}><strong>Backlog:</strong> {data.backlog.semester_2_book_code} — {data.backlog.note}</section>

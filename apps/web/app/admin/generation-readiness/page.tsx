@@ -1,6 +1,6 @@
 'use client';
 
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 
 const API=process.env.NEXT_PUBLIC_API_URL||'http://localhost:8000';
 
@@ -37,11 +37,11 @@ export default function GenerationReadinessPage(){
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
 
-  async function check(){
+  async function check(targetId=lessonId){
     setBusy(true);setMessage('');setData(null);
     const token=localStorage.getItem('pal_admin_token')||'';
     try{
-      const r=await fetch(`${API}/factory/lessons/${lessonId}/generation-readiness`,{headers:{Authorization:`Bearer ${token}`}});
+      const r=await fetch(`${API}/factory/lessons/${targetId}/generation-readiness`,{headers:{Authorization:`Bearer ${token}`}});
       const body=await r.json();
       if(!r.ok)throw new Error(typeof body.detail==='string'?body.detail:body.detail?.message||'تعذر فحص الجاهزية');
       setData(body);
@@ -49,13 +49,19 @@ export default function GenerationReadinessPage(){
     finally{setBusy(false);}
   }
 
+  useEffect(()=>{
+    const requested=Number(new URLSearchParams(window.location.search).get('lesson_id')||0);
+    if(requested>0){setLessonId(requested);void check(requested);}
+  },[]);
+
   return <main style={{maxWidth:1000,margin:'30px auto',padding:18}}>
     <div style={{fontSize:14,opacity:.6}}>الإدارة ← Curriculum Factory ← Generation Readiness</div>
     <h1>جاهزية توليد الدرس</h1>
     <p>هذا الفحص تشخيصي فقط: لا ينشئ AI Job ولا ينشر محتوى. يوضح بالضبط ما الذي يمنع التوليد وما الخطوة التالية.</p>
     <div style={{display:'flex',gap:10,alignItems:'center',flexWrap:'wrap',background:'white',padding:16,border:'1px solid #e8edf5',borderRadius:14}}>
       <label>Lesson ID <input type="number" min="1" value={lessonId} onChange={e=>setLessonId(Number(e.target.value)||1)} style={{width:90,padding:8,marginInlineStart:6}}/></label>
-      <button onClick={check} disabled={busy} style={{padding:'9px 14px'}}>{busy?'جارٍ الفحص…':'فحص الجاهزية'}</button>
+      <button onClick={()=>void check()} disabled={busy} style={{padding:'9px 14px'}}>{busy?'جارٍ الفحص…':'فحص الجاهزية'}</button>
+      <a href="/admin/current-semester/matrix">مصفوفة الفصل</a>
       <a href="/admin/curriculum">مصنع المنهاج</a>
       <a href="/admin/source-discovery">المصادر المكتشفة</a>
     </div>

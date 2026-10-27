@@ -17,11 +17,13 @@ from ..services.document_importer import (
     edition_match_score,
     extract_document,
     save_upload,
+    sha256_bytes,
     title_match_score,
 )
 
 router = APIRouter(prefix='/importer', tags=['curriculum-importer'], dependencies=[Depends(require_admin)])
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', Path(__file__).resolve().parents[2] / 'data' / 'uploads'))
+MAX_SOURCE_BYTES = int(os.getenv('MAX_SOURCE_BYTES', str(70 * 1024 * 1024)))
 
 SOURCE_WEIGHTS = {
     # 100 total. Current official learning packages are distinct from full textbooks.
@@ -120,10 +122,31 @@ async def upload_source(
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
         raise HTTPException(404, 'Package not found')
+    if source_type not in SOURCE_WEIGHTS:
+        raise HTTPException(422, f'Unsupported source_type: {source_type}')
+
     book = db.query(Book).filter(Book.id == package.book_id).first()
     data = await file.read()
     if not data:
         raise HTTPException(400, 'Empty file')
+    if len(data) > MAX_SOURCE_BYTES:
+        raise HTTPException(413, f'Source file exceeds the {MAX_SOURCE_BYTES // (1024 * 1024)} MiB limit')
+
+    checksum = sha256_bytes(data)
+    duplicate = db.query(SourceFile).filter(
+        SourceFile.package_id == package_id,
+        SourceFile.checksum == checksum,
+    ).first()
+    if duplicate:
+        raise HTTPException(
+            409,
+            detail={
+                'message': 'This exact source file is already registered in the package',
+                'existing_source_file_id': duplicate.id,
+                'checksum': checksum,
+            },
+        )
+
     try:
         path = save_upload(data, file.filename or 'source', UPLOAD_DIR)
         extracted = extract_document(path, file.content_type)
@@ -148,6 +171,7 @@ async def upload_source(
             'method': extracted.extraction_method,
             'warnings': extracted.warnings,
             'characters': len(extracted.text),
+            'bytes': len(data),
         },
     )
     db.add(row)

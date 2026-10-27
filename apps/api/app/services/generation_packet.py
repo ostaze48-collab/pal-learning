@@ -48,7 +48,7 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
 
     section_rows = db.query(LessonSection).filter(
         LessonSection.lesson_id == lesson_id
-    ).order_by(LessonSection.order_no, LessonSection.section_number).all()
+    ).order_by(LessonSection.order_no, LessonSection.id).all()
     section_blueprint = [
         {
             'section_number': section.section_number,

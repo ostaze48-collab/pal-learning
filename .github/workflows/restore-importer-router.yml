@@ -1,0 +1,62 @@
+name: Restore importer router
+
+on:
+  push:
+    paths:
+      - '.github/workflows/restore-importer-router.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Restore known-good router and apply narrow patches
+        run: |
+          git show e2ffe7d05adec0d98d4966ae7f3decdde11f366e:apps/api/app/importer/router.py > apps/api/app/importer/router.py
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('apps/api/app/importer/router.py')
+          s = p.read_text()
+          old = "DEFAULT_SOURCE_HOSTS = 'moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com'"
+          new = "DEFAULT_SOURCE_HOSTS = 'moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com,elearn.edu.ps,elearnps.blob.core.windows.net'"
+          if old not in s:
+              raise SystemExit('DEFAULT_SOURCE_HOSTS marker not found')
+          s = s.replace(old, new, 1)
+
+          old_redirect = """    row.extracted_text = extracted.text\n    row.source_url = source_url or row.source_url\n    row.extraction_meta = {\n        'method': extracted.extraction_method,"""
+          new_redirect = """    row.extracted_text = extracted.text\n    registered_url = row.source_url\n    if not registered_url and source_url:\n        row.source_url = source_url\n    row.extraction_meta = {\n        **dict(row.extraction_meta or {}),\n        'method': extracted.extraction_method,"""
+          if old_redirect in s:
+              s = s.replace(old_redirect, new_redirect, 1)
+              s = s.replace("        'final_source_url': source_url,", "        'registered_source_url': registered_url or row.source_url,\n        'final_source_url': source_url,", 1)
+          elif "'registered_source_url':" not in s:
+              raise SystemExit('redirect identity patch marker not found')
+          p.write_text(s)
+          PY
+      - name: Install API dependencies
+        run: |
+          cd apps/api
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest httpx2
+      - name: Run API tests
+        env:
+          DATABASE_URL: sqlite:///./ci-restore.db
+          PYTHONPATH: apps/api
+        run: pytest -q
+      - name: Commit verified restoration and remove temporary workflow
+        run: |
+          rm .github/workflows/restore-importer-router.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/api/app/importer/router.py .github/workflows/restore-importer-router.yml
+          git commit -m "fix: restore complete curriculum importer router"
+          git pull --rebase origin main
+          git push origin HEAD:main

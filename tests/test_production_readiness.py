@@ -11,9 +11,13 @@ def test_sqlite_and_local_mock_block_production(monkeypatch):
     result = evaluate_production_readiness(
         database_backend='sqlite',
         allowed_origins=['http://localhost:3000', 'https://pal-learning-web.onrender.com'],
+        migration_current=False,
+        migration_revision=None,
+        migration_head='20261027_01',
     )
     assert result.ready is False
     assert 'persistent_database' in result.blockers
+    assert 'database_migration_current' in result.blockers
     assert 'jwt_secret_configured' in result.blockers
     assert 'ai_provider_is_real' in result.blockers
     assert 'ai_provider_configured' in result.blockers
@@ -29,6 +33,9 @@ def test_postgres_openai_and_hardened_runtime_can_be_ready(monkeypatch):
     result = evaluate_production_readiness(
         database_backend='postgresql',
         allowed_origins=['https://pal-learning-web.onrender.com'],
+        migration_current=True,
+        migration_revision='20261027_01',
+        migration_head='20261027_01',
     )
     assert result.ready is True
     assert result.blockers == []

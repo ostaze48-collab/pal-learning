@@ -84,7 +84,7 @@ class AIGateway:
             allowed_chunks = [x.get('source_chunk_id') for x in packet.get('source_context', []) if x.get('source_chunk_id')]
             allowed_skills = [x.get('skill_code') for x in packet.get('skills', []) if x.get('skill_code')]
             return common + (
-                ' Produce one complete Arabic digital lesson object with keys: '
+                ' Produce exactly one Arabic digital lesson object with only these top-level keys: '
                 'learning_objectives, concepts, sections, questions, summary, flashcards, '
                 'misconceptions, remediation_candidates. Design the lesson as short mobile-friendly '
                 'learning blocks following Explain -> Interact -> Check -> Adapt. Use an age-appropriate '
@@ -96,7 +96,9 @@ class AIGateway:
                 'source_chunk_ids. Every citable block and question must cite at least one '
                 f'allowed source_chunk_id from {allowed_chunks}. Question skill_codes may only '
                 f'come from {allowed_skills}. Never cite an ID not present in those allowlists. '
-                'Keep language Arabic-first, clear, non-stigmatizing, and appropriate for the learner age.'
+                'Do not add provider metadata, model names, task names, confidence wrappers, or extra '
+                'top-level keys to the lesson object. Keep language Arabic-first, clear, non-stigmatizing, '
+                'and appropriate for the learner age.'
             )
         if task == 'EXTRACT_STRUCTURE':
             return common + (
@@ -133,8 +135,6 @@ class AIGateway:
             max_output_tokens=max_output_tokens,
         )
         output = self._json_from_text(getattr(response, 'output_text', '') or '')
-        output.setdefault('task', task)
-        output.setdefault('model', model)
 
         usage_obj = getattr(response, 'usage', None)
         if usage_obj is None:
@@ -145,5 +145,8 @@ class AIGateway:
             usage = usage_obj
         else:
             usage = {'raw': str(usage_obj)}
+        usage = dict(usage)
+        usage.setdefault('model', model)
+        usage.setdefault('task', task)
 
         return AIResponse('OPENAI', model_route, output, usage)

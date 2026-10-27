@@ -36,7 +36,7 @@ services:
       - key: SOURCE_FETCH_TIMEOUT_SECONDS
         value: "45"
       - key: CURRICULUM_SOURCE_HOSTS
-        value: moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com
+        value: moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com,elearn.edu.ps,elearnps.blob.core.windows.net
       # Real AI stays opt-in to avoid accidental spend. When ready, set in the dashboard:
       # AI_PROVIDER=OPENAI, OPENAI_API_KEY, OPENAI_MODEL (or OPENAI_MODEL_BALANCED).
 

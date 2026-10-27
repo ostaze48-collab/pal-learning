@@ -4,7 +4,12 @@ import {FormEvent, useState} from 'react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const adminHeaders=()=>({Authorization:`Bearer ${localStorage.getItem('pal_admin_token')||''}`});
-const sourceTypes = ['STUDENT_BOOK','SOLUTIONS','TEACHER_GUIDE','WORKSHEET','EXAM','REMEDIAL'];
+const sourceTypes = ['OFFICIAL_PACKAGE','STUDENT_BOOK','SOLUTIONS','TEACHER_GUIDE','WORKSHEET','EXAM','REMEDIAL','INTERACTIVE','VIDEO_REFERENCE'];
+const sourceLabels:Record<string,string>={
+  OFFICIAL_PACKAGE:'رزمة رسمية حالية من وزارة التربية',
+  STUDENT_BOOK:'كتاب الطالب', SOLUTIONS:'الحلول/الإجابات المرجعية', TEACHER_GUIDE:'دليل المعلم',
+  WORKSHEET:'ورقة عمل', EXAM:'اختبار', REMEDIAL:'مادة علاجية', INTERACTIVE:'مورد تفاعلي', VIDEO_REFERENCE:'مرجع فيديو'
+};
 
 export default function ImporterPage(){
   const [message,setMessage]=useState('');
@@ -37,12 +42,12 @@ export default function ImporterPage(){
   return <main style={{maxWidth:900,margin:'28px auto',padding:18}}>
     <div style={{fontSize:14,opacity:.6}}>الإدارة ← مصنع المنهاج</div>
     <h1>استيراد الرزمة التعليمية</h1>
-    <p>ارفع كتاب الطالب أولًا، ثم الحلول وبقية المصادر. لا تُنشر أي بنية مستخرجة باعتبارها نهائية قبل QA.</p>
+    <p>الرزمة الرسمية الحالية تُسجّل كمصدر مستقل، والكتاب الكامل والحلول ودليل المعلم تبقى مصادر منفصلة. لا نعتبر الرزمة الرسمية وحدها إثباتًا لطبعة كتاب كاملة ما لم تتم مطابقة المحتوى.</p>
     <form onSubmit={upload} style={{background:'white',padding:20,borderRadius:16,border:'1px solid #e8edf5',display:'grid',gap:14}}>
       <label>رقم الرزمة<input name="package_id" defaultValue="1" required style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
-      <label>نوع المصدر<select name="source_type" defaultValue="STUDENT_BOOK" style={{display:'block',width:'100%',padding:10,marginTop:5}}>{sourceTypes.map(x=><option key={x}>{x}</option>)}</select></label>
+      <label>نوع المصدر<select name="source_type" defaultValue="OFFICIAL_PACKAGE" style={{display:'block',width:'100%',padding:10,marginTop:5}}>{sourceTypes.map(x=><option key={x} value={x}>{sourceLabels[x]||x} — {x}</option>)}</select></label>
       <label>الطبعة/السنة<input name="edition" defaultValue="2026" style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
-      <label>درجة موثوقية المصدر<input name="reliability_score" type="number" min="0" max="100" defaultValue="90" style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
+      <label>درجة موثوقية المصدر<input name="reliability_score" type="number" min="0" max="100" defaultValue="100" style={{display:'block',width:'100%',padding:10,marginTop:5}}/></label>
       <label>الملف<input name="file" type="file" accept=".pdf,.txt,.md" required style={{display:'block',marginTop:8}}/></label>
       <button disabled={busy} style={{border:0,borderRadius:12,padding:12,background:'#1f6feb',color:'white',fontWeight:700}}>{busy?'جارٍ التنفيذ…':'رفع واستخراج النص'}</button>
     </form>

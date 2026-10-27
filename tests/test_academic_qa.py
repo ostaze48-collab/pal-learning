@@ -26,6 +26,23 @@ assert login.status_code == 200, login.text
 HEADERS = {'Authorization': f"Bearer {login.json()['access_token']}"}
 
 
+def _verify_teaching_links(lesson_id: int = 1):
+    response = client.get(f'/importer/lessons/{lesson_id}/source-links', headers=HEADERS)
+    assert response.status_code == 200, response.text
+    verified = 0
+    for link in response.json()['links']:
+        if not link['factual_grounding_authorized']:
+            continue
+        if link['status'] == 'VERIFIED':
+            verified += 1
+            continue
+        result = client.post(f"/importer/lesson-source-links/{link['id']}/verify", headers=HEADERS)
+        assert result.status_code == 200, result.text
+        assert result.json()['status'] == 'VERIFIED'
+        verified += 1
+    assert verified >= 1
+
+
 def _stage_release_ready_lesson():
     text = '''
 العلوم والحياة الصف الخامس الفصل الثاني 2026
@@ -48,6 +65,7 @@ def _stage_release_ready_lesson():
 
     linked = client.post('/importer/source-packages/1/link-lessons', headers=HEADERS)
     assert linked.status_code == 200, linked.text
+    _verify_teaching_links(1)
 
     queued = client.post('/factory/lessons/1/generate', headers=HEADERS)
     assert queued.status_code == 200, queued.text

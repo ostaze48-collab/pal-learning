@@ -42,6 +42,11 @@ export default function SourcePolicyPage(){
     <div style={{fontSize:14,opacity:.65}}>الإدارة ← مصادر المنهاج ← Authority Matrix</div>
     <h1>سياسة صلاحيات المصادر</h1>
     <p>كل نوع مصدر له وظيفة محددة. النظام يمنع المصدر من أداء وظيفة غير مصرح بها حتى لو تم ربطه يدويًا بالدرس. الأنواع غير المعروفة تُعامل تلقائيًا كـ <strong>DENY ALL</strong>.</p>
+    <div style={{display:'flex',gap:10,flexWrap:'wrap',marginBottom:16}}>
+      <a href="/admin/source-discovery">المصادر المكتشفة</a>
+      <a href="/admin/importer">استيراد الملفات</a>
+      <a href="/admin">لوحة الإدارة</a>
+    </div>
     {error&&<div style={{padding:14,borderRadius:12,background:'#ffecec'}}>{error}</div>}
     {!data&&!error&&<p>جارٍ تحميل المصفوفة…</p>}
     {data&&<>
@@ -64,6 +69,7 @@ export default function SourcePolicyPage(){
           <li><strong>الحلول:</strong> للتحقق من الإجابات ونمط التقييم، وليس لشرح حقائق الدرس.</li>
           <li><strong>خطة المنهاج:</strong> تثبت أن الوحدة/الدرس ما زال ضمن الخطة الحالية، ولا تدخل factual context.</li>
           <li><strong>مرشح كتالوج الوزارة:</strong> بلا صلاحيات حتى يثبت النطاق ويُرقّى إلى نوع موثوق.</li>
+          <li><strong>Discovery Candidate:</strong> ليس SourceFile أصلًا؛ هو فقط دليل بأن ملفًا محتملًا موجود ويجب الحصول على الملف الفعلي أولًا.</li>
         </ul>
       </section>
     </>}

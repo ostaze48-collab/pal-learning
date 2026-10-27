@@ -126,4 +126,4 @@ def test_candidate_preflight_and_staging_do_not_publish():
 
     lesson = client.get('/curriculum/lessons/1').json()
     # Staging approval is intentionally separate from the live lesson state.
-    assert lesson['status'] == 'PUBLISHED'
+    assert lesson['status'] == 'DRAFT'

@@ -10,27 +10,31 @@ from sqlalchemy.orm import Session
 
 from ..auth.deps import require_admin
 from ..db.deps import get_db
-from ..db.models import AIJob, Book, Lesson, LessonSkill, Skill, Unit
+from ..db.models import AIJob, Book, Lesson, LessonSkill, Skill, Subject, Unit
 from ..schemas.skill_mapping import SkillApprovalRequest, SkillMappingPayload
 from ..services.generation_packet import build_lesson_generation_packet
 
 router = APIRouter(prefix='/factory', tags=['skill-mapping'], dependencies=[Depends(require_admin)])
 
 
-def _subject_id_for_lesson(db: Session, lesson: Lesson) -> int:
+def _subject_for_lesson(db: Session, lesson: Lesson) -> Subject:
     unit = db.query(Unit).filter(Unit.id == lesson.unit_id).first()
     if not unit:
         raise HTTPException(409, 'Lesson unit is missing')
     book = db.query(Book).filter(Book.id == unit.book_id).first()
     if not book:
         raise HTTPException(409, 'Lesson book is missing')
-    return book.subject_id
+    subject = db.query(Subject).filter(Subject.id == book.subject_id).first()
+    if not subject:
+        raise HTTPException(409, 'Lesson subject is missing')
+    return subject
 
 
-def _skill_code(domain: str, name_ar: str) -> str:
+def _skill_code(subject_code: str, domain: str, name_ar: str) -> str:
+    safe_subject = re.sub(r'[^A-Z0-9]+', '', subject_code.upper())[:12] or 'GEN'
     safe_domain = re.sub(r'[^A-Z0-9_]+', '_', domain.upper()).strip('_')[:36] or 'GENERAL'
-    digest = hashlib.sha256(f'{safe_domain}|{name_ar.strip()}'.encode('utf-8')).hexdigest()[:12].upper()
-    return f'SK.SCI.AUTO.{safe_domain}.{digest}'
+    digest = hashlib.sha256(f'{safe_subject}|{safe_domain}|{name_ar.strip()}'.encode('utf-8')).hexdigest()[:12].upper()
+    return f'SK.{safe_subject}.AUTO.{safe_domain}.{digest}'
 
 
 @router.post('/lessons/{lesson_id}/skill-mapping/queue')
@@ -218,17 +222,17 @@ def approve_skill_mapping(job_id: int, request: SkillApprovalRequest, db: Sessio
     lesson = db.query(Lesson).filter(Lesson.id == job.source_id).first()
     if not lesson:
         raise HTTPException(404, 'Lesson not found')
-    subject_id = _subject_id_for_lesson(db, lesson)
+    subject = _subject_for_lesson(db, lesson)
     approved = []
     existing_approved = set(candidate.get('approved_indices') or [])
     for index in indices:
         proposal = proposals[index]
-        code = _skill_code(proposal['domain'], proposal['name_ar'])
+        code = _skill_code(subject.code, proposal['domain'], proposal['name_ar'])
         skill = db.query(Skill).filter(Skill.skill_code == code).first()
         if not skill:
             skill = Skill(
                 skill_code=code,
-                subject_id=subject_id,
+                subject_id=subject.id,
                 domain=proposal['domain'],
                 name_ar=proposal['name_ar'],
                 description=proposal.get('description_ar') or proposal['measurable_outcome_ar'],
@@ -260,6 +264,7 @@ def approve_skill_mapping(job_id: int, request: SkillApprovalRequest, db: Sessio
         'approved_at': datetime.now(UTC).isoformat(),
         'approved_indices': sorted(existing_approved),
         'server_generated_skill_codes': True,
+        'subject_code': subject.code,
     }
     job.result_json = result
     job.status = 'SKILL_MAPPING_APPROVED' if len(existing_approved) == len(proposals) else 'SKILL_MAPPING_PARTIALLY_APPROVED'
@@ -271,4 +276,5 @@ def approve_skill_mapping(job_id: int, request: SkillApprovalRequest, db: Sessio
         'approved': approved,
         'approved_indices': sorted(existing_approved),
         'server_generated_skill_codes': True,
+        'subject_code': subject.code,
     }

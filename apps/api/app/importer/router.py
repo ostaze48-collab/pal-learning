@@ -24,11 +24,13 @@ router = APIRouter(prefix='/importer', tags=['curriculum-importer'], dependencie
 UPLOAD_DIR = Path(os.getenv('UPLOAD_DIR', Path(__file__).resolve().parents[2] / 'data' / 'uploads'))
 
 SOURCE_WEIGHTS = {
-    'STUDENT_BOOK': 35,
-    'SOLUTIONS': 20,
-    'TEACHER_GUIDE': 15,
-    'WORKSHEET': 10,
-    'EXAM': 10,
+    # 100 total. Current official learning packages are distinct from full textbooks.
+    'STUDENT_BOOK': 30,
+    'OFFICIAL_PACKAGE': 20,
+    'SOLUTIONS': 15,
+    'TEACHER_GUIDE': 10,
+    'WORKSHEET': 8,
+    'EXAM': 7,
     'REMEDIAL': 5,
     'INTERACTIVE': 3,
     'VIDEO_REFERENCE': 2,

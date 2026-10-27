@@ -213,6 +213,21 @@ def run():
                 status='DISCOVERED', completeness_score=0, quality_score=0
             )
             db.add(package); db.commit(); db.refresh(package)
+        # Official current learning-package source from the Palestinian Ministry of Education.
+        # It is authoritative for the current Gaza package, but does not by itself prove
+        # that the complete 2026 textbook edition has been verified.
+        official_package = db.query(SourceFile).filter_by(package_id=package.id, source_type='OFFICIAL_PACKAGE').first()
+        if not official_package:
+            official_package = SourceFile(
+                package_id=package.id, source_type='OFFICIAL_PACKAGE',
+                source_url='https://moe.edu.ps/m/4070',
+                original_filename='moe-current-grade5-science-learning-package',
+                edition='current official Gaza learning package',
+                reliability_score=100, edition_match_score=95, status='DISCOVERED'
+            )
+            db.add(official_package); db.flush()
+
+        # Historical full student book remains only a structure/reference fallback.
         source_file = db.query(SourceFile).filter_by(package_id=package.id, source_type='STUDENT_BOOK').first()
         if not source_file:
             source_file = SourceFile(
@@ -222,6 +237,17 @@ def run():
                 reliability_score=75, edition_match_score=0, status='DISCOVERED'
             )
             db.add(source_file); db.flush()
+
+        solutions_file = db.query(SourceFile).filter_by(package_id=package.id, source_type='SOLUTIONS').first()
+        if not solutions_file:
+            solutions_file = SourceFile(
+                package_id=package.id, source_type='SOLUTIONS',
+                source_url='https://www.sh-pal.com/2018/01/blog-post_675.html',
+                original_filename='science-grade5-sem2-model-answers-reference',
+                edition='edition-not-yet-matched-to-current-package',
+                reliability_score=85, edition_match_score=0, status='DISCOVERED'
+            )
+            db.add(solutions_file); db.flush()
 
         skill_sets = seed_skill_graph(db, sci, math, lessons[1])
         seed_questions(db, lessons[1], skill_sets['science'], source_file)

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from ..db.models import (
     Lesson, LessonSkill, LessonSourceLink, Question, Skill, SourceChunk, SourceFile
 )
+from ..importer.source_policy import can_ground_facts, can_prove_current_scope
 
 
 def _source_payload(db: Session, link: LessonSourceLink) -> dict | None:
@@ -57,10 +58,20 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         LessonSourceLink.status.in_(['CANDIDATE', 'VERIFIED_CANDIDATE', 'VERIFIED'])
     ).order_by(LessonSourceLink.confidence.desc()).all()
     source_context = []
+    rejected_teaching_sources = []
     for link in teaching_links[:12]:
         item = _source_payload(db, link)
-        if item:
-            source_context.append(item)
+        if not item:
+            continue
+        if not can_ground_facts(item.get('source_type')):
+            rejected_teaching_sources.append({
+                'source_file_id': item.get('source_file_id'),
+                'source_type': item.get('source_type'),
+                'source_chunk_id': item.get('source_chunk_id'),
+                'reason': 'SOURCE_TYPE_NOT_AUTHORIZED_FOR_FACTUAL_GROUNDING',
+            })
+            continue
+        source_context.append(item)
 
     scope_links = db.query(LessonSourceLink).filter(
         LessonSourceLink.lesson_id == lesson_id,
@@ -68,21 +79,31 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         LessonSourceLink.status == 'VERIFIED',
     ).order_by(LessonSourceLink.confidence.desc()).all()
     scope_evidence = []
+    rejected_scope_sources = []
     for link in scope_links[:6]:
         item = _source_payload(db, link)
-        if item:
-            # Scope evidence is metadata/context for gating only. It must not be
-            # included in the source_chunk allowlist used by generated facts.
-            scope_evidence.append({
-                'source_file_id': item['source_file_id'],
-                'source_type': item['source_type'],
-                'source_edition': item['source_edition'],
-                'source_chunk_id': item['source_chunk_id'],
-                'page_number': item['page_number'],
-                'confidence': item['confidence'],
-                'relation': item['relation'],
-                'text_preview': item['text'][:700],
+        if not item:
+            continue
+        if not can_prove_current_scope(item.get('source_type')):
+            rejected_scope_sources.append({
+                'source_file_id': item.get('source_file_id'),
+                'source_type': item.get('source_type'),
+                'source_chunk_id': item.get('source_chunk_id'),
+                'reason': 'SOURCE_TYPE_NOT_AUTHORIZED_FOR_CURRENT_SCOPE',
             })
+            continue
+        # Scope evidence is metadata/context for gating only. It must not be
+        # included in the source_chunk allowlist used by generated facts.
+        scope_evidence.append({
+            'source_file_id': item['source_file_id'],
+            'source_type': item['source_type'],
+            'source_edition': item['source_edition'],
+            'source_chunk_id': item['source_chunk_id'],
+            'page_number': item['page_number'],
+            'confidence': item['confidence'],
+            'relation': item['relation'],
+            'text_preview': item['text'][:700],
+        })
 
     current_teaching_source = any(_looks_current_teaching_source(item) for item in source_context)
     scope_evidence_required = bool(source_context) and not current_teaching_source
@@ -97,7 +118,7 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
 
     existing_questions = db.query(Question).filter(Question.lesson_id == lesson_id).all()
     return {
-        'contract_version': 'lesson-generation-packet/v2',
+        'contract_version': 'lesson-generation-packet/v3',
         'lesson': {
             'id': lesson.id,
             'lesson_code': lesson.lesson_code,
@@ -107,6 +128,12 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
         'skills': skills,
         'source_context': effective_source_context,
         'scope_evidence': scope_evidence,
+        'authority_gate': {
+            'rejected_teaching_sources': rejected_teaching_sources,
+            'rejected_scope_sources': rejected_scope_sources,
+            'factual_sources_authorized': not rejected_teaching_sources,
+            'scope_sources_authorized': not rejected_scope_sources,
+        },
         'scope_gate': {
             'current_teaching_source': current_teaching_source,
             'current_scope_evidence_required': scope_evidence_required,
@@ -129,10 +156,12 @@ def build_lesson_generation_packet(db: Session, lesson_id: int) -> dict:
             'provenance_required': True,
             'provenance_field': 'source_chunk_ids',
             'scope_evidence_is_non_factual': True,
+            'source_authority_enforced': True,
             'lesson_loop': ['EXPLORE', 'UNDERSTAND', 'TRY', 'CHECK', 'DEEPEN', 'MASTERY', 'SUMMARY'],
             'avoid': [
                 'invented curriculum facts',
                 'using curriculum-plan text as factual lesson explanation',
+                'using solution/reference-answer sources as factual lesson explanation',
                 'long lecture-like blocks',
                 'unsupported answer keys',
                 'stigmatising grade-level labels during remediation',

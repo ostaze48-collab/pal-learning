@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useState} from 'react';
 import {apiJson,studentHeaders} from '../../../lib/api';
 import {BottomNav,Notice,Pill,PrimaryButton,PrimaryLink,ProgressBar,StudentCard,StudentShell} from '../_components/StudentUI';
 
@@ -10,6 +10,8 @@ type LessonPayload={experimental:boolean;book:{title:string;book_code:string};un
 type Question={id:number;question_code:string;question_type:string;prompt:string;options:string[];difficulty:number;purpose:string};
 type Progress={progress_percent:number;mastered_skills:number;skills:Array<{skill_id:number;name_ar:string;mastery_score:number;status:string}>};
 type Feedback={correct:boolean;message:string;attempt:number};
+
+const OPTION_LABELS=['أ','ب','ج','د','هـ','و'];
 
 function Timeline({items}:{items:Array<{year:string;name:string;text:string}>}){
   return <div style={{display:'grid',gap:10}}>{items.map((item,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'62px 1fr',gap:10,alignItems:'stretch'}}><div style={{display:'grid',placeItems:'center',borderRadius:12,background:'#eef8f1',color:'#176b3a',fontWeight:900}}>{item.year}</div><div style={{padding:11,border:'1px solid #e7ebf1',borderRadius:12,background:'#fff'}}><strong>{item.name}</strong><div style={{marginTop:4,lineHeight:1.7,color:'#475467'}}>{item.text}</div></div></div>)}</div>;
@@ -50,7 +52,7 @@ export default function LessonPage(){
   useEffect(()=>{void load();},[]);
 
   const answered=Object.keys(feedback).length;
-  const lessonUiProgress=lesson?.sections.length?Math.round(((lesson.sections.length+(answered/questions.length||0))/ (lesson.sections.length+1))*100):0;
+  const lessonUiProgress=lesson?.sections.length?Math.round(((lesson.sections.length+(questions.length?answered/questions.length:0))/(lesson.sections.length+1))*100):0;
 
   async function submit(q:Question){
     const answer=selected[q.id];if(answer===undefined)return;
@@ -100,7 +102,7 @@ export default function LessonPage(){
         return <StudentCard key={q.id}>
           <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><Pill tone="info">سؤال {index+1}</Pill><Pill>{q.purpose}</Pill></div>
           <h3 style={{fontSize:18,lineHeight:1.6,margin:'12px 0'}}>{q.prompt}</h3>
-          <div style={{display:'grid',gap:8}}>{q.options.map((option,i)=><button key={i} onClick={()=>!f&&setSelected(s=>({...s,[q.id]:i}))} disabled={!!f} style={{textAlign:'right',padding:'12px 13px',borderRadius:12,border:selected[q.id]===i?'2px solid #176b3a':'1px solid #d7dde6',background:selected[q.id]===i?'#f1faf4':'#fff',fontSize:15,cursor:f?'default':'pointer'}}><span style={{display:'inline-grid',placeItems:'center',width:24,height:24,borderRadius:99,background:selected[q.id]===i?'#176b3a':'#f2f4f7',color:selected[q.id]===i?'#fff':'#344054',fontWeight:900,marginInlineEnd:8}}>{String.fromCharCode(أ.charCodeAt?0:0)}</span>{option}</button>)}</div>
+          <div style={{display:'grid',gap:8}}>{q.options.map((option,i)=><button key={i} onClick={()=>!f&&setSelected(s=>({...s,[q.id]:i}))} disabled={!!f} style={{textAlign:'right',padding:'12px 13px',borderRadius:12,border:selected[q.id]===i?'2px solid #176b3a':'1px solid #d7dde6',background:selected[q.id]===i?'#f1faf4':'#fff',fontSize:15,cursor:f?'default':'pointer'}}><span style={{display:'inline-grid',placeItems:'center',width:24,height:24,borderRadius:99,background:selected[q.id]===i?'#176b3a':'#f2f4f7',color:selected[q.id]===i?'#fff':'#344054',fontWeight:900,marginInlineEnd:8}}>{OPTION_LABELS[i]||String(i+1)}</span>{option}</button>)}</div>
           {!f&&<div style={{marginTop:11}}><PrimaryButton disabled={selected[q.id]===undefined||busyQuestion===q.id} onClick={()=>void submit(q)}>{busyQuestion===q.id?'جارٍ الحفظ…':'تحقق واحفظ التقدم'}</PrimaryButton></div>}
           {f&&<div style={{marginTop:12}}><Notice tone={f.correct?'good':'warn'}><strong>{f.correct?'إجابة صحيحة ✓':'تحتاج مراجعة'}</strong><div style={{marginTop:4}}>{f.message}</div><div style={{fontSize:11,marginTop:5}}>المحاولة رقم {f.attempt}</div></Notice></div>}
         </StudentCard>})}</div>
@@ -111,9 +113,9 @@ export default function LessonPage(){
         <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/progress">تفاصيل المهارات</PrimaryLink><PrimaryLink href="/student/recovery" secondary>مراجعة ذكية</PrimaryLink></div>
       </StudentCard>
 
-      <button onClick={()=>setTutorOpen(x=>!x)} style={{position:'fixed',left:16,bottom:84,zIndex:30,width:58,height:58,borderRadius:99,border:0,background:'#14213d',color:'#fff',fontSize:24,boxShadow:'0 10px 30px rgba(20,33,61,.25)',cursor:'pointer'}}>✦</button>
+      <button onClick={()=>setTutorOpen(x=>!x)} aria-label="مساعد الدرس" style={{position:'fixed',left:16,bottom:84,zIndex:30,width:58,height:58,borderRadius:99,border:0,background:'#14213d',color:'#fff',fontSize:24,boxShadow:'0 10px 30px rgba(20,33,61,.25)',cursor:'pointer'}}>✦</button>
       {tutorOpen&&<div style={{position:'fixed',left:12,right:12,bottom:150,zIndex:29,maxWidth:540,margin:'0 auto',background:'#fff',border:'1px solid #dce2ea',borderRadius:18,padding:14,boxShadow:'0 18px 60px rgba(20,33,61,.22)'}}>
-        <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><div><strong>مساعد الدرس</strong><div style={{fontSize:11,color:'#667085'}}>مقيد بالمجهر واكتشاف الخلية</div></div><button onClick={()=>setTutorOpen(false)} style={{border:0,background:'transparent',fontSize:22}}>×</button></div>
+        <div style={{display:'flex',justifyContent:'space-between',gap:8,alignItems:'center'}}><div><strong>مساعد الدرس</strong><div style={{fontSize:11,color:'#667085'}}>مقيد بالمجهر واكتشاف الخلية</div></div><button onClick={()=>setTutorOpen(false)} aria-label="إغلاق" style={{border:0,background:'transparent',fontSize:22}}>×</button></div>
         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginTop:10}}>{[['explain_simple','اشرح أبسط'],['example','أعطني مثالًا'],['hint','أعطني تلميحًا'],['compare','قارن العلماء'],['quiz','اختبرني']].map(([action,label])=><button key={action} onClick={()=>void tutor(action)} disabled={tutorBusy} style={{padding:'7px 9px',borderRadius:999,border:'1px solid #d8dee7',background:'#fff',fontSize:12}}>{label}</button>)}</div>
         <div style={{display:'flex',gap:7,marginTop:10}}><input value={tutorQuestion} onChange={e=>setTutorQuestion(e.target.value)} placeholder="اسأل عن الدرس…" style={{flex:1,minWidth:0,padding:'10px 11px',border:'1px solid #ccd5df',borderRadius:10}}/><button onClick={()=>void tutor('free',tutorQuestion)} disabled={!tutorQuestion.trim()||tutorBusy} style={{padding:'0 13px',border:0,borderRadius:10,background:'#176b3a',color:'#fff',fontWeight:800}}>إرسال</button></div>
         <div style={{marginTop:10,minHeight:48,padding:10,borderRadius:11,background:'#f8fafc',lineHeight:1.7,fontSize:14}}>{tutorBusy?'يفكر داخل محتوى الدرس…':tutorAnswer||'اختر أمرًا سريعًا أو اكتب سؤالك.'}</div>

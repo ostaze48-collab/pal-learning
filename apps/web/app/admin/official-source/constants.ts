@@ -1,0 +1,1 @@
+export const OFFICIAL_G5_SCI_S1_PACKAGE_ID=1;

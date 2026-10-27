@@ -120,7 +120,21 @@ class AIGateway:
         if task == 'GENERATE_REMEDIATION':
             return common + ' Return a short source-grounded remediation sequence followed by a mastery check.'
         if task == 'QA_CONTENT':
-            return common + ' Audit the supplied content and return errors, conflicts, unsupported claims, and a confidence score.'
+            return common + (
+                ' Act as an independent academic reviewer. Audit the staged lesson against the supplied '
+                'source_context. Return exactly these top-level keys and no others: errors, conflicts, '
+                'unsupported_claims, question_issues, age_appropriateness_issues, confidence, '
+                'recommendation, summary. Every issue object must contain exactly code, severity, '
+                'category, message, source_chunk_ids. severity must be one of INFO, WARNING, ERROR, '
+                'CRITICAL. recommendation must be PASS, REVIEW, or BLOCK. confidence must be 0 through 100. '
+                'Use source_chunk_ids only from the supplied source_context; use an empty list only when '
+                'the issue is structural and cannot reasonably be tied to a source chunk. Check factual '
+                'accuracy, source support, contradictions, curriculum alignment, question answers and '
+                'explanations, age-appropriate language, and whether assessment items test the intended '
+                'learning. Mark every unsupported curriculum claim explicitly. PASS only when no ERROR or '
+                'CRITICAL issue and no unsupported curriculum claim remains. Do not rewrite the lesson; '
+                'report findings only.'
+            )
         return common + f' Perform task {task} and return a JSON object.'
 
     def _run_openai(self, task: str, payload: dict, model_route: str) -> AIResponse:

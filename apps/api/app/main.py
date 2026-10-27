@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from .db.base import Base, engine
+from .db.migration_status import get_migration_status
 from .curriculum.router import router as curriculum_router
 from .importer.router import router as importer_router
 from .learning.router import router as learning_router
@@ -77,6 +78,19 @@ def ready():
     try:
         with engine.connect() as connection:
             connection.execute(text('SELECT 1'))
+        backend = engine.url.get_backend_name()
+        if backend in {'postgresql', 'postgres'}:
+            migration = get_migration_status(engine)
+            if not migration['is_current']:
+                raise HTTPException(
+                    status_code=503,
+                    detail={
+                        'message': 'Database migration is not current',
+                        'migration': migration,
+                    },
+                )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail='Database is not ready') from exc
     return {

@@ -26,12 +26,13 @@ from .admin.readiness import router as readiness_router
 from .admin.current_semester import router as current_semester_router
 from .factory.router import router as factory_router
 from .factory.generation_readiness import router as generation_readiness_router
+from .factory.skill_mapping import router as skill_mapping_router
 from .factory.candidate_qa import router as candidate_qa_router
 from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.13.1'
+VERSION = '1.14.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -91,6 +92,7 @@ def health():
             'published-question-attempt-gate', 'published-learning-event-reference-gate',
             'official-package-priority', 'readiness-check', 'safe-registered-source-fetch',
             'provider-backed-content-factory', 'lesson-generation-readiness-diagnostics',
+            'evidence-grounded-skill-mapping', 'admin-skill-approval',
             'candidate-preflight-qa', 'admin-staging-approval', 'immutable-staged-versions',
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
             'release-manifest-sha256', 'direct-legacy-publish-disabled',
@@ -144,6 +146,7 @@ app.include_router(readiness_router)
 app.include_router(current_semester_router)
 app.include_router(factory_router)
 app.include_router(generation_readiness_router)
+app.include_router(skill_mapping_router)
 app.include_router(candidate_qa_router)
 app.include_router(academic_qa_router)
 app.include_router(release_gate_router)

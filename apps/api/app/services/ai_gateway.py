@@ -77,7 +77,7 @@ class AIGateway:
             'You are a curriculum-grounded education content processor. '
             'Use only the source context supplied in the input. Do not invent facts, '
             'citations, source chunk IDs, skill codes, or curriculum claims. '
-            'Return JSON only, without Markdown fences.'
+            'Return one valid JSON object only.'
         )
         if task == 'GENERATE_LESSON':
             packet = payload.get('packet') or {}
@@ -86,13 +86,17 @@ class AIGateway:
             return common + (
                 ' Produce one complete Arabic digital lesson object with keys: '
                 'learning_objectives, concepts, sections, questions, summary, flashcards, '
-                'misconceptions, remediation_candidates. Each section must contain blocks; '
-                'each block must include block_type, title/body/content as appropriate, and '
-                'source_chunk_ids. Each question must include question_type, prompt, options '
-                'when needed, correct_answer, explanation, purpose, difficulty, skill_codes, '
-                'and source_chunk_ids. Every citable block and question must cite at least one '
+                'misconceptions, remediation_candidates. Design the lesson as short mobile-friendly '
+                'learning blocks following Explain -> Interact -> Check -> Adapt. Use an age-appropriate '
+                'hook, concise explanation, guided interaction, quick checks, mastery questions, summary, '
+                'and remediation candidates where the supplied skills justify them. Each section must '
+                'contain blocks; each block must include block_type, title/body/content as appropriate, '
+                'and source_chunk_ids. Each question must include question_type, prompt, options when '
+                'needed, correct_answer, explanation, purpose, difficulty, skill_codes, and '
+                'source_chunk_ids. Every citable block and question must cite at least one '
                 f'allowed source_chunk_id from {allowed_chunks}. Question skill_codes may only '
-                f'come from {allowed_skills}. Keep language age-appropriate and Arabic-first.'
+                f'come from {allowed_skills}. Never cite an ID not present in those allowlists. '
+                'Keep language Arabic-first, clear, non-stigmatizing, and appropriate for the learner age.'
             )
         if task == 'EXTRACT_STRUCTURE':
             return common + (
@@ -125,6 +129,7 @@ class AIGateway:
             model=model,
             instructions=self._instructions_for_task(task, payload),
             input=json.dumps(payload, ensure_ascii=False, default=str),
+            text={'format': {'type': 'json_object'}},
             max_output_tokens=max_output_tokens,
         )
         output = self._json_from_text(getattr(response, 'output_text', '') or '')

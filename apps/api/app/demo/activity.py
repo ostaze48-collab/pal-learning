@@ -104,10 +104,10 @@ def check_matching_activity(
         student_id=profile.id,
         event_type='ACTIVITY_COMPLETED',
         lesson_id=lesson.id,
-        content_block_id=block.id,
         metadata_json={
             'experimental_demo': True,
             'activity_type': 'MATCHING',
+            'activity_id': block.id,
             'score': correct_count,
             'total': total,
             'percent': percent,

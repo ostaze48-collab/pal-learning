@@ -39,6 +39,43 @@ def _authorized_factual_lesson_links(db: Session, lesson_id: int) -> list[Lesson
     return authorized
 
 
+def _source_ref_chunk_id(ref) -> int | None:
+    if isinstance(ref, int):
+        return ref
+    if isinstance(ref, str) and ref.isdigit():
+        return int(ref)
+    if isinstance(ref, dict):
+        for key in ('source_chunk_id', 'chunk_id', 'id'):
+            value = ref.get(key)
+            if isinstance(value, int):
+                return value
+            if isinstance(value, str) and value.isdigit():
+                return int(value)
+    return None
+
+
+def _block_has_authorized_factual_provenance(db: Session, block: ContentBlock) -> bool:
+    refs = list(block.source_refs or [])
+    if not refs:
+        return False
+    chunk_ids = [_source_ref_chunk_id(ref) for ref in refs]
+    if not chunk_ids or any(chunk_id is None for chunk_id in chunk_ids):
+        return False
+    chunks = db.query(SourceChunk).filter(SourceChunk.id.in_(chunk_ids)).all()
+    by_id = {chunk.id: chunk for chunk in chunks}
+    if len(by_id) != len(set(chunk_ids)):
+        return False
+    source_ids = {chunk.source_file_id for chunk in chunks}
+    sources = db.query(SourceFile).filter(SourceFile.id.in_(source_ids)).all()
+    by_source = {source.id: source for source in sources}
+    for chunk_id in chunk_ids:
+        chunk = by_id.get(chunk_id)
+        source = by_source.get(chunk.source_file_id) if chunk else None
+        if not source or not can_ground_facts(source.source_type):
+            return False
+    return True
+
+
 def _reference_answer_weight(db: Session, ref: ReferenceAnswer, validation_weights: dict[str, float]) -> float:
     if not ref.source_file_id:
         return 0.0
@@ -129,13 +166,16 @@ def calculate_lesson_qa(db: Session, lesson_id: int) -> dict:
     lesson_skills = db.query(LessonSkill).filter(LessonSkill.lesson_id == lesson_id).all()
     questions = db.query(Question).filter(Question.lesson_id == lesson_id).all()
 
-    blocks_with_refs = sum(1 for b in blocks if b.source_refs)
+    blocks_with_any_refs = sum(1 for block in blocks if block.source_refs)
+    blocks_with_authorized_factual_refs = sum(
+        1 for block in blocks if _block_has_authorized_factual_provenance(db, block)
+    )
     all_lesson_source_links = db.query(LessonSourceLink).filter(LessonSourceLink.lesson_id == lesson_id).all()
     factual_lesson_source_links = _authorized_factual_lesson_links(db, lesson_id)
-    source_alignment = (100 * blocks_with_refs / len(blocks)) if blocks else 0
-    if blocks and blocks_with_refs == 0 and factual_lesson_source_links:
-        source_alignment = 60  # factual lesson provenance exists, but block-level provenance is incomplete
-    elif blocks and blocks_with_refs == 0:
+    source_alignment = (100 * blocks_with_authorized_factual_refs / len(blocks)) if blocks else 0
+    if blocks and blocks_with_authorized_factual_refs == 0 and factual_lesson_source_links:
+        source_alignment = 60  # factual lesson provenance exists, but block-level provenance is still incomplete
+    elif blocks and blocks_with_authorized_factual_refs == 0:
         source_alignment = 25  # no authorized factual lesson-level provenance has been mapped yet
 
     linked_question_ids = {
@@ -191,7 +231,8 @@ def calculate_lesson_qa(db: Session, lesson_id: int) -> dict:
         'details': {
             'sections': len(sections),
             'blocks': len(blocks),
-            'blocks_with_source_refs': blocks_with_refs,
+            'blocks_with_source_refs': blocks_with_any_refs,
+            'blocks_with_authorized_factual_source_refs': blocks_with_authorized_factual_refs,
             'lesson_skills': len(lesson_skills),
             'lesson_source_links': len(all_lesson_source_links),
             'authorized_factual_lesson_source_links': len(factual_lesson_source_links),

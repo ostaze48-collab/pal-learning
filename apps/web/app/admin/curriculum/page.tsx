@@ -39,7 +39,6 @@ export default function CurriculumAdmin(){
  const [busy,setBusy]=useState('');
  const [message,setMessage]=useState('');
  const tokenPresent=typeof window!=='undefined'&&Boolean(localStorage.getItem('pal_admin_token'));
- const latestJob=jobs[0];
 
  async function refresh(){
   setMessage('');
@@ -151,4 +150,4 @@ export default function CurriculumAdmin(){
 
 const panel:React.CSSProperties={background:'white',padding:18,borderRadius:16,border:'1px solid #e8edf5',marginTop:16};
 function Metric({title,value,sub}:{title:string;value:string;sub:string}){return <div style={{background:'white',padding:16,borderRadius:14,border:'1px solid #e8edf5'}}><div style={{fontSize:12,opacity:.55}}>{title}</div><div style={{fontSize:21,fontWeight:800,margin:'5px 0'}}>{value}</div><div style={{fontSize:12,opacity:.65}}>{sub}</div></div>}
-function Action({children,onClick,disabled}:{children:React.ReactNode;onClick:()=>void;disabled?:boolean}){return <button disabled={disabled} onClick={onClick} style={{border:0,borderRadius:10,padding:'10px 12px',background:'#1f6feb',color:'white',fontWeight:700,opacity:disabled?.6:1}}>{children}</button>}
+function Action({children,onClick,disabled}:{children:React.ReactNode;onClick:()=>void;disabled?:boolean}){return <button disabled={disabled} onClick={onClick} style={{border:0,borderRadius:10,padding:'10px 12px',background:'#1f6feb',color:'white',fontWeight:700,opacity:disabled?0.6:1}}>{children}</button>}

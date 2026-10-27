@@ -18,9 +18,26 @@ function Timeline({items}:{items:Array<{year:string;name:string;text:string}>}){
   return <div style={{display:'grid',gap:10}}>{items.map((item,i)=><div key={i} style={{display:'grid',gridTemplateColumns:'62px 1fr',gap:10}}><div style={{display:'grid',placeItems:'center',borderRadius:12,background:'#eef8f1',color:'#176b3a',fontWeight:900}}>{item.year}</div><div style={{padding:11,border:'1px solid #e7ebf1',borderRadius:12}}><strong>{item.name}</strong><div style={{marginTop:4,lineHeight:1.7,color:'#475467'}}>{item.text}</div></div></div>)}</div>;
 }
 
+function MicroscopeZoom({content}:{content:any}){
+  const levels:Array<{label:string;caption:string;magnification:string}>=content.levels||[];
+  const [level,setLevel]=useState(0);
+  const current=levels[level]||{label:'',caption:'',magnification:''};
+  const count=level===0?1:level===1?9:30;
+  return <div style={{padding:14,borderRadius:16,border:'1px solid #d7e4dc',background:'linear-gradient(135deg,#f8fcf9,#f7f9ff)'}}>
+    <div style={{display:'flex',justifyContent:'space-between',gap:10,alignItems:'flex-start',flexWrap:'wrap'}}><div><div style={{fontSize:11,color:'#667085',fontWeight:900}}>نشاط تفاعلي</div><h3 style={{margin:'4px 0 5px',fontSize:19}}>{content.title||'جرّب التكبير'}</h3><p style={{margin:0,color:'#526071',lineHeight:1.7}}>{content.prompt}</p></div><Pill tone="info">{current.magnification}</Pill></div>
+    <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:7,marginTop:13}}>{levels.map((row,i)=><button key={row.label} onClick={()=>setLevel(i)} style={{padding:'9px 6px',borderRadius:11,border:i===level?'2px solid #176b3a':'1px solid #d7dde6',background:i===level?'#eef9f1':'#fff',fontWeight:800,fontSize:12,cursor:'pointer'}}>{i===0?'👁️ ':i===1?'🔍 ':'🔬 '}{row.label}</button>)}</div>
+    <div style={{marginTop:12,minHeight:190,borderRadius:15,border:'1px solid #dbc9aa',background:'#b98555',padding:level===0?22:12,display:'grid',gridTemplateColumns:level===0?'1fr':`repeat(${level===1?3:6},1fr)`,gap:level===2?3:7,alignItems:'stretch',overflow:'hidden',transition:'all .2s'}}>
+      {Array.from({length:count}).map((_,i)=><div key={i} style={{minHeight:level===0?140:level===1?48:25,borderRadius:level===0?12:5,border:level===0?'0':'2px solid rgba(78,48,25,.55)',background:level===0?'linear-gradient(135deg,#c8935e,#9e683d)':i%3===0?'rgba(242,213,170,.72)':'rgba(221,180,128,.72)',boxShadow:level===2?'inset 0 0 0 1px rgba(255,255,255,.22)':'none'}}>{level===0&&<div style={{display:'grid',height:'100%',placeItems:'center',color:'#fff7ec',fontWeight:900,fontSize:20}}>قطعة فلين</div>}</div>)}
+    </div>
+    <div style={{marginTop:11,padding:11,borderRadius:11,background:'#fff',border:'1px solid #e6eaf0',lineHeight:1.75}}><strong>{current.label}:</strong> {current.caption}</div>
+    <div style={{marginTop:8,fontSize:12,color:'#667085'}}>الفكرة: ازدياد قوة التكبير يكشف تفاصيل أدق، وهو المبدأ الذي جعل اكتشاف الخلايا ممكنًا.</div>
+  </div>;
+}
+
 function LessonBlock({block}:{block:Block}){
   const c=block.content||{};
   if(block.block_type==='INFO_CARD') return <div style={{padding:14,borderRadius:14,background:'#f4f9ff',border:'1px solid #d8e8fb'}}><div style={{display:'flex',gap:9,alignItems:'center'}}><span style={{fontSize:25}}>{c.icon||'💡'}</span><div><div style={{fontSize:11,color:'#667085',fontWeight:900}}>{c.label||'معلومة'}</div><strong style={{fontSize:18}}>{c.title||''}</strong></div></div>{c.body&&<p style={{margin:'9px 0 0',lineHeight:1.85}}>{c.body}</p>}</div>;
+  if(block.block_type==='MICROSCOPE_ZOOM') return <MicroscopeZoom content={c}/>;
   if(block.block_type==='TIMELINE') return <div><h3 style={{margin:'0 0 10px'}}>{c.title||'خط زمني'}</h3><Timeline items={c.items||[]}/></div>;
   if(block.block_type==='MATCHING') return <div><h3 style={{margin:'0 0 6px'}}>{c.title||'مطابقة'}</h3><p style={{margin:'0 0 10px',color:'#667085'}}>{c.prompt}</p><div style={{display:'grid',gap:8}}>{(c.pairs||[]).map((p:string[],i:number)=><div key={i} style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',gap:8,padding:10,borderRadius:11,background:'#fafbfc',border:'1px solid #edf0f5'}}><strong>{p[0]}</strong><span>←</span><span>{p[1]}</span></div>)}</div></div>;
   if(block.block_type==='SUMMARY') return <div style={{padding:14,borderRadius:14,background:'#f7fcf9',border:'1px solid #cfe7d7'}}><h3 style={{margin:'0 0 8px'}}>{c.title||'الخلاصة'}</h3><ul style={{margin:0,paddingInlineStart:20,lineHeight:1.9}}>{(c.items||[]).map((x:string,i:number)=><li key={i}>{x}</li>)}</ul></div>;

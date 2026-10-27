@@ -100,7 +100,7 @@ def test_skill_mapping_queue_requires_authorized_factual_source_context():
         with pytest.raises(HTTPException) as exc:
             queue_skill_mapping(lesson.id, db)
         assert exc.value.status_code == 409
-        assert exc.value.detail['message'] == 'Skill mapping requires authorized factual source context'
+        assert exc.value.detail['message'] == 'Skill mapping requires admin-verified factual teaching-source links'
         assert db.query(AIJob).count() == 0
     finally:
         db.close()

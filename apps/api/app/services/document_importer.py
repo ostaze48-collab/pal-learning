@@ -239,7 +239,7 @@ def edition_match_score(extracted_text: str, expected_year: str | None, expected
         unique_tokens = set(tokens)
         if unique_tokens:
             hits = sum(1 for token in unique_tokens if token in normalized)
-            score += 30.0 * (hits / len(unique_tokens)))
+            score += 30.0 * (hits / len(unique_tokens))
 
     return round(min(100.0, score), 1)
 

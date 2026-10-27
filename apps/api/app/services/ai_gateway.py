@@ -14,13 +14,7 @@ class AIResponse:
 
 
 class AIGateway:
-    """Provider-neutral AI gateway.
-
-    LOCAL_MOCK remains the safe default. OPENAI is opt-in and requires all
-    credentials/model configuration to live in environment variables, never in
-    source control. Generated lesson output is still validated by the Content
-    Factory's Pydantic/provenance layer before it can become a candidate.
-    """
+    """Provider-neutral AI gateway with fail-closed task contracts."""
 
     def __init__(self, provider: str | None = None):
         self.provider = (provider or os.getenv('AI_PROVIDER', 'LOCAL_MOCK')).upper()
@@ -39,7 +33,8 @@ class AIGateway:
             'status': 'MOCK_COMPLETED',
             'source_excerpt': excerpt,
             'requires_provider_for_generation': task in {
-                'GENERATE_LESSON', 'GENERATE_QUESTIONS', 'GENERATE_REMEDIATION', 'QA_CONTENT'
+                'GENERATE_LESSON', 'GENERATE_QUESTIONS', 'GENERATE_REMEDIATION',
+                'QA_CONTENT', 'EXTRACT_SKILLS'
             },
         }
         return AIResponse('LOCAL_MOCK', model_route, output, {'input_chars': len(payload.get('text') or ''), 'cost': 0})
@@ -79,6 +74,23 @@ class AIGateway:
             'citations, source chunk IDs, skill codes, or curriculum claims. '
             'Return one valid JSON object only.'
         )
+        if task == 'EXTRACT_SKILLS':
+            packet = payload.get('packet') or {}
+            source_context = packet.get('source_context') or []
+            allowed_chunks = [x.get('source_chunk_id') for x in source_context if x.get('source_chunk_id')]
+            return common + (
+                ' Infer only measurable learner skills that are directly supported by the supplied lesson source context. '
+                'Do not create skill codes; the server creates codes after admin approval. '
+                'Return exactly one object with one top-level key: skills. skills must be an array of 1 to 20 objects. '
+                'Each object must contain exactly: name_ar, domain, measurable_outcome_ar, description_ar, '
+                'mastery_threshold, importance, source_chunk_ids. '
+                'name_ar and measurable_outcome_ar must be Arabic and observable/measurable, not vague verbs such as "يعرف" alone. '
+                'domain must be an uppercase ASCII identifier such as SCIENTIFIC_TOOLS or CELL_BIOLOGY and must match ^[A-Z][A-Z0-9_]{1,39}$. '
+                'mastery_threshold must be between 0.5 and 0.98; importance between 0.1 and 2.0. '
+                'Every proposal must cite one or more source_chunk_ids, using only IDs from '
+                f'{allowed_chunks}. Do not infer prerequisites, future-grade links, misconceptions, or assessment questions in this task. '
+                'If evidence is insufficient for a skill, omit it rather than guessing.'
+            )
         if task == 'GENERATE_LESSON':
             packet = payload.get('packet') or {}
             allowed_chunks = [x.get('source_chunk_id') for x in packet.get('source_context', []) if x.get('source_chunk_id')]

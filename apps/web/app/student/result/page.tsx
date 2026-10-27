@@ -58,7 +58,7 @@ export default function ResultPage(){
       </StudentCard>
 
       <Notice tone="info">{data.notice}</Notice>
-      <StudentCard style={{marginTop:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/lesson">إعادة الدرس</PrimaryLink><PrimaryLink href="/student/progress" secondary>تفاصيل المهارات</PrimaryLink><PrimaryLink href="/student" secondary>الرئيسية</PrimaryLink></div></StudentCard>
+      <StudentCard style={{marginTop:14}}><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><PrimaryLink href="/student/lesson">إعادة الدرس</PrimaryLink><PrimaryLink href="/student/progress" secondary>تفاصيل المهارات</PrimaryLink><PrimaryLink href="/student/feedback" secondary>أبلغ عن مشكلة</PrimaryLink><PrimaryLink href="/student" secondary>الرئيسية</PrimaryLink></div></StudentCard>
       <BottomNav active="progress"/>
     </>}
   </StudentShell>;

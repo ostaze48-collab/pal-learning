@@ -4,7 +4,7 @@ services:
     runtime: python
     rootDir: apps/api
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: alembic upgrade head && python -m app.db.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /ready
     envVars:
       - key: DATABASE_URL
@@ -38,5 +38,5 @@ services:
 
 databases:
   - name: pal-learning-db
-    databaseName: pal_learning
-    user: pal_learning
+    databaseName: pal_learning_db
+    user: pal_learning_db_user

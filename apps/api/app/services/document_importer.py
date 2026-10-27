@@ -29,6 +29,16 @@ class ExtractedDocument:
     warnings: list[str]
 
 
+@dataclass(frozen=True)
+class ExtractionQuality:
+    text_page_count: int
+    empty_page_count: int
+    text_coverage_percent: float
+    total_characters: int
+    average_characters_per_page: float
+    needs_vision: bool
+
+
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -46,6 +56,42 @@ def save_upload(data: bytes, filename: str, upload_dir: str | Path) -> Path:
     target = root / f'{digest}-{safe_filename(filename)}'
     target.write_bytes(data)
     return target
+
+
+def assess_extraction_quality(document: ExtractedDocument) -> ExtractionQuality:
+    """Measure whether extracted text is dense enough to trust for curriculum parsing.
+
+    This is deliberately conservative and does not attempt OCR. A PDF is routed to
+    NEEDS_VISION when most pages have no meaningful text or when the extracted text
+    is extremely sparse. Plain-text sources are never sent to vision review merely
+    because they are short.
+    """
+    page_count = max(0, int(document.page_count or 0))
+    meaningful_pages = 0
+    for page in document.pages:
+        compact = re.sub(r'\s+', '', page or '')
+        if len(compact) >= 20:
+            meaningful_pages += 1
+
+    empty_pages = max(0, page_count - meaningful_pages)
+    coverage = round((meaningful_pages / page_count * 100.0), 1) if page_count else 0.0
+    total_characters = len(re.sub(r'\s+', '', document.text or ''))
+    average = round(total_characters / page_count, 1) if page_count else 0.0
+
+    is_pdf = document.extraction_method == 'PDF_TEXT'
+    needs_vision = bool(
+        is_pdf and page_count > 0 and (
+            coverage < 60.0 or average < 40.0
+        )
+    )
+    return ExtractionQuality(
+        text_page_count=meaningful_pages,
+        empty_page_count=empty_pages,
+        text_coverage_percent=coverage,
+        total_characters=total_characters,
+        average_characters_per_page=average,
+        needs_vision=needs_vision,
+    )
 
 
 def extract_document(path: str | Path, mime_type: str | None = None) -> ExtractedDocument:
@@ -193,7 +239,7 @@ def edition_match_score(extracted_text: str, expected_year: str | None, expected
         unique_tokens = set(tokens)
         if unique_tokens:
             hits = sum(1 for token in unique_tokens if token in normalized)
-            score += 30.0 * (hits / len(unique_tokens))
+            score += 30.0 * (hits / len(unique_tokens)))
 
     return round(min(100.0, score), 1)
 

@@ -21,6 +21,7 @@ from .importer.scope_evidence import router as scope_evidence_router
 from .importer.source_policy_router import router as source_policy_router
 from .importer.source_link_review import router as source_link_review_router
 from .learning.router import router as learning_router
+from .learning.runtime import router as lesson_runtime_router
 from .demo.router import router as demo_router
 from .demo.health import router as demo_health_router
 from .demo.admin import router as demo_admin_router
@@ -44,7 +45,7 @@ from .factory.release_transaction import router as release_transaction_router
 from .factory.staging_preview import router as staging_preview_router
 from .auth.router import router as auth_router
 
-VERSION = '1.21.0'
+VERSION = '1.22.0'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -110,6 +111,7 @@ def health():
             'improvement-queue', 'admin-auth', 'revocable-sessions',
             'student-session-binding', 'student-publication-visibility-gate',
             'published-question-attempt-gate', 'published-learning-event-reference-gate',
+            'published-lesson-runtime',
             'official-package-priority', 'readiness-check', 'safe-registered-source-fetch',
             'provider-backed-content-factory', 'lesson-generation-readiness-diagnostics',
             'evidence-grounded-skill-mapping', 'admin-skill-approval',
@@ -167,6 +169,7 @@ app.include_router(scope_evidence_router)
 app.include_router(source_policy_router)
 app.include_router(source_link_review_router)
 app.include_router(learning_router)
+app.include_router(lesson_runtime_router)
 app.include_router(demo_router)
 app.include_router(demo_health_router)
 app.include_router(demo_admin_router)

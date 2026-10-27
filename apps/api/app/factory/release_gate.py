@@ -10,6 +10,7 @@ from ..db.base import engine
 from ..db.deps import get_db
 from ..db.models import User
 from ..db.staging_models import StagedLessonVersion
+from ..services.release_manifest import build_release_manifest
 from ..services.release_policy import release_policy_status
 
 router = APIRouter(prefix='/factory', tags=['content-factory-release-gate'])
@@ -22,6 +23,7 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
     confidence = float(academic_result.get('confidence') or 0)
     recommendation = academic.get('effective_recommendation')
     release_policy = release_policy_status()
+    release_manifest = build_release_manifest(staged)
 
     # This gate answers only whether the immutable staged snapshot is ready to be
     # handed to a future audited release transaction. Transaction availability is
@@ -37,6 +39,7 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
         'no_unsupported_claims': int(academic.get('unsupported_claim_count') or 0) == 0,
         'persistent_production_database': database_backend in {'postgresql', 'postgres'},
         'immutable_staging_snapshot_present': bool(staged.snapshot_json),
+        'release_manifest_present': bool(release_manifest.get('snapshot_sha256')) and bool(release_manifest.get('manifest_sha256')),
         'legacy_direct_publish_disabled': bool(release_policy['direct_legacy_publish_disabled']),
     }
     ready = all(checks.values())
@@ -49,6 +52,7 @@ def calculate_final_release_gate(staged: StagedLessonVersion, database_backend: 
         'release_readiness': staged.release_readiness,
         'academic_recommendation': recommendation,
         'academic_confidence': confidence,
+        'release_manifest': release_manifest,
         'release_policy': release_policy,
         'release_transaction_available': bool(release_policy['audited_release_transaction_implemented']),
         # The gate is deliberately non-mutating. Even when a transaction is built,

@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
       - name: Patch source registry
         shell: bash
         run: |
@@ -36,6 +39,7 @@ jobs:
       - name: Verify tests
         run: |
           cd apps/api
+          python -m pip install --upgrade pip >/dev/null
           pip install -r requirements.txt pytest >/dev/null
           DATABASE_URL=sqlite:///./official-source-ci.db PYTHONPATH=. pytest -q ../../tests
       - name: Commit patch and self-remove

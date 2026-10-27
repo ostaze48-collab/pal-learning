@@ -104,8 +104,8 @@ def current_semester(db: Session = Depends(get_db)):
 
 @router.get('/current-semester/pipeline')
 def current_semester_pipeline(
-    lesson_id: int | None = Query(default=None, ge=1),
     db: Session = Depends(get_db),
+    lesson_id: int | None = Query(default=None, ge=1),
 ):
     book, package = _registry(db)
     lesson = _pipeline_lesson(db, book.id, lesson_id)

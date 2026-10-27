@@ -39,11 +39,11 @@ function actionHref(row:Row){
     case 'QUEUE_GENERATION':
     case 'OPEN_LESSON_GENERATION': return `/admin/lesson-generation?lesson_id=${id}`;
     case 'OPEN_CANDIDATE_QA':
-    case 'REVIEW_CANDIDATE': return '/admin/quality';
+    case 'REVIEW_CANDIDATE':
     case 'RUN_ACADEMIC_QA':
-    case 'REVIEW_ACADEMIC_QA':
+    case 'REVIEW_ACADEMIC_QA': return `/admin/staging?lesson_id=${id}`;
     case 'REVIEW_FINAL_GATE':
-    case 'OPEN_RELEASE_CONSOLE': return '/admin/release';
+    case 'OPEN_RELEASE_CONSOLE': return `/admin/release?lesson_id=${id}`;
     case 'AUTO_LINK_LESSONS': return '/admin/current-semester';
     default: return null;
   }

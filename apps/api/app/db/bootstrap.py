@@ -4,6 +4,7 @@ from sqlalchemy.engine import Engine
 
 from .base import SessionLocal, engine
 from .migration_status import get_migration_status
+from .publication_integrity import quarantine_unreleased_demo_content
 from .seed import run as seed_run
 
 
@@ -60,6 +61,11 @@ def normalize_seeded_source_catalog() -> dict:
         return quarantine_unverified_catalog_sources(db)
 
 
+def normalize_seeded_publication_state() -> dict:
+    with SessionLocal() as db:
+        return quarantine_unreleased_demo_content(db)
+
+
 def run() -> None:
     state = ensure_schema_ready(engine)
     print(
@@ -68,12 +74,22 @@ def run() -> None:
         f"revision={state.get('migration_revision', 'n/a')}"
     )
     seed_run()
-    normalized = normalize_seeded_source_catalog()
+
+    sources = normalize_seeded_source_catalog()
     print(
         'Source catalog integrity: '
-        f"checked={normalized['checked']} "
-        f"quarantined={normalized['quarantined']} "
-        f"scope_verified={normalized['already_scope_verified']}"
+        f"checked={sources['checked']} "
+        f"quarantined={sources['quarantined']} "
+        f"scope_verified={sources['already_scope_verified']}"
+    )
+
+    publication = normalize_seeded_publication_state()
+    print(
+        'Publication integrity: '
+        f"books={publication['books_checked']} "
+        f"lessons_to_draft={publication['lessons_changed']} "
+        f"blocks_to_draft={publication['blocks_changed']} "
+        f"questions_to_draft={publication['questions_changed']}"
     )
 
 

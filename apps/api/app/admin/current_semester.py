@@ -108,7 +108,8 @@ def current_semester_pipeline(
     lesson_id: int | None = Query(default=None, ge=1),
 ):
     book, package = _registry(db)
-    lesson = _pipeline_lesson(db, book.id, lesson_id)
+    selected_lesson_id = lesson_id if isinstance(lesson_id, int) else None
+    lesson = _pipeline_lesson(db, book.id, selected_lesson_id)
     source = _current_official_source(db, package.id)
     database_backend = _database_backend(db)
     production_database = database_backend in {'postgresql', 'postgres'}

@@ -45,6 +45,13 @@ S1_WORKSHEET_URL = (
     '%D9%88%D8%A7%D9%83%D8%AA%D8%B4%D8%A7%D9%81%20%D8%A7%D9%84%D8%AE%D9%84%D9%8A%D8%A9-%D8%A7%D9%84%D9%88%D8%AD%D8%AF%D8%A9%201-%D8%A7%D9%84%D9%81%D8%B5%D9%84%201.pdf'
 )
 
+S1_LESSON2_WORKSHEET_URL = (
+    'https://elearnps.blob.core.windows.net/public/ElearnPs/worksheets2_10_2024/5/'
+    '%D8%A7%D9%84%D8%B9%D9%84%D9%88%D9%85%20%D9%88%D8%A7%D9%84%D8%AD%D9%8A%D8%A7%D8%A9/'
+    '%D8%A7%D9%84%D8%B5%D9%81-5-%20%D8%A7%D9%84%D8%B9%D9%84%D9%88%D9%85-%20%D8%A7%D9%84%D8%AE%D9%84%D9%8A%D8%A9%20'
+    '%D9%88%D8%A3%D9%86%D9%88%D8%A7%D8%B9%D9%87%D8%A7-%D8%A7%D9%84%D9%88%D8%AD%D8%AF%D8%A9%201-%D8%A7%D9%84%D9%81%D8%B5%D9%84%201.pdf'
+)
+
 S1_TEACHER_GUIDE_URL = 'https://elearnps.blob.core.windows.net/public/TeacherGuides/Dal5/Daleel%20Oloom05Book.pdf'
 
 
@@ -128,6 +135,34 @@ SOURCE_DISCOVERY_CATALOG: tuple[SourceDiscoveryEntry, ...] = (
         edition_claim='official worksheet 2024; textbook edition not inferred',
     ),
     SourceDiscoveryEntry(
+        source_code='PS.G05.SCI.S1.U01.L02.WORKSHEET.2024.OFFICIAL',
+        package_code='PS-G05-SCI-S1-2026',
+        intended_source_type='WORKSHEET',
+        title='ورقة عمل رسمية — الخلية وأنواعها — الصف الخامس — الفصل الأول',
+        grade_code='G05',
+        subject_code='SCI',
+        semester=1,
+        academic_year='2024',
+        discovery_url=S1_LESSON2_WORKSHEET_URL,
+        corroboration_urls=(
+            'https://elearn.edu.ps/worksheets/',
+            'https://elearn.edu.ps/c5/',
+        ),
+        discovery_kind='OFFICIAL_DIRECT_FILE',
+        authority_claim='PALESTINIAN_EDUCATION_PORTAL',
+        file_verified=True,
+        ingestion_mode='REMOTE_FETCH_ALLOWED',
+        discovered_on='2026-10-27',
+        notes=(
+            'Lesson-2 assessment and remediation reference only. The direct two-page PDF was verified on the '
+            'Palestinian educational portal storage. WORKSHEET authority is intentionally non-factual: this source '
+            'may inform question style, comparison/classification practice and remediation, but it must never ground '
+            'generated curriculum facts or substitute for the verified current 2026 teaching package.'
+        ),
+        reliability_score=95.0,
+        edition_claim='official worksheet 2024; textbook edition not inferred',
+    ),
+    SourceDiscoveryEntry(
         source_code='PS.G05.SCI.TEACHER_GUIDE.OFFICIAL',
         package_code='PS-G05-SCI-S1-2026',
         intended_source_type='TEACHER_GUIDE',
@@ -192,7 +227,7 @@ def list_source_discoveries(package_code: str | None = None):
     if package_code:
         rows = tuple(item for item in rows if item.package_code == package_code)
     return {
-        'catalog_version': 'source-discovery/v3',
+        'catalog_version': 'source-discovery/v4',
         'entries': [asdict(item) for item in rows],
         'policy': {
             'unverified_discovery_creates_source_files': False,

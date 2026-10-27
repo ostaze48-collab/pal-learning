@@ -112,6 +112,20 @@ def test_student_activity_appears_in_beta_operations_dashboard():
     assert data['ai_tutor']['requests'] >= 1
 
 
+def test_session_state_restores_saved_question_attempts():
+    state = client.get('/demo/session-state', headers=STUDENT)
+    assert state.status_code == 200
+    data = state.json()
+    assert data['lesson_code'] == 'PS.G05.SCI.S1.U01.L01'
+    assert data['total_questions'] == 5
+    assert data['answered_questions'] >= 1
+    saved = [row for row in data['questions'] if row['answered']]
+    assert saved
+    assert saved[0]['latest_attempt']['attempt_number'] >= 1
+    assert saved[0]['latest_attempt']['answer'] == 0
+    assert saved[0]['latest_attempt']['correct'] is True
+
+
 def test_completed_demo_has_result_summary_and_next_action():
     questions = client.get('/demo/questions', headers=STUDENT)
     assert questions.status_code == 200

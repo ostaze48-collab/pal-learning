@@ -15,6 +15,7 @@ from ..db.models import (
     Unit,
 )
 from .router import MAX_SOURCE_BYTES, _apply_extracted_source
+from .source_policy import can_prove_current_scope
 
 router = APIRouter(
     prefix='/importer/scope-evidence',
@@ -45,6 +46,9 @@ async def upload_curriculum_plan(
     an older textbook topic is still in the current teaching sequence, but it can
     never become the factual source used to generate lesson explanations.
     """
+    if not can_prove_current_scope('CURRICULUM_PLAN'):
+        raise HTTPException(500, 'CURRICULUM_PLAN is not authorized for current scope evidence')
+
     package = db.query(SourcePackage).filter(SourcePackage.id == package_id).first()
     if not package:
         raise HTTPException(404, 'Package not found')
@@ -116,8 +120,9 @@ def verify_lesson_in_current_plan(lesson_id: int, db: Session = Depends(get_db))
         SourceFile.source_type == 'CURRICULUM_PLAN',
         SourceFile.status.in_(['EXTRACTED', 'ANALYZED']),
     ).order_by(SourceFile.reliability_score.desc(), SourceFile.id.desc()).all()
+    plans = [plan for plan in plans if can_prove_current_scope(plan.source_type)]
     if not plans:
-        raise HTTPException(409, 'No extracted CURRICULUM_PLAN is available for current-scope verification')
+        raise HTTPException(409, 'No policy-authorized extracted CURRICULUM_PLAN is available for current-scope verification')
 
     evidence = []
     for plan in plans:
@@ -169,6 +174,7 @@ def verify_lesson_in_current_plan(lesson_id: int, db: Session = Depends(get_db))
             'scope_chunk_ids': [chunk.id for chunk in matching_chunks[:4]],
             'evidence': evidence,
             'teaching_source': False,
+            'source_authority_authorized': True,
         }
 
     return {
@@ -180,4 +186,5 @@ def verify_lesson_in_current_plan(lesson_id: int, db: Session = Depends(get_db))
         'evidence': evidence,
         'blocking_reason': 'Current curriculum plan does not contain both the target unit and lesson titles.',
         'teaching_source': False,
+        'source_authority_authorized': True,
     }

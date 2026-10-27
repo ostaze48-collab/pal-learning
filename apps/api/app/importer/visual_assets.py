@@ -11,6 +11,7 @@ from ..db.deps import get_db
 from ..db.models import User
 from ..db.visual_models import VisualAsset
 from ..services.visual_asset_pipeline import extract_lesson_visual_assets, serialize_visual_asset
+from ..services.visual_crop_service import create_or_refresh_figure_crop
 
 router = APIRouter(prefix='/importer', tags=['visual-assets'])
 
@@ -28,6 +29,13 @@ class VisualAssetReview(BaseModel):
     alt_text: str | None = Field(default=None, max_length=600)
     caption: str | None = Field(default=None, max_length=1000)
     hotspots: list[HotspotInput] = Field(default_factory=list, max_length=30)
+
+
+class FigureCropInput(BaseModel):
+    x: float = Field(ge=0, le=95)
+    y: float = Field(ge=0, le=95)
+    width: float = Field(ge=5, le=100)
+    height: float = Field(ge=5, le=100)
 
 
 @router.post('/lessons/{lesson_id}/visual-assets/extract')
@@ -52,11 +60,26 @@ def list_visual_assets(
 ):
     rows = db.query(VisualAsset).filter(
         VisualAsset.lesson_id == lesson_id
-    ).order_by(VisualAsset.source_page, VisualAsset.id).all()
+    ).order_by(VisualAsset.source_page, VisualAsset.parent_asset_id, VisualAsset.id).all()
     return {
         'lesson_id': lesson_id,
         'assets': [serialize_visual_asset(db, row, include_private=True) for row in rows],
     }
+
+
+@router.post('/visual-assets/{asset_id}/figure-crops')
+def create_figure_crop(
+    asset_id: int,
+    body: FigureCropInput,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    try:
+        return create_or_refresh_figure_crop(db, asset_id, body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(409, 'Parent visual bytes are not available in configured storage') from exc
 
 
 @router.patch('/visual-assets/{asset_id}')

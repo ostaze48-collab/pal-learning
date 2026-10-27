@@ -36,12 +36,41 @@ class GeneratedQuestion(StrictGeneratedModel):
     source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
 
 
+class GeneratedSummaryItem(StrictGeneratedModel):
+    text: str
+    source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
+
+
+class GeneratedFlashcard(StrictGeneratedModel):
+    front: str
+    back: str
+    source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
+
+
+class GeneratedMisconception(StrictGeneratedModel):
+    title: str
+    incorrect_idea: str
+    correction: str
+    skill_codes: list[str] = Field(min_length=1, max_length=6)
+    source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
+
+
+class GeneratedRemediationCandidate(StrictGeneratedModel):
+    title: str
+    trigger: str
+    explanation: str
+    practice_prompt: str
+    mastery_check: str
+    skill_codes: list[str] = Field(min_length=1, max_length=6)
+    source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
+
+
 class GeneratedLessonPayload(StrictGeneratedModel):
     learning_objectives: list[str] = Field(min_length=1, max_length=20)
     concepts: list[str] = Field(min_length=1, max_length=40)
     sections: list[GeneratedSection] = Field(min_length=1, max_length=20)
     questions: list[GeneratedQuestion] = Field(default_factory=list, max_length=120)
-    summary: list[str] = Field(min_length=1, max_length=20)
-    flashcards: list[dict] = Field(default_factory=list, max_length=60)
-    misconceptions: list[dict] = Field(default_factory=list, max_length=40)
-    remediation_candidates: list[dict] = Field(default_factory=list, max_length=40)
+    summary: list[GeneratedSummaryItem] = Field(min_length=1, max_length=20)
+    flashcards: list[GeneratedFlashcard] = Field(default_factory=list, max_length=60)
+    misconceptions: list[GeneratedMisconception] = Field(default_factory=list, max_length=40)
+    remediation_candidates: list[GeneratedRemediationCandidate] = Field(default_factory=list, max_length=40)

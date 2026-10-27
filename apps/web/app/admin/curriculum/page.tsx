@@ -15,13 +15,11 @@ type Lesson={id:number;lesson_code:string;title:string;status:string};
 type Job={id:number;job_type:string;status:string;progress:number;provider?:string;error?:string};
 type Candidate={id:number;version_label:string;status:string;schema_valid:boolean;provenance_score:number;validation?:Record<string,unknown>};
 
-function adminHeaders(json=false){
- const token=typeof window!=='undefined'?localStorage.getItem('pal_admin_token')||'':'';
- return json?{'Authorization':`Bearer ${token}`,'Content-Type':'application/json'}:{'Authorization':`Bearer ${token}`};
-}
-
 async function api(path:string,init:RequestInit={}){
- const res=await fetch(`${API}${path}`,{...init,headers:{...adminHeaders(false),...(init.headers||{})}});
+ const headers=new Headers(init.headers);
+ const token=typeof window!=='undefined'?localStorage.getItem('pal_admin_token')||'':'';
+ headers.set('Authorization',`Bearer ${token}`);
+ const res=await fetch(`${API}${path}`,{...init,headers});
  let body:any=null; try{body=await res.json();}catch{body=null;}
  if(!res.ok){const detail=body?.detail;throw new Error(typeof detail==='string'?detail:detail?.message||`HTTP ${res.status}`);}
  return body;

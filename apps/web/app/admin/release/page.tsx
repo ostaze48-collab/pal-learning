@@ -9,11 +9,17 @@ type Staged={
  release_readiness:string;approved_by_user_id:number;created_at?:string;
 };
 
+type ReleaseManifest={
+ manifest_version:string;
+ identity:{staged_version_id?:number;lesson_id?:number;candidate_id?:number;version_label?:string};
+ snapshot_sha256:string;manifest_sha256:string;snapshot_bytes:number;
+};
 type Gate={
  staged_version_id:number;decision:string;checks:Record<string,boolean>;blockers:string[];
  database_backend:string;release_readiness:string;academic_recommendation?:string;
  academic_confidence:number;publication_authorized:boolean;release_transaction_available:boolean;
- next_action:string;note:string;release_policy:{direct_legacy_publish_enabled:boolean;direct_legacy_publish_disabled:boolean;audited_release_transaction_implemented:boolean;publication_authorized:boolean};
+ next_action:string;note:string;release_manifest:ReleaseManifest;
+ release_policy:{direct_legacy_publish_enabled:boolean;direct_legacy_publish_disabled:boolean;audited_release_transaction_implemented:boolean;publication_authorized:boolean};
 };
 
 async function api(path:string,init:RequestInit={}){
@@ -36,6 +42,7 @@ const labels:Record<string,string>={
  no_unsupported_claims:'لا توجد Unsupported claims',
  persistent_production_database:'قاعدة بيانات إنتاج دائمة (PostgreSQL)',
  immutable_staging_snapshot_present:'Staging snapshot موجودة ومستقلة',
+ release_manifest_present:'Release Manifest + SHA-256 موجودة',
  legacy_direct_publish_disabled:'مسار النشر المباشر القديم معطّل',
 };
 const actionLabels:Record<string,string>={
@@ -94,6 +101,11 @@ export default function ReleaseConsole(){
       <div style={{display:'grid',gap:5,marginTop:12}}>{Object.entries(gate.checks).map(([key,passed])=><div key={key}>{passed?'✅':'⛔'} {labels[key]||key}</div>)}</div>
       {gate.blockers.length>0&&<div style={{marginTop:12}}><strong>Blockers:</strong> {gate.blockers.join(' · ')}</div>}
       <div style={{marginTop:12,padding:11,borderRadius:10,background:'rgba(255,255,255,.75)'}}>
+       <div><strong>Release Manifest</strong> · {gate.release_manifest.manifest_version} · {gate.release_manifest.snapshot_bytes} bytes</div>
+       <div style={{marginTop:6,fontFamily:'monospace',fontSize:12,overflowWrap:'anywhere'}}>Snapshot SHA-256: {gate.release_manifest.snapshot_sha256}</div>
+       <div style={{marginTop:4,fontFamily:'monospace',fontSize:12,overflowWrap:'anywhere'}}>Manifest SHA-256: {gate.release_manifest.manifest_sha256}</div>
+      </div>
+      <div style={{marginTop:10,padding:11,borderRadius:10,background:'rgba(255,255,255,.75)'}}>
        <div>Release Transaction available: <strong>{String(gate.release_transaction_available)}</strong></div>
        <div>Direct legacy publish disabled: <strong>{String(gate.release_policy.direct_legacy_publish_disabled)}</strong></div>
        <div>publication_authorized: <strong>{String(gate.publication_authorized)}</strong></div>
@@ -103,7 +115,7 @@ export default function ReleaseConsole(){
     </article>
    })}
   </section>
-  <section style={{...panel,marginTop:16,background:'#fffaf0'}}><strong>قاعدة ثابتة:</strong> عبارة READY_FOR_RELEASE_TRANSACTION تعني أن النسخة اجتازت بوابات الجاهزية فقط. لا تصبح منشورة للطلاب إلا عبر Audited Release Transaction منفصلة ومدققة، وهي غير مبنية حاليًا.</section>
+  <section style={{...panel,marginTop:16,background:'#fffaf0'}}><strong>قاعدة ثابتة:</strong> عبارة READY_FOR_RELEASE_TRANSACTION تعني أن النسخة اجتازت بوابات الجاهزية فقط. بصمة SHA-256 تثبت أي Snapshot اجتازت المراجعة، لكنها لا تنشرها. لا تصبح النسخة مرئية للطلاب إلا عبر Audited Release Transaction منفصلة ومدققة، وهي غير مبنية حاليًا.</section>
  </main>
 }
 

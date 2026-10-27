@@ -12,6 +12,7 @@ from ..db.models import AIJob, ContentCandidate, Lesson
 from ..services.ai_gateway import AIGateway
 from ..services.generation_packet import build_lesson_generation_packet
 from ..schemas.factory import GeneratedLessonPayload
+from .generation_readiness import calculate_generation_readiness
 
 router = APIRouter(prefix='/factory', tags=['content-factory'], dependencies=[Depends(require_admin)])
 
@@ -42,12 +43,24 @@ def queue_lesson_generation(lesson_id: int, db: Session = Depends(get_db)):
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise HTTPException(404, 'Lesson not found')
+
+    readiness = calculate_generation_readiness(db, lesson_id)
+    if not readiness['queue_ready']:
+        raise HTTPException(
+            409,
+            detail={
+                'message': 'Lesson is not ready for generation',
+                'blockers': readiness['blockers'],
+                'next_actions': readiness['next_actions'],
+                'generation_readiness': readiness,
+            },
+        )
+
     try:
         packet = build_lesson_generation_packet(db, lesson_id)
     except ValueError as exc:
         raise HTTPException(404, str(exc)) from exc
-    if not packet['source_context']:
-        raise HTTPException(409, 'No lesson-level source provenance is linked yet')
+
     job = AIJob(
         job_type='GENERATE_LESSON',
         source_type='LESSON',
@@ -66,6 +79,11 @@ def queue_lesson_generation(lesson_id: int, db: Session = Depends(get_db)):
         'lesson_id': lesson_id,
         'source_chunks': len(packet['source_context']),
         'skills': len(packet['skills']),
+        'generation_readiness': {
+            'queue_ready': readiness['queue_ready'],
+            'execution_ready': readiness['execution_ready'],
+            'provider': readiness['provider'],
+        },
     }
 
 

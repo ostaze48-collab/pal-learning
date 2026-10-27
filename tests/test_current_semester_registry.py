@@ -8,7 +8,18 @@ from app.db.current_semester import (
     MINISTRY_G5_SCIENCE_URL,
     ensure_current_semester_registry,
 )
-from app.db.models import Book, CurriculumVersion, Grade, Lesson, SourceFile, SourcePackage, Subject, Unit
+from app.db.models import (
+    Book,
+    ContentBlock,
+    CurriculumVersion,
+    Grade,
+    Lesson,
+    LessonSection,
+    SourceFile,
+    SourcePackage,
+    Subject,
+    Unit,
+)
 
 
 def test_current_semester_registry_creates_s1_and_reassigns_broad_s2_catalog_url():
@@ -64,6 +75,21 @@ def test_current_semester_registry_creates_s1_and_reassigns_broad_s2_catalog_url
         assert len(lessons) == 8
         assert all(lesson.status == 'DRAFT' for lesson in lessons)
 
+        first = db.query(Lesson).filter(Lesson.lesson_code == 'PS.G05.SCI.S1.U01.L01').one()
+        sections = db.query(LessonSection).filter(LessonSection.lesson_id == first.id).order_by(LessonSection.order_no).all()
+        assert len(sections) == 7
+        assert [section.title for section in sections] == [
+            'استكشف: ماذا يمكن أن نرى؟',
+            'افهم: التعرف إلى المجهر',
+            'افهم: اكتشاف الخلية',
+            'طبّق: ملاحظة وتمييز',
+            'تحقق من فهمك',
+            'اختبر نفسك',
+            'ملخص ومراجعة',
+        ]
+        section_ids = [section.id for section in sections]
+        assert db.query(ContentBlock).filter(ContentBlock.lesson_section_id.in_(section_ids)).count() == 0
+
         s1_package = db.query(SourcePackage).filter(SourcePackage.package_code == CURRENT_PACKAGE_CODE).one()
         s1_source = db.query(SourceFile).filter(
             SourceFile.package_id == s1_package.id,
@@ -72,6 +98,10 @@ def test_current_semester_registry_creates_s1_and_reassigns_broad_s2_catalog_url
         assert s1_source.source_type == 'CATALOG_CANDIDATE'
         assert s1_source.edition_match_score == 0
         assert s1_source.reliability_score == 100
+
+        supporting = db.query(SourceFile).filter(SourceFile.package_id == s1_package.id).all()
+        assert {'CATALOG_CANDIDATE', 'STUDENT_BOOK', 'SOLUTIONS', 'REMEDIAL'} <= {x.source_type for x in supporting}
+        assert all(x.edition_match_score == 0 for x in supporting)
 
         db.refresh(s2_source)
         assert s2_source.source_type == 'CATALOG_CANDIDATE'

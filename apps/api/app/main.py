@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from .db.base import Base, SessionLocal, engine
 from .db.migration_status import get_migration_status
+from .db.publication_integrity import quarantine_unreleased_demo_content
 from .curriculum.router import router as curriculum_router
 from .importer.router import router as importer_router
 from .importer.official_catalog import (
@@ -23,7 +24,7 @@ from .factory.academic_qa import router as academic_qa_router
 from .factory.release_gate import router as release_gate_router
 from .auth.router import router as auth_router
 
-VERSION = '1.8.1'
+VERSION = '1.8.2'
 DEFAULT_ORIGINS = 'http://localhost:3000,https://pal-learning-web.onrender.com'
 allowed_origins = [x.strip() for x in os.getenv('ALLOWED_ORIGINS', DEFAULT_ORIGINS).split(',') if x.strip()]
 
@@ -34,10 +35,12 @@ async def lifespan(app: FastAPI):
     # migration-managed and must be prepared with `alembic upgrade head` first.
     if engine.url.get_backend_name() == 'sqlite':
         Base.metadata.create_all(bind=engine)
-        # Repair legacy demo seed rows that treated a grade/subject ministry link
-        # as semester-specific before its extracted content proved that scope.
+        # Repair legacy demo state on every local/demo startup. Catalog links do
+        # not become semester-specific sources until scope is proven, and seeded
+        # prototype lessons remain DRAFT until a future audited release transaction.
         with SessionLocal() as db:
             quarantine_unverified_catalog_sources(db)
+            quarantine_unreleased_demo_content(db)
     yield
 
 
@@ -78,6 +81,7 @@ def health():
             'release-gated-academic-ai-qa', 'final-non-publishing-release-gate',
             'production-readiness-diagnostics', 'alembic-migration-gate',
             'official-source-catalog', 'catalog-scope-quarantine',
+            'unreleased-demo-publication-quarantine',
         ],
     }
 

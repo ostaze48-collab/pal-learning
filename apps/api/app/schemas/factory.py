@@ -1,12 +1,16 @@
 from typing import Literal
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 BlockType = Literal['TEXT','INFO_CARD','IMAGE','AUDIO','VIDEO','MATCHING','DRAG_DROP','QUESTION','FLASHCARD','SUMMARY','ACTIVITY']
 QuestionPurpose = Literal['DIAGNOSTIC','PRACTICE','MASTERY','REMEDIATION','RETENTION','TRANSFER']
 
 
-class GeneratedBlock(BaseModel):
+class StrictGeneratedModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+
+class GeneratedBlock(StrictGeneratedModel):
     block_type: BlockType
     title: str | None = None
     body: str | None = None
@@ -14,13 +18,13 @@ class GeneratedBlock(BaseModel):
     source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
 
 
-class GeneratedSection(BaseModel):
+class GeneratedSection(StrictGeneratedModel):
     title: str
     learning_goal: str | None = None
     blocks: list[GeneratedBlock] = Field(min_length=1, max_length=20)
 
 
-class GeneratedQuestion(BaseModel):
+class GeneratedQuestion(StrictGeneratedModel):
     question_type: str = 'MCQ'
     prompt: str
     options: list[str] | None = None
@@ -32,7 +36,7 @@ class GeneratedQuestion(BaseModel):
     source_chunk_ids: list[int] = Field(min_length=1, max_length=12)
 
 
-class GeneratedLessonPayload(BaseModel):
+class GeneratedLessonPayload(StrictGeneratedModel):
     learning_objectives: list[str] = Field(min_length=1, max_length=20)
     concepts: list[str] = Field(min_length=1, max_length=40)
     sections: list[GeneratedSection] = Field(min_length=1, max_length=20)

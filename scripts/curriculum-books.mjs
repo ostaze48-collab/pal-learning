@@ -8,7 +8,7 @@ const root=process.cwd();
 const cfg=JSON.parse(await fsp.readFile(path.join(root,'curriculum/direct-resources.json'),'utf8'));
 const outDir=path.join(root,'curriculum/books');
 const manifestPath=path.join(root,'curriculum/books-manifest.json');
-const UA='Salma-Sama-Official-Books/1.1';
+const UA='Salma-Sama-Official-Books/1.2';
 
 function sha256(buffer){return crypto.createHash('sha256').update(buffer).digest('hex')}
 function slug(s){return String(s).replace(/\s+/g,'-').replace(/[\\/:*?"<>|]/g,'-')}
@@ -67,6 +67,8 @@ async function prepare(){
   return prepared;
 }
 
+function attributesFor(book,role){return {grade:Number(book.grade),semester:Number(book.semester),subject:String(book.subject),kind:String(book.kind),authority:String(book.authority),source_priority:Number(book.sourcePriority||100),document_role:role}}
+
 async function upload(prepared){
   if(!process.env.OPENAI_API_KEY)throw new Error('OPENAI_API_KEY is required to create/upload the curriculum vector store.');
   const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
@@ -78,14 +80,16 @@ async function upload(prepared){
   }
   let indexed=0;
   for(const book of prepared){
-    for(const filePath of [book.filePath,book.metaPath]){
+    const files=[[book.filePath,'book'],[book.metaPath,'metadata']];
+    for(const [filePath,role] of files){
       console.log('index',path.basename(filePath));
       const result=await client.vectorStores.files.uploadAndPoll(vectorStoreId,fs.createReadStream(filePath),{pollIntervalMs:1000});
       if(result.status!=='completed')throw new Error(`Indexing failed (${result.status}) for ${filePath}`);
+      await client.vectorStores.files.update(result.id,{vector_store_id:vectorStoreId,attributes:attributesFor(book,role)});
       indexed++;
     }
   }
-  const state={vectorStoreId,uploadedAt:new Date().toISOString(),books:prepared.length,indexedFiles:indexed};
+  const state={vectorStoreId,uploadedAt:new Date().toISOString(),books:prepared.length,indexedFiles:indexed,attributes:['grade','semester','subject','kind','authority','source_priority','document_role']};
   await fsp.writeFile(path.join(root,'curriculum/vector-store-books.json'),JSON.stringify(state,null,2));
   console.log(`OPENAI_CURRICULUM_VECTOR_STORE_ID=${vectorStoreId}`);
 }

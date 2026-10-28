@@ -2,6 +2,8 @@ import Link from 'next/link';
 import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
 import LessonPlayer from './LessonPlayer';
 
+const subjectIcons:Record<string,string>={'الرياضيات':'➗','العلوم والحياة':'🔬','اللغة العربية':'📚','English':'🌍'};
+
 export default async function LessonPage({params}:{params:Promise<{lessonId:string}>}){
  const {lessonId}=await params;
  const lesson=getLesson(lessonId);
@@ -11,25 +13,28 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
  const currentIndex=subjectLessons.findIndex(item=>item.id===lesson.id);
  const previous=currentIndex>0?subjectLessons[currentIndex-1]:null;
  const next=currentIndex>=0&&currentIndex<subjectLessons.length-1?subjectLessons[currentIndex+1]:null;
+ const isSalma=student.slug==='salma';
 
- return <main className="shell"><div className="wrap">
-  <div className="top"><Link className="btn secondary" href={`/student/${student.slug}`}>← دروس {student.name}</Link><div className="brand">{lesson.subject}</div></div>
-  <div className="lessonDesktopLayout">
-    <section className="lessonMainPane">
-      <span className="tag">{student.name} · الصف {student.grade} · الفصل الأول</span>
-      <h1>{lesson.title}</h1>
-      <p className="muted lessonLead">{lesson.summary}</p>
-      <LessonPlayer lesson={lesson}/>
-      <nav style={{display:'flex',justifyContent:'space-between',gap:12,flexWrap:'wrap',marginTop:18}} aria-label="التنقل بين الدروس">
-        <div>{previous&&<Link className="btn secondary" href={`/lesson/${previous.id}`}>→ السابق: {previous.title}</Link>}</div>
-        <div>{next&&<Link className="btn" href={`/lesson/${next.id}`}>التالي: {next.title} ←</Link>}</div>
-      </nav>
-    </section>
+ return <main className={`lessonJourney ${isSalma?'themeSalma':'themeSama'}`}><div className="wrap lessonJourneyWrap">
+  <header className="kidTopbar lessonTopbar"><Link className="backBubble" href={`/student/${student.slug}`}>→ دروسي</Link><div className="lessonTopTitle"><span>{subjectIcons[lesson.subject]??'📘'}</span><strong>{lesson.subject}</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
 
-    <aside className="lessonSidebar card">
-      <div className="lessonSidebarSection"><div className="muted" style={{fontSize:12,fontWeight:900}}>معلومات الدرس</div><div className="lessonInfoRow"><span>⏱️ المدة</span><strong>{lesson.minutes} دقيقة</strong></div><div className="lessonInfoRow"><span>📚 المادة</span><strong>{lesson.subject}</strong></div><div className="lessonInfoRow"><span>🎯 النوع</span><strong>{lesson.kind==='assessment'?'اختبار':'درس'}</strong></div></div>
-      <div className="lessonSidebarSection"><strong>ما الذي سأتعلمه؟</strong><ol className="learningObjectives">{lesson.learningPoints.map(point=><li key={point}>{point}</li>)}</ol></div>
+  <section className="lessonMissionHead">
+    <div className="missionCopy"><span className="questEyebrow">{lesson.kind==='assessment'?'🏆 تحدي قصير':'✨ مهمة جديدة'}</span><h1>{lesson.title}</h1><p>{lesson.summary}</p></div>
+    <div className="missionFacts"><div><span>⏱</span><strong>{lesson.minutes}</strong><small>دقيقة</small></div><div><span>🎯</span><strong>{lesson.learningPoints.length}</strong><small>أهداف</small></div></div>
+  </section>
+
+  <div className="lessonStepRail" aria-label="خطوات الدرس"><span className="active">1 <b>ابدئي</b></span><span>2 <b>تعلّمي</b></span><span>3 <b>تدرّبي</b></span><span>4 <b>احتفلي</b></span></div>
+
+  <div className="kidLessonLayout">
+    <section className="lessonMainPane"><LessonPlayer lesson={lesson}/></section>
+    <aside className="goalCard">
+      <div className="goalCardIcon">🎯</div><span>هدفي في هذا الدرس</span><h2>سأستطيع أن…</h2><ul>{lesson.learningPoints.slice(0,4).map(point=><li key={point}>{point}</li>)}</ul>
     </aside>
   </div>
+
+  <nav className="lessonNavKid" aria-label="التنقل بين الدروس">
+    {previous?<Link href={`/lesson/${previous.id}`}><span>→</span><div><small>الدرس السابق</small><strong>{previous.title}</strong></div></Link>:<span/>}
+    {next&&<Link className="nextLessonLink" href={`/lesson/${next.id}`}><div><small>بعدها</small><strong>{next.title}</strong></div><span>←</span></Link>}
+  </nav>
  </div></main>;
 }

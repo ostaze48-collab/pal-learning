@@ -1,0 +1,68 @@
+'use client';
+import {useEffect,useMemo,useState} from 'react';
+import type {Lesson} from '../../../../lib/data';
+import type {TeachingVisualSpec} from '../../../../lib/teachingVisuals';
+import TeachingSceneVisual from '../TeachingSceneVisual';
+import styles from './AlternateTeachingCanvas.module.css';
+
+type Decision={decision?:string;focus?:string;reason?:string;objectiveIds?:number[];gapType?:string;source?:string};
+type AltStep={title:string;body:string;prompt:string;visual?:TeachingVisualSpec};
+
+function readDecision(lessonId:string):Decision|null{try{const raw=localStorage.getItem(`teacherDecision:${lessonId}`)||localStorage.getItem(`lesson:${lessonId}:teacherDecision`);return raw?JSON.parse(raw):null}catch{return null}}
+
+function objectiveIndex(decision:Decision|null){const id=Number(decision?.objectiveIds?.[0]);return Number.isFinite(id)&&id>0?id-1:0}
+
+function visualFor(lesson:Lesson,index:number):TeachingVisualSpec|undefined{
+ if(lesson.id==='g5-science-cell-types')return index===0?{kind:'cell_zoom'}:index===2?{kind:'cell_parts'}:{kind:'cell_compare'};
+ if(lesson.id==='g5-science-separation-methods')return index===0?{kind:'filter_lab'}:index===1?{kind:'magnet_lab'}:{kind:'evaporation_lab'};
+ if(lesson.id==='g7-math-integers')return index===0?{kind:'integer_context'}:{kind:'number_line'};
+ if(lesson.id==='g7-math-add-subtract-integers')return {kind:'integer_motion',variant:index===0?'-3,+5':index===1?'-7,-2':'4,+2'};
+ if(lesson.id==='g5-ar-noun-types')return {kind:'pronoun_swap'};
+ if(lesson.id==='g7-en-question-order')return index===1?{kind:'do_does'}:{kind:'question_blocks'};
+ return undefined;
+}
+
+function stepsFor(lesson:Lesson,decision:Decision|null):AltStep[]{
+ const index=objectiveIndex(decision);const visual=visualFor(lesson,index);const transfer=decision?.gapType==='transfer_gap'||decision?.source==='transfer_evidence';
+ if(transfer){
+   const context=lesson.subject==='الرياضيات'?'بدّلي الأرقام والسياق، لكن ابحثي عن العلاقة نفسها.':lesson.subject==='العلوم والحياة'?'غيّري الشيء الذي نلاحظه، ثم ابحثي عن نفس السبب أو المبدأ.':lesson.subject==='English'?'Change the situation, but keep the same language pattern.':'غيّري الجملة أو الموقف، ثم ابحثي عن الفكرة نفسها.';
+   return [
+    {title:'نغيّر شكل المسألة',body:'أنتِ لا تحتاجين إعادة الدرس؛ نريد فقط أن نتأكد أن الفكرة لا ترتبط بمثال واحد.',prompt:context},
+    {title:'شاهديها في تمثيل آخر',body:'استخدمي النموذج التالي لتفصلي بين شكل المثال وبين الفكرة التي تحكمه.',prompt:'ما الشيء الذي بقي ثابتًا رغم تغير الموقف؟',visual},
+    {title:'اصنعي رابطًا جديدًا',body:'اختاري موقفًا جديدًا من حياتك أو من سؤال مختلف واربطيه بنفس الفكرة.',prompt:'قولي لنفسك: عرفتُ أن الفكرة تنطبق هنا لأن…'}
+   ];
+ }
+ if(lesson.subject==='العلوم والحياة')return [
+  {title:'بدل التعريف، نبدأ من دليل',body:'هذه المرة لن نبدأ باسم المفهوم. ننظر أولًا إلى ما يحدث أو ما نراه، ثم نبني التفسير منه.',prompt:'ما الشيء الذي يمكن ملاحظته فعلًا قبل أن نفسره؟'},
+  {title:'جرّبي نموذجًا آخر',body:'تعاملي مع النموذج كدليل: غيّريه أو قارني داخله ثم لاحظي ما الذي يظل ثابتًا.',prompt:'أي تغيير في النموذج أعطاكِ الدليل الأقوى؟',visual},
+  {title:'من الدليل إلى السبب',body:'الآن اربطي المشاهدة بالسبب. لا تحفظي الجملة؛ اكتبي في ذهنك علاقة «لأن… لذلك…».',prompt:'كيف تكمّلين: حدث هذا لأن…؟'}
+ ];
+ if(lesson.subject==='الرياضيات')return [
+  {title:'نترك القاعدة قليلًا',body:'بدل البدء بالرموز، سنحوّل المسألة إلى حركة أو مكان أو كميات يمكن تخيلها.',prompt:'ما الذي تمثله الأعداد هنا قبل أي عملية؟'},
+  {title:'شاهدي العلاقة تتحرك',body:'استخدمي النموذج، ثم ركزي على الاتجاه أو المسافة أو الشيء الذي يتغير.',prompt:'ما الذي حدث بصريًا قبل كتابة الناتج؟',visual},
+  {title:'أعيدي بناء القاعدة',body:'القاعدة الآن نتيجة لما شاهدته، وليست جملة يجب حفظها.',prompt:'كيف تشرحين الطريقة لشخص لم ير القاعدة من قبل؟'}
+ ];
+ if(lesson.subject==='اللغة العربية')return [
+  {title:'ابدئي من الجملة لا من اسم القاعدة',body:'اقرئي الجملة كمعنى أولًا، ثم لاحظي ما الذي يجعلها أثقل أو أوضح.',prompt:'ما الجزء الذي يتكرر أو يحتاج استبدالًا؟'},
+  {title:'شاهدي قبل وبعد',body:'بدّلي العنصر داخل الجملة ولاحظي أثره على المعنى والوضوح.',prompt:'هل بقي المقصود واضحًا بعد التغيير؟',visual},
+  {title:'استخدمي النمط بنفسك',body:'اصنعي جملة جديدة مختلفة عن المثال السابق وطبقي فيها نفس الفكرة.',prompt:'ما الدليل في جملتك أن الاستخدام صحيح؟'}
+ ];
+ if(lesson.subject==='English')return [
+  {title:'Start from meaning',body:'Forget the rule name for a moment. Start with what you want the sentence or question to mean.',prompt:'What are you trying to ask or say?'},
+  {title:'Build it with visible blocks',body:'Use the model to see where each part belongs instead of memorising the whole sentence.',prompt:'Which block controls the form of the main verb?',visual},
+  {title:'Change one thing',body:'Change the subject or situation and rebuild the sentence with the same pattern.',prompt:'What changed, and what stayed the same?'}
+ ];
+ return [{title:'نغير الزاوية',body:lesson.example,prompt:'ما العلاقة الأساسية هنا؟'},{title:'نجرب مثالًا آخر',body:lesson.summary,prompt:'ما الذي بقي ثابتًا؟',visual},{title:'نشرحها بطريقتنا',body:'أعيدي صياغة الفكرة بكلماتك.',prompt:'كيف تشرحينها ببساطة؟'}];
+}
+
+export default function AlternateTeachingCanvas({lesson}:{lesson:Lesson}){
+ const [decision,setDecision]=useState<Decision|null>(null);const [step,setStep]=useState(0);const [reflection,setReflection]=useState('');
+ useEffect(()=>{setDecision(readDecision(lesson.id));try{localStorage.setItem(`lesson:${lesson.id}:reteachStarted`,new Date().toISOString())}catch{}},[lesson.id]);
+ const steps=useMemo(()=>stepsFor(lesson,decision),[lesson,decision]);const current=steps[step];
+ function next(){try{const key=`lessonUx:${lesson.id}`;const raw=localStorage.getItem(key);const old=raw?JSON.parse(raw):[];const events=Array.isArray(old)?old:[];events.push({event:'alternate_teaching_step',step:step+1,at:new Date().toISOString(),gapType:decision?.gapType||null});localStorage.setItem(key,JSON.stringify(events.slice(-199)))}catch{};setStep(v=>Math.min(steps.length-1,v+1))}
+ return <div className={styles.shell}>
+  <div className={styles.head}><span className={styles.badge}>🧭 طريقة ثانية للفكرة</span><small>{decision?.focus||'نغيّر التمثيل ثم نعيد القياس'}</small></div>
+  <div className={styles.steps}>{steps.map((_,i)=><div key={i} className={`${styles.step} ${i===step?styles.active:''} ${i<step?styles.done:''}`}>{i<step?'✓':i+1}</div>)}</div>
+  <article className={styles.card}><h2>{current.title}</h2><p>{current.body}</p><div className={styles.scenario}>💡 {current.prompt}</div>{current.visual&&<TeachingSceneVisual spec={current.visual}/>} {step===steps.length-1&&<><textarea className={styles.reflection} value={reflection} onChange={e=>setReflection(e.target.value)} placeholder={lesson.subject==='English'?'Write one short thought or example…':'اكتبي مثالًا أو تفسيرًا قصيرًا لنفسك…'}/><div className={styles.quiet}>هذه الكتابة جزء من التعلم وليست درجة. سنعيد القياس بعد ذلك بسؤال جديد.</div></>}<div className={styles.actions}>{step>0&&<button className={styles.secondary} onClick={()=>setStep(v=>Math.max(0,v-1))}>→ السابق</button>}{step<steps.length-1&&<button className={styles.button} onClick={next}>الطريقة التالية ←</button>}</div></article>
+ </div>;
+}

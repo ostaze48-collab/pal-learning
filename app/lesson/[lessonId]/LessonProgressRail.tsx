@@ -13,6 +13,6 @@ function detectStage(){
 
 export default function LessonProgressRail(){
  const [stage,setStage]=useState(0);
- useEffect(()=>{const update=()=>setStage(detectStage());update();const observer=new MutationObserver(update);observer.observe(document.body,{subtree:true,childList:true,attributes:true,classFilter:['class'] as any});return()=>observer.disconnect()},[]);
+ useEffect(()=>{const update=()=>setStage(detectStage());update();const observer=new MutationObserver(update);observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class']});return()=>observer.disconnect()},[]);
  return <div className="lessonStepRail liveLessonRail" aria-label="خطوات الدرس">{steps.map(([label,icon],i)=><span key={label} className={i===stage?'active':i<stage?'done':''}><b className="railIcon">{i<stage?'✓':icon}</b><em>{i+1}</em><strong>{label}</strong></span>)}</div>;
 }

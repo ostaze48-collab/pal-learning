@@ -13,6 +13,7 @@ import './creative-learning.css';
 import './concept-studio.css';
 import './advanced-concept-studio.css';
 import './dashboard-progress.css';
+import './learning-path.css';
 import './live-rail.css';
 import PwaClient from './PwaClient';
 

@@ -57,7 +57,7 @@ function allPrerequisites(lesson:Lesson){
 function recoveryTitle(id:string){return recoverySkills.find(x=>x.id===id)?.title||gapSkills[id]?.title||id}
 
 function readJson(key:string){if(typeof window==='undefined')return null;const raw=localStorage.getItem(key);if(!raw)return null;try{return JSON.parse(raw)}catch{return null}}
-function finite(v:unknown){return Number.isFinite(Number(v))?Number(v):null}
+function finite(v:unknown){if(v===null||v===undefined||v==='')return null;return Number.isFinite(Number(v))?Number(v):null}
 function clampScore(v:number|null){return v===null?null:Math.max(0,Math.min(100,Math.round(v)))}
 
 function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidenceDecision|null{

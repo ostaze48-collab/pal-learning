@@ -5,12 +5,14 @@ import {chooseVisualStrategy} from '../../../lib/visualTeaching';
 
 function textOf(lesson:Lesson){return [lesson.title,lesson.summary,...lesson.learningPoints,lesson.example].join(' ').toLowerCase()}
 function languageGrammarLesson(lesson:Lesson){const t=textOf(lesson);return /(ضمير|فعل|اسم|جملة|قاعدة|همزة|تعريف|تنكير|verb|tense|present|past|perfect|question|pronoun|comparative|sentence|grammar|punctuation)/i.test(t)}
-export function supportsConceptStudio(lesson:Lesson){const strategy=chooseVisualStrategy(lesson).strategy;return strategy==='fraction_model'||strategy==='geometry'||(lesson.subject==='العلوم والحياة'&&strategy==='cause_effect')||((lesson.subject==='English'||lesson.subject==='اللغة العربية')&&languageGrammarLesson(lesson))}
+export function supportsConceptStudio(lesson:Lesson){const strategy=chooseVisualStrategy(lesson).strategy;return strategy==='fraction_model'||strategy==='geometry'||strategy==='factor_tree'||strategy==='number_line'||(lesson.subject==='العلوم والحياة'&&strategy==='cause_effect')||((lesson.subject==='English'||lesson.subject==='اللغة العربية')&&languageGrammarLesson(lesson))}
 
 export default function ConceptStudio({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
  const strategy=chooseVisualStrategy(lesson).strategy;
  if(strategy==='fraction_model')return <FractionStudio lesson={lesson} onOutcome={onOutcome}/>;
  if(strategy==='geometry')return <GeometryStudio lesson={lesson} onOutcome={onOutcome}/>;
+ if(strategy==='factor_tree')return <FactorStudio lesson={lesson} onOutcome={onOutcome}/>;
+ if(strategy==='number_line')return <NumberLineStudio lesson={lesson} onOutcome={onOutcome}/>;
  if(lesson.subject==='العلوم والحياة'&&strategy==='cause_effect')return <ScienceCauseStudio lesson={lesson} onOutcome={onOutcome}/>;
  if((lesson.subject==='English'||lesson.subject==='اللغة العربية')&&languageGrammarLesson(lesson))return <SentenceStudio lesson={lesson} onOutcome={onOutcome}/>;
  return null;
@@ -24,6 +26,17 @@ function FractionStudio({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean
  function changeDen(next:number){const d=Math.min(10,Math.max(2,next));setDen(d);setNum(n=>Math.min(n,d));setChecked(false)}
  function check(){const ok=den===targetDen&&num===targetNum;setChecked(true);onOutcome?.(ok)}
  return <div className="conceptStudio fractionStudio"><div className="conceptStudioHead"><span>🍰</span><div><small>مختبر الكسور</small><h4>ابني الكسر بيدك</h4><p>اضغطي على الأجزاء لتري معنى البسط والمقام بدل حفظهما فقط.</p></div></div><div className="fractionBoard">{Array.from({length:den},(_,i)=><button key={i} className={i<num?'filled':''} onClick={()=>{setNum(i+1);setChecked(false)}} aria-label={`اختيار ${i+1} من ${den}`}/>)}</div><div className="fractionReadout"><strong>{num}</strong><span/><strong>{den}</strong></div><div className="studioControls"><button onClick={()=>changeDen(den-1)}>− مقام</button><button onClick={()=>changeDen(den+1)}>+ مقام</button><button className="studioCheck" onClick={check}>تحقق من كسر المثال</button></div>{checked&&<div className={den===targetDen&&num===targetNum?'studioFeedback ok':'studioFeedback learn'}><strong>{den===targetDen&&num===targetNum?'⭐ ممتاز! بنيتِ كسر المثال':'💡 قارني بالدرس مرة أخرى'}</strong><p>الهدف هنا هو {targetNum}/{targetDen}. المقام يحدد عدد الأجزاء المتساوية، والبسط يحدد الأجزاء المأخوذة.</p></div>}</div>
+}
+
+function FactorStudio({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
+ const nums=(lesson.example+' '+lesson.summary).match(/\d+/g)?.map(Number).filter(n=>n>=4&&n<=120)||[];const target=nums[0]||24;const divisors=Array.from({length:target},(_,i)=>i+1).filter(n=>target%n===0);const prime=divisors.length===2;const [answer,setAnswer]=useState<'prime'|'composite'|null>(null);const [showFactors,setShowFactors]=useState(false);
+ function choose(value:'prime'|'composite'){if(answer)return;setAnswer(value);const ok=(value==='prime')===prime;onOutcome?.(ok)}
+ return <div className="conceptStudio factorStudio"><div className="conceptStudioHead"><span>🌳</span><div><small>مختبر العوامل</small><h4>هل العدد أولي أم مركب؟</h4><p>لا تحفظي التعريف فقط؛ ابحثي عن عوامل العدد ثم قرري.</p></div></div><div className="factorNumber">{target}</div><div className="studioChoices"><button disabled={answer!==null} onClick={()=>choose('prime')}>عدد أولي</button><button disabled={answer!==null} onClick={()=>choose('composite')}>عدد مركب</button></div>{answer&&<button className="revealEvidence" onClick={()=>setShowFactors(true)}>🔎 اكشفي عوامل العدد</button>}{showFactors&&<div className={(answer==='prime')===prime?'studioFeedback ok':'studioFeedback learn'}><strong>{prime?'عوامله فقط 1 ونفسه':'له عوامل أخرى غير 1 ونفسه'}</strong><div className="factorChips">{divisors.map(n=><span key={n}>{n}</span>)}</div><p>{target} هو {prime?'عدد أولي':'عدد مركب'}.</p></div>}</div>
+}
+
+function NumberLineStudio({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
+ const nums=(lesson.example+' '+lesson.summary).match(/-?\d+/g)?.map(Number).filter(n=>n>=-10&&n<=10)||[];const target=nums.find(n=>n!==0)??-3;const min=-10,max=10;const [value,setValue]=useState(0);const [checked,setChecked]=useState(false);function move(delta:number){setValue(v=>Math.max(min,Math.min(max,v+delta)));setChecked(false)}function check(){const ok=value===target;setChecked(true);onOutcome?.(ok)}const left=((value-min)/(max-min))*100;
+ return <div className="conceptStudio numberLineStudio"><div className="conceptStudioHead"><span>↔️</span><div><small>مختبر خط الأعداد</small><h4>حرّكي النقطة إلى {target}</h4><p>اليمين يزيد القيمة، واليسار ينقصها. تحركي خطوة خطوة ولا تحفظي الموقع.</p></div></div><div className="interactiveNumberLine"><div className="numberLineTrack"/><div className="numberLinePoint" style={{left:`${left}%`}}>{value}</div><div className="numberTicks">{[-10,-5,0,5,10].map(n=><span key={n} style={{left:`${((n-min)/(max-min))*100}%`}}>{n}</span>)}</div></div><div className="studioControls"><button onClick={()=>move(-1)}>← −1</button><button onClick={()=>{setValue(0);setChecked(false)}}>الصفر</button><button onClick={()=>move(1)}>+1 →</button><button className="studioCheck" onClick={check}>تحقق من الموقع</button></div>{checked&&<div className={value===target?'studioFeedback ok':'studioFeedback learn'}><strong>{value===target?'⭐ وصلتِ إلى المكان الصحيح':'💡 راقبي الاتجاه والقيمة'}</strong><p>أنتِ الآن عند {value}، والهدف {target}.</p></div>}</div>
 }
 
 function GeometryStudio({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){

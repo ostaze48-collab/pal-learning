@@ -1,15 +1,22 @@
 import type {Lesson} from './data';
 import type {TeachingMode} from './teachingProfile';
 import {buildTeacherSessionPlan} from './teacherBrain';
+import {getLessonReadiness} from './masteryEngine';
 
 export type LocalTeachingMode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 export type LocalTeacherContent={title:string;intro:string;cards:Array<{title:string;body:string;kind:'explain'|'example'|'tip'|'check'}>;checkQuestion?:{text:string;hint:string};teacherNote?:string};
 
 type Options={diagnosticCorrect?:boolean;weaknessScore?:number|null;conceptSuccess?:number|null;subjectMastery?:number|null;preferredMode?:TeachingMode;lastUnderstanding?:string|null};
 export function buildLocalTeachingContent(lesson:Lesson,mode:LocalTeachingMode='overview',options:Options={}):LocalTeacherContent{
+ const readiness=getLessonReadiness(lesson.student,lesson.id);
+ const prerequisiteScores=(readiness?.weakPrerequisites||[]).map(x=>x.score).filter((x):x is number=>typeof x==='number');
+ const prerequisiteWeakest=prerequisiteScores.length?Math.min(...prerequisiteScores):readiness?.readinessStatus==='check'?70:null;
+ const weaknessValues=[options.weaknessScore,prerequisiteWeakest].filter((x):x is number=>typeof x==='number'&&Number.isFinite(x));
+ const effectiveWeakness=weaknessValues.length?Math.min(...weaknessValues):null;
  const requested=mode!=='overview'&&mode!=='check'?mode as TeachingMode:options.preferredMode;
- const plan=buildTeacherSessionPlan(lesson,{diagnosticCorrect:options.diagnosticCorrect,weakestScore:options.weaknessScore,conceptSuccess:options.conceptSuccess,subjectMastery:options.subjectMastery,preferredMode:requested,lastUnderstanding:options.lastUnderstanding});
+ const plan=buildTeacherSessionPlan(lesson,{diagnosticCorrect:options.diagnosticCorrect,weakestScore:effectiveWeakness,conceptSuccess:options.conceptSuccess,subjectMastery:options.subjectMastery,preferredMode:requested,lastUnderstanding:options.lastUnderstanding});
  const activeMode:LocalTeachingMode=mode==='overview'?plan.entryMode:mode;
+ const prerequisiteIntro=readiness?.readinessStatus==='blocked'&&readiness.weakPrerequisites[0]?`قبل فكرة اليوم سنثبت سريعًا: ${readiness.weakPrerequisites[0].title}. `:readiness?.readinessStatus==='check'&&readiness.weakPrerequisites[0]?`سنبدأ بتحقق قصير من: ${readiness.weakPrerequisites[0].title}. `:'';
  const introPrefix=plan.level==='rebuild'?'سنثبت الأساس الضروري أولًا ثم نعود مباشرة لفكرة اليوم. ':plan.level==='guided'?'سأعطيك دعمًا صغيرًا ثم أجعلك تجربين بنفسك. ':plan.level==='stretch'?'أنتِ قوية في الأساس؛ سنختصر الشرح ونصل أسرع إلى التحدي. ':'';
  const points=lesson.learningPoints.slice(0,plan.level==='stretch'?3:4);
  const cards:Array<{title:string;body:string;kind:'explain'|'example'|'tip'|'check'}>=[];
@@ -23,5 +30,5 @@ export function buildLocalTeachingContent(lesson:Lesson,mode:LocalTeachingMode='
  cards.push({title:`كيف أفكر؟ · ${plan.visualLabel}`,body:thinkingTip,kind:'tip'});
  if(plan.level==='stretch')cards.push({title:'تحدي التفكير',body:'حاولي تفسير لماذا تعمل الفكرة، ثم طبقيها على مثال مختلف بدل إعادة نفس المثال.',kind:'check'});
  const q=lesson.questions[0];
- return {title:lesson.title,intro:`${introPrefix}${lesson.summary}`,cards:cards.slice(0,7),checkQuestion:{text:q?.text||'اشرحي الفكرة بكلماتك.',hint:q?.explanation||'ارجعي إلى الفكرة الأساسية ومثال الدرس.'},teacherNote:`شرح محلي احتياطي مبني فقط على محتوى الدرس المسجل من المنهاج. خطة الجلسة: ${plan.reason} قاعدة الانتقال: ${plan.transitionRule}`};
+ return {title:lesson.title,intro:`${prerequisiteIntro}${introPrefix}${lesson.summary}`,cards:cards.slice(0,7),checkQuestion:{text:q?.text||'اشرحي الفكرة بكلماتك.',hint:q?.explanation||'ارجعي إلى الفكرة الأساسية ومثال الدرس.'},teacherNote:`شرح محلي احتياطي مبني فقط على محتوى الدرس المسجل من المنهاج. الجاهزية: ${readiness?.readinessStatus||'غير مقاسة'}. خطة الجلسة: ${plan.reason} قاعدة الانتقال: ${plan.transitionRule}`};
 }

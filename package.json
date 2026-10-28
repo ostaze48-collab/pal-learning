@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "dev":"next dev",
-    "build":"node scripts/find-official-book-links.mjs && next build",
+    "build":"next build",
     "start":"next start",
+    "kb:books:prepare":"node scripts/curriculum-books.mjs prepare",
+    "kb:books:upload":"node scripts/curriculum-books.mjs upload",
+    "kb:books:all":"node scripts/curriculum-books.mjs all",
     "kb:discover":"node scripts/curriculum-kb.mjs discover",
     "kb:download":"node scripts/curriculum-kb.mjs download",
     "kb:validate":"node scripts/curriculum-kb.mjs validate",

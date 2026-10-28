@@ -1,11 +1,44 @@
 import Link from 'next/link';
 import {lessons,students} from '../lib/data';
 
+const subjectMeta=[
+  ['الرياضيات','➗','أرقام وألغاز'],
+  ['العلوم والحياة','🔬','اكتشاف وتجارب'],
+  ['اللغة العربية','📚','قراءة ولغة'],
+  ['English','🌍','Words & stories']
+] as const;
+
 export default function Home(){
- const subjectMeta=[['الرياضيات','📘'],['العلوم والحياة','🔬'],['اللغة العربية','📕'],['English','🔤']] as const;
- return <main className="shell"><div className="wrap">
-   <div className="top"><div><div className="brand">تعلم سلمى وسما</div><div className="muted" style={{fontSize:12,marginTop:4}}>تعمل مباشرة من متصفح الهاتف أو اللابتوب</div></div><Link className="btn secondary" href="/parent">لوحة الأب 🔒</Link></div>
-   <section className="hero"><span className="tag">الفصل الأول · الرزم التعليمية الفلسطينية</span><h1>من سيتعلم الآن؟</h1><p className="muted">تعلم يومي منظم لسلمى وسما: دروس، اختبارات، علاج للأخطاء، مراجعات متباعدة، ومتابعة للأب — دون الحاجة إلى تثبيت تطبيق.</p></section>
-   <section className="grid">{students.map(s=>{const own=lessons.filter(l=>l.student===s.slug);return <div className="card student" key={s.slug}><div className="avatar">{s.emoji}</div><div><h2 style={{margin:'0 0 6px'}}>{s.name}</h2><div className="muted">الصف {s.grade===5?'الخامس':'السابع'} · الفصل الأول</div></div><div className="subjects">{subjectMeta.map(([subject,icon])=>{const count=own.filter(l=>l.subject===subject&&l.kind!=='assessment').length;return <div className="subject" key={subject}><strong>{icon} {subject}</strong><div className="muted" style={{fontSize:12,marginTop:4}}>{count} درسًا متاحًا</div></div>})}</div><Link className="btn" href={`/student/${s.slug}`}>ابدئي التعلم</Link></div>})}</section>
+ return <main className="kidHome"><div className="wrap homeWrap">
+   <header className="kidTopbar">
+     <div className="kidBrand"><span className="brandSpark">✦</span><span>رحلة سلمى وسما</span></div>
+     <Link className="parentDoor" href="/parent">للأب 🔒</Link>
+   </header>
+
+   <section className="homeHero">
+     <div className="heroStars" aria-hidden="true">✦　●　✧</div>
+     <span className="heroPill">كل يوم خطوة صغيرة 🌱</span>
+     <h1>من ستبدأ رحلتها الآن؟</h1>
+     <p>اختاري بطاقتك، وسنأخذك مباشرة إلى مهمة اليوم. لا قوائم معقدة ولا خطوات كثيرة.</p>
+   </section>
+
+   <section className="kidProfiles">{students.map(s=>{
+     const own=lessons.filter(l=>l.student===s.slug);
+     const isSalma=s.slug==='salma';
+     return <article className={`kidProfileCard ${isSalma?'salmaCard':'samaCard'}`} key={s.slug}>
+       <div className="profileDecor" aria-hidden="true">{isSalma?'★ ✿ ★':'✦ ◇ ✦'}</div>
+       <div className="profileTop">
+         <div className="kidAvatar">{s.emoji}</div>
+         <div><span className="gradePill">الصف {s.grade===5?'الخامس':'السابع'}</span><h2>{s.name}</h2><p>{isSalma?'مغامرة تعلم مرحة وواضحة':'مسار تعلم ذكي وسريع'}</p></div>
+       </div>
+       <div className="miniSubjects">{subjectMeta.map(([subject,icon,label])=>{
+         const count=own.filter(l=>l.subject===subject&&l.kind!=='assessment').length;
+         return <div className="miniSubject" key={subject}><span className="miniSubjectIcon">{icon}</span><div><strong>{subject}</strong><small>{label} · {count} درس</small></div></div>
+       })}</div>
+       <Link className="kidStartBtn" href={`/student/${s.slug}`}><span>{isSalma?'ابدئي مغامرتك':'ابدئي جلسة اليوم'}</span><b>←</b></Link>
+     </article>
+   })}</section>
+
+   <div className="homePromise"><span>🎯</span><div><strong>مهمة واحدة في كل مرة</strong><p>المنصة تختار ما تحتاجينه اليوم وتخفي التعقيد في الخلفية.</p></div></div>
  </div></main>
 }

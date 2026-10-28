@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
 import LessonPlayer from './LessonPlayer';
+import LessonProgressRail from './LessonProgressRail';
 
 const subjectIcons:Record<string,string>={'الرياضيات':'➗','العلوم والحياة':'🔬','اللغة العربية':'📚','English':'🌍'};
 const subjectClasses:Record<string,string>={'الرياضيات':'subjectMath','العلوم والحياة':'subjectScience','اللغة العربية':'subjectArabic','English':'subjectEnglish'};
@@ -25,7 +26,7 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
     <div className="missionFacts"><div><span>⏱</span><strong>{lesson.minutes}</strong><small>دقيقة</small></div><div><span>🎯</span><strong>{lesson.learningPoints.length}</strong><small>أهداف</small></div></div>
   </section>
 
-  <div className="lessonStepRail" aria-label="خطوات الدرس"><span className="active">1 <b>ابدئي</b></span><span>2 <b>تعلّمي</b></span><span>3 <b>تدرّبي</b></span><span>4 <b>احتفلي</b></span></div>
+  <LessonProgressRail/>
 
   <div className="kidLessonLayout">
     <section className="lessonMainPane"><LessonPlayer lesson={lesson}/></section>

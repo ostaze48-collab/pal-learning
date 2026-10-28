@@ -13,9 +13,12 @@ export type AdaptiveResult={
   evidence:AdaptiveEvidence[];
 };
 
-function isFluencySensitive(subskillId:string){
-  return /^tables-/.test(subskillId)||['division-inverse','addition-carry','subtraction-borrow','phonics-basic','phonics-blending','core-vocabulary','basic-spelling'].includes(subskillId);
-}
+const fluencySensitiveIds=new Set([
+  'division-inverse','addition-carry','subtraction-borrow',
+  'initial-sounds','short-vowels','school-family','time-place','actions-adjectives',
+  'taa-haa','solar-lunar'
+]);
+function isFluencySensitive(subskillId:string){return /^tables-/.test(subskillId)||fluencySensitiveIds.has(subskillId)}
 
 export function evaluateAdaptiveSubskill(sub:DeepSubskill,evidence:AdaptiveEvidence[],priorScore?:number):AdaptiveResult{
   const entry=evidence.find(x=>x.mode==='entry');

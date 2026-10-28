@@ -1,0 +1,178 @@
+/* Child-facing visual system. Scoped to .kidShell so the parent dashboard stays calm and professional. */
+.kidShell{
+  --kid-primary:#7557e8;
+  --kid-primary-dark:#5a3fd0;
+  --kid-sun:#ffd166;
+  --kid-ink:#263247;
+  --kid-muted:#667085;
+  --kid-surface:#ffffff;
+  --kid-border:#e8e4f6;
+  min-height:100vh;
+  color:var(--kid-ink);
+  background:
+    radial-gradient(circle at 7% 8%,rgba(255,209,102,.25) 0 92px,transparent 93px),
+    radial-gradient(circle at 93% 18%,rgba(121,214,255,.20) 0 110px,transparent 111px),
+    linear-gradient(180deg,#fffaf2 0%,#f8fbff 55%,#fff 100%);
+  position:relative;
+  overflow-x:hidden;
+}
+.kidShell .wrap{position:relative;z-index:1}
+.kidShell .brand{font-size:22px;color:#3d3563;letter-spacing:-.3px}
+.kidShell .top.kidTop{padding:10px 12px;background:rgba(255,255,255,.82);border:1px solid rgba(224,218,244,.85);border-radius:22px;box-shadow:0 8px 24px rgba(77,62,125,.07);backdrop-filter:blur(10px)}
+.kidShell .hero{padding:38px 4px 24px}
+.kidShell .hero h1{font-size:clamp(34px,7vw,58px);letter-spacing:-1px;color:#342b59;margin:14px 0 10px}
+.kidShell .hero p{max-width:780px;font-size:17px;line-height:1.9;color:#667085}
+.kidShell .tag{background:#f2edff;color:#6347c8;border:1px solid #e3d9ff;padding:7px 12px;font-size:12px}
+.kidShell .btn{min-height:54px;padding:0 21px;border-radius:18px;background:linear-gradient(135deg,var(--subject,var(--student,var(--kid-primary))),var(--subject-dark,var(--student-dark,var(--kid-primary-dark))));box-shadow:0 5px 0 rgba(54,42,108,.14);font-size:15px;transition:transform .16s ease,box-shadow .16s ease,filter .16s ease}
+.kidShell .btn:hover{filter:saturate(1.08);transform:translateY(-1px);box-shadow:0 7px 0 rgba(54,42,108,.13)}
+.kidShell .btn:active{transform:translateY(3px);box-shadow:0 2px 0 rgba(54,42,108,.12)}
+.kidShell .btn.secondary{background:#fff;color:#514774;border:2px solid #e4def5;box-shadow:none}
+.kidShell .card{border:2px solid #ece8f6;border-radius:28px;box-shadow:0 13px 34px rgba(70,57,118,.09);background:rgba(255,255,255,.96)}
+
+/* Home: choose a learner */
+.kidHome .grid{gap:22px}
+.kidHome .student{min-height:0;padding:26px;position:relative;overflow:hidden}
+.kidHome .student:before{content:"";position:absolute;width:150px;height:150px;border-radius:50%;background:var(--student-soft);left:-55px;top:-62px;opacity:.78}
+.studentCardSalma{--student:#8758e8;--student-dark:#6840c8;--student-soft:#efe7ff}
+.studentCardSama{--student:#1787d8;--student-dark:#0c67b1;--student-soft:#e2f3ff}
+.kidHome .studentHead{display:flex;align-items:center;gap:16px;position:relative}
+.kidHome .avatar{width:84px;height:84px;border-radius:28px;font-size:44px;background:var(--student-soft);border:3px solid #fff;box-shadow:0 8px 22px rgba(70,57,118,.10)}
+.kidHome .student h2{font-size:30px;color:#342b59}
+.kidHome .subjects{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;margin:2px 0 4px}
+.kidHome .subject{border:2px solid var(--subject-border,#eee);background:var(--subject-soft,#fafafa);padding:14px;border-radius:19px;min-height:88px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.kidHome .subject strong{font-size:14px;color:var(--subject-dark,#30384a)}
+.kidHome .student .btn{width:100%;margin-top:2px}
+
+/* Subject identity */
+.subjectMath{--subject:#7b57e8;--subject-dark:#5e3fc6;--subject-soft:#f1eaff;--subject-border:#ded1ff}
+.subjectScience{--subject:#15a99a;--subject-dark:#0b7f74;--subject-soft:#e6fbf7;--subject-border:#c4efe7}
+.subjectArabic{--subject:#ef6f6c;--subject-dark:#c65050;--subject-soft:#fff0ed;--subject-border:#ffd7d2}
+.subjectEnglish{--subject:#3187e8;--subject-dark:#1768c1;--subject-soft:#eaf4ff;--subject-border:#cde4ff}
+
+/* Student hub */
+.salmaTheme{--student:#8758e8;--student-dark:#6840c8;--student-soft:#efe7ff}
+.samaTheme{--student:#1787d8;--student-dark:#0c67b1;--student-soft:#e2f3ff}
+.kidWelcome{padding:27px!important;position:relative;overflow:hidden;background:linear-gradient(135deg,#fff 0%,var(--student-soft) 160%)!important;border-color:#e9e2fb!important}
+.kidWelcome:after{content:"✦";position:absolute;left:22px;top:16px;font-size:62px;color:var(--student);opacity:.10;transform:rotate(14deg)}
+.kidWelcome h1{font-size:clamp(30px,5vw,46px);margin:10px 0 4px;color:#342b59}
+.kidWelcome p{font-size:15px;line-height:1.8;max-width:850px}
+.kidMissionLine{display:flex;align-items:center;gap:9px;margin-top:12px;font-weight:900;color:#594c86;font-size:14px}
+.kidSubjectNav{border-radius:24px!important;background:rgba(255,255,255,.93)!important}
+.kidShell .subjectNavLink{border:2px solid transparent;background:#faf9ff;border-radius:16px;min-height:48px;color:#4b4267}
+.kidShell .subjectNavLink:hover{border-color:#ddd3f7;background:#fff}
+.kidShell .subjectNavLink small{background:#eee9ff;color:#5e46bd}
+.kidShell .subjectBlock{border:2px solid var(--subject-border);border-radius:28px;padding:22px;background:linear-gradient(180deg,var(--subject-soft) 0,rgba(255,255,255,.98) 190px);box-shadow:0 12px 32px rgba(70,57,118,.07)}
+.kidShell .subjectHeader{margin-bottom:20px}
+.kidShell .subjectHeader h2{font-size:25px;color:var(--subject-dark)}
+.kidShell .subjectIcon{width:56px;height:56px;border-radius:20px;background:#fff;border:2px solid var(--subject-border);font-size:29px;box-shadow:0 6px 18px rgba(0,0,0,.05)}
+.kidShell .subjectBlock>.subjectHeader>.tag{background:#fff;color:var(--subject-dark);border-color:var(--subject-border)}
+.kidShell .unitStack{gap:26px}
+.kidShell .unitTitle{padding:13px 16px;border:0;background:rgba(255,255,255,.78);border-radius:17px;color:#40385c}
+.kidShell .unitTitle strong{font-size:16px}
+.kidShell .lessonList{gap:12px}
+.kidShell .lesson{border:2px solid #eeeaf7;border-right:7px solid var(--subject);border-radius:20px;padding:16px;background:#fff;box-shadow:0 6px 16px rgba(63,53,100,.05);transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease}
+.kidShell .lesson:hover{transform:translateY(-2px);border-color:var(--subject-border);box-shadow:0 10px 24px rgba(63,53,100,.09)}
+.kidShell .lesson h3{font-size:18px;color:#332d4a}
+.kidShell .lesson .muted{line-height:1.65}
+.kidShell .lesson.assessment{border-right-color:#e5a825;background:#fffaf0;border-style:solid}
+.kidShell .lesson.assessment .btn{--subject:#e7a923;--subject-dark:#bd7c06}
+.kidShell .lessonStatus{font-size:11px;padding:6px 9px;border:0}
+.kidShell .lessonStatus.new{background:#f0eef8;color:#726a86}
+.kidShell .lessonStatus.done{background:#dcf8e9;color:#267454}
+.kidShell .lessonStatus.review{background:#fff0c8;color:#8a6410}
+.kidShell .dailyPlan{border:2px solid #e9e2fb;background:linear-gradient(135deg,#f6f0ff,#fff9e9);border-radius:26px;padding:22px;box-shadow:0 9px 24px rgba(75,57,120,.06)}
+.kidShell .dailyTask{border:2px solid #eee8fb;border-radius:19px;box-shadow:0 4px 10px rgba(66,53,110,.04)}
+.kidShell .dailyTaskIcon{width:48px;height:48px;border-radius:16px;background:#f4efff}
+.kidShell .progress{height:13px;background:#ece9f4;border-radius:999px}
+.kidShell .progress>span{border-radius:999px;background:linear-gradient(90deg,var(--subject,var(--student,var(--kid-primary))),#53d7c7)}
+
+/* Lesson = a mission, not a document */
+.kidLesson .lessonHeroKid{margin-bottom:18px;padding:24px 26px;border-radius:28px;border:2px solid var(--subject-border);background:linear-gradient(135deg,var(--subject-soft),#fff 72%);box-shadow:0 10px 28px rgba(63,53,100,.07)}
+.kidLesson .lessonHeroKid h1{font-size:clamp(30px,5vw,48px);line-height:1.25;margin:12px 0 8px;color:var(--subject-dark)}
+.kidLesson .lessonHeroKid .tag{background:#fff;color:var(--subject-dark);border-color:var(--subject-border)}
+.kidLesson .lessonLead{margin-bottom:14px;color:#667085;font-size:16px;line-height:1.8}
+.missionTrail{display:flex;gap:9px;flex-wrap:wrap;margin-top:16px}
+.missionTrail span{display:inline-flex;align-items:center;min-height:38px;padding:0 12px;border-radius:999px;background:#fff;border:2px solid var(--subject-border);font-size:13px;font-weight:900;color:var(--subject-dark)}
+.kidLesson .lessonSidebar{border-color:var(--subject-border);background:linear-gradient(180deg,#fff,var(--subject-soft));border-radius:25px}
+.kidLesson .lessonSidebarSection>strong{color:var(--subject-dark)}
+.kidLesson .lessonInfoRow{padding:11px 0;border-bottom:1px dashed var(--subject-border)}
+.kidLesson .lessonInfoRow:last-child{border-bottom:0}
+.kidLesson .learningObjectives{font-size:14px;gap:10px;color:#4f5263}
+.kidLesson .learningObjectives li::marker{color:var(--subject);font-weight:900}
+.kidLesson .lessonMainPane>.card,
+.kidLesson .interactiveCard,
+.kidLesson .gapCoach,
+.kidLesson .aiTutor,
+.kidLesson .aiFirstLessonShell{border:2px solid #ebe6f6;border-radius:26px;box-shadow:0 10px 28px rgba(66,53,110,.07)}
+.kidLesson .option{min-height:64px;padding:16px;border:2px solid #e6e1f1;border-radius:18px;background:#fff;color:#30364a;font-size:17px;font-weight:800;box-shadow:0 4px 0 #f0edf6;transition:transform .14s ease,border-color .14s ease,background .14s ease}
+.kidLesson .option:hover{transform:translateY(-1px);border-color:var(--subject)}
+.kidLesson .option.ok{background:#e6f8ef;border-color:#54b98a;box-shadow:none;color:#1d6c4b}
+.kidLesson .option.bad{background:#fff0ee;border-color:#e98d84;box-shadow:none;color:#9b4541}
+.kidLesson .result{border:2px solid #d7f0e3;background:#effbf4;border-radius:20px}
+.kidLesson .remediation{border:2px solid #f1dfab;background:#fff9e8;border-radius:19px}
+.kidLesson .masteryGrid>div{border:2px solid #ece7f5;border-radius:18px;background:#fff}
+.kidLesson .masteryGrid strong{color:var(--subject-dark)}
+.kidLesson .lessonVisual{border:2px solid var(--subject-border);background:linear-gradient(180deg,#fff,var(--subject-soft));border-radius:23px}
+.kidLesson .visualTitle>span{background:var(--subject-soft);border:2px solid var(--subject-border)}
+.kidLesson .aiTutor{overflow:hidden;border-color:#ded6f4}
+.kidLesson .aiTutorToggle{background:linear-gradient(135deg,var(--subject-dark),#44356f);padding:16px 18px}
+.kidLesson .aiOrb{background:#fff;color:var(--subject-dark);border-radius:15px}
+.kidLesson .quickPrompts button{min-height:40px;border:2px solid var(--subject-border);color:var(--subject-dark);background:var(--subject-soft)}
+.kidLesson .chatComposer textarea{border:2px solid #e4def2;border-radius:17px;min-height:64px}
+.kidLesson .chatComposer textarea:focus{border-color:var(--subject);box-shadow:0 0 0 4px var(--subject-soft)}
+.kidLesson .aiLessonTeacher{border-radius:24px}
+
+/* Age tuning: Sama is playful but less "little-kid" than Salma. */
+.samaTheme.kidShell .card,.samaTheme.kidShell .subjectBlock{border-radius:23px}
+.samaTheme.kidShell .kidWelcome:after{content:"✧"}
+.samaTheme.kidShell .subjectIcon{border-radius:17px}
+.samaTheme.kidShell .lesson{border-radius:17px}
+
+@media (hover:hover){
+  .kidHome .student:hover{transform:translateY(-3px);transition:transform .18s ease}
+}
+@media(max-width:900px){
+  .kidShell .studentDesktopLayout{display:block}
+  .kidShell .subjectNav{position:sticky;top:8px;z-index:12;display:flex;overflow-x:auto;gap:8px;padding:10px;margin-bottom:18px;scrollbar-width:none;background:rgba(255,255,255,.92)!important;backdrop-filter:blur(12px)}
+  .kidShell .subjectNav::-webkit-scrollbar{display:none}
+  .kidShell .subjectNavLink{flex:0 0 auto;white-space:nowrap;padding:9px 12px;min-height:44px}
+  .kidShell .subjectNavHint{display:none}
+  .kidLesson .lessonSidebar{position:static;order:-1}
+}
+@media(max-width:560px){
+  .kidShell .wrap{width:min(100% - 20px,1040px);padding-top:14px}
+  .kidShell .top.kidTop{border-radius:18px;padding:8px 10px;margin-bottom:4px}
+  .kidShell .brand{font-size:18px}
+  .kidShell .top.kidTop .btn{min-height:44px;padding:0 13px;border-radius:14px;font-size:13px}
+  .kidShell .hero{padding:28px 3px 16px}
+  .kidShell .hero h1{font-size:36px}
+  .kidShell .hero p{font-size:15px;line-height:1.75}
+  .kidHome .grid{grid-template-columns:1fr}
+  .kidHome .student{padding:20px;border-radius:24px}
+  .kidHome .avatar{width:72px;height:72px;border-radius:23px;font-size:39px}
+  .kidHome .student h2{font-size:27px}
+  .kidHome .subjects{grid-template-columns:1fr 1fr}
+  .kidHome .subject{min-height:78px;padding:11px}
+  .kidWelcome{padding:21px!important;border-radius:24px!important}
+  .kidWelcome h1{font-size:32px}
+  .kidShell .subjectBlock{padding:15px;border-radius:23px}
+  .kidShell .subjectHeader{flex-direction:row;align-items:center}
+  .kidShell .subjectHeader>div{align-items:center}
+  .kidShell .subjectHeader h2{font-size:21px}
+  .kidShell .subjectIcon{width:50px;height:50px;border-radius:17px;font-size:26px}
+  .kidShell .subjectBlock>.subjectHeader>.tag{display:none}
+  .kidShell .lesson{padding:14px;gap:11px;align-items:stretch}
+  .kidShell .lesson h3{font-size:17px}
+  .kidShell .lesson .btn{width:100%;min-height:50px}
+  .kidShell .lesson .muted:not(.lessonMeta .muted){display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .kidLesson .lessonHeroKid{padding:20px;border-radius:23px}
+  .kidLesson .lessonHeroKid h1{font-size:31px}
+  .kidLesson .lessonSidebar{padding:15px;margin-bottom:14px}
+  .kidLesson .lessonSidebar .learningObjectives{display:none}
+  .kidLesson .option{min-height:62px;font-size:16px}
+  .missionTrail{gap:6px}
+  .missionTrail span{font-size:12px;padding:0 10px;min-height:35px}
+}
+@media(prefers-reduced-motion:reduce){
+  .kidShell *{scroll-behavior:auto!important;transition:none!important;animation:none!important}
+}

@@ -8,6 +8,7 @@
     "start":"next start",
     "kb:discover":"node scripts/curriculum-kb.mjs discover",
     "kb:download":"node scripts/curriculum-kb.mjs download",
+    "kb:validate":"node scripts/curriculum-kb.mjs validate",
     "kb:upload":"node scripts/curriculum-kb.mjs upload",
     "kb:all":"node scripts/curriculum-kb.mjs all"
   },

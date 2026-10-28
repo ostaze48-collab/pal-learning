@@ -2,20 +2,24 @@ import OpenAI from 'openai';
 import {NextResponse} from 'next/server';
 import {getLesson,getStudent,getLessonSourceLabel} from '../../../lib/data';
 import {gapSkills,lessonPrerequisites} from '../../../lib/skillGraph';
+import {getCurriculumSources,getRecoveryGradeBand} from '../../../lib/curriculumKnowledge';
+import {recoverySkills} from '../../../lib/recoverySkills';
 
 type LearnerState={
   diagnosticCorrect?:boolean;
   mastery?:number;
   wrongQuestionIds?:string[];
   likelyGapId?:string|null;
+  recoveryProfile?:Record<string,number>;
 };
 
 type RequestBody={lessonId?:string;question?:string;learnerState?:LearnerState};
 
-function localFallback(lessonId:string,question:string){
+function localFallback(lessonId:string,question:string,weakTitle?:string){
   const lesson=getLesson(lessonId);
   if(!lesson)return 'لم أتمكن من فتح سياق هذا الدرس.';
   const q=question.trim();
+  if(weakTitle)return `قبل العودة إلى درس ${lesson.title}، ثبتي أولًا مهارة ${weakTitle}. بعد ذلك نربطها بالفكرة الأساسية في الدرس: ${lesson.learningPoints[0]}`;
   if(q.includes('مثال'))return `مثال من هذا الدرس: ${lesson.example}`;
   if(q.includes('أبسط')||q.includes('افهم')||q.includes('فهم'))return `نبدأ من أبسط نقطة: ${lesson.learningPoints[0]} ثم نطبّقها على المثال: ${lesson.example}`;
   return `الفكرة الأساسية في هذا الدرس: ${lesson.learningPoints.join(' ثم ')}. ${lesson.example}`;
@@ -32,64 +36,90 @@ export async function POST(request:Request){
   const student=getStudent(lesson.student);
   if(!student)return NextResponse.json({error:'student_not_found'},{status:400});
 
+  const learnerState=body.learnerState||{};
   const prereqIds=lessonPrerequisites[lesson.id]||[];
   const prereqs=prereqIds.map(id=>gapSkills[id]).filter(Boolean);
-  const likelyGap=body.learnerState?.likelyGapId?gapSkills[body.learnerState.likelyGapId]:undefined;
+  const likelyGap=learnerState.likelyGapId?gapSkills[learnerState.likelyGapId]:undefined;
+  const recoveryProfile=learnerState.recoveryProfile||{};
+  const weakRecovery=Object.entries(recoveryProfile).filter(([,score])=>score<80).sort((a,b)=>a[1]-b[1])[0];
+  const weakRecoverySkill=weakRecovery?recoverySkills.find(s=>s.id===weakRecovery[0]):undefined;
   const sourceLabel=getLessonSourceLabel(lesson);
+  const previousGrades=getRecoveryGradeBand(student.grade);
+  const sourceGrades=[...previousGrades,student.grade];
+  const officialSources=sourceGrades.flatMap(g=>getCurriculumSources(g,lesson.subject));
+  const uniqueSources=[...new Map(officialSources.map(s=>[s.id,s])).values()].slice(0,12);
 
   if(!process.env.OPENAI_API_KEY){
-    return NextResponse.json({answer:localFallback(lesson.id,question),mode:'local',gap:likelyGap?.title||null});
+    return NextResponse.json({answer:localFallback(lesson.id,question,weakRecoverySkill?.title||likelyGap?.title),mode:'local',gap:weakRecoverySkill?.title||likelyGap?.title||null});
   }
 
   const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
   const grade=student.grade;
-  const learnerState=body.learnerState||{};
+  const sourceList=uniqueSources.map((s,i)=>`${i+1}. ${s.title} — ${s.kind} — ثقة ${s.priority}/100 — ${s.url}`).join('\n');
+  const recoveryList=Object.entries(recoveryProfile).map(([id,score])=>{const skill=recoverySkills.find(s=>s.id===id);return skill?`- ${skill.title}: ${score}% (${skill.strand})`:null}).filter(Boolean).join('\n');
 
   const curriculumContext=`
 الطالبة: ${student.name}
-الصف: ${grade}
+الصف الحالي المسجل: ${grade}
 الفصل: الأول
 المادة: ${lesson.subject}
-الدرس: ${lesson.title}
+الدرس الحالي: ${lesson.title}
 وصف الدرس: ${lesson.summary}
-أهداف/نقاط التعلم المعتمدة داخل المنصة:
+أهداف/نقاط التعلم داخل المنصة:
 ${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}
 مثال الدرس الموجود في المنصة:
 ${lesson.example}
-المصدر: ${sourceLabel}
-المهارات السابقة المطلوبة:
-${prereqs.length?prereqs.map(x=>`- ${x.title}: ${x.explanation}`).join('\n'):'- لا توجد مهارة سابقة مسجلة لهذا الدرس.'}
-حالة المتعلمة الحالية:
+مرجع الدرس الحالي: ${sourceLabel}
+
+نطاق الاستدراك: الصفوف السابقة ${previousGrades.join('، ')||'لا يوجد'} مع الاستمرار في الصف ${grade}.
+المهارات السابقة المرتبطة مباشرة بهذا الدرس:
+${prereqs.length?prereqs.map(x=>`- ${x.title}: ${x.explanation}`).join('\n'):'- لا توجد مهارة مباشرة مسجلة.'}
+
+نتائج فحص الفجوات في مادة ${lesson.subject}:
+${recoveryList||'- لم يكتمل فحص الفجوات لهذه المادة بعد.'}
+أضعف مهارة موثقة حاليًا: ${weakRecoverySkill?`${weakRecoverySkill.title} (${weakRecovery?.[1]}%) — ${weakRecoverySkill.whyItMatters}`:'لا توجد فجوة موثقة أقل من 80%.'}
+فجوة محتملة من أخطاء الدرس: ${likelyGap?`${likelyGap.title} — ${likelyGap.why}`:'لم تحدد.'}
+
+حالة الدرس:
 - التشخيص القبلي صحيح: ${learnerState.diagnosticCorrect===undefined?'غير معروف':learnerState.diagnosticCorrect?'نعم':'لا'}
 - الإتقان الحالي: ${learnerState.mastery??'غير متوفر'}
 - الأسئلة التي أخطأت فيها: ${(learnerState.wrongQuestionIds||[]).join(', ')||'لا يوجد'}
-- الفجوة المحتملة: ${likelyGap?`${likelyGap.title} — ${likelyGap.why}`:'لم تحدد بعد'}
+
+ترتيب المصادر الموثوقة المتاحة للنظام:
+${sourceList}
 `;
 
-  const instructions=`أنت معلم ذكي خاص بطفلة في منصة تعليم منزلية فلسطينية. التزم حرفيًا بهذه القواعد:
-1) اشرح على مستوى الصف ${grade} وبالعربية المبسطة، إلا إذا كانت المادة English فاسمح بالإنجليزية البسيطة مع شرح عربي عند الحاجة.
-2) اجعل إجابتك مرتبطة بالدرس الحالي والسياق المقدم فقط. لا تنسب معلومة إلى المنهاج إن لم تكن موجودة في السياق.
-3) إذا كان السؤال يحتاج معلومة دقيقة غير موجودة في السياق، قل بوضوح: "هذه النقطة غير موجودة في سياق الدرس المتاح لي الآن" ثم قدم شرحًا عامًا قصيرًا فقط إذا كان آمنًا ومفيدًا، مع تمييزه بأنه شرح مساعد وليس نصًا رسميًا.
-4) لا تعطِ الحل النهائي فورًا إذا كان الأفضل أن تقود الطفلة خطوة بخطوة. استخدم سؤالًا صغيرًا أو مثالًا ثم اطلب منها التفكير.
-5) إذا أظهرت حالة المتعلمة فجوة سابقة مثل جدول الضرب أو خط الأعداد أو معنى الكسر، عالج تلك الفجوة أولًا قبل العودة للمفهوم الحالي.
-6) لا تستخدم مصطلحات أعلى من مستوى الصف دون شرحها.
-7) حافظ على الإجابة قصيرة: عادة 4-8 جمل، ويمكن استخدام نقاط قليلة.
-8) لا تطلب أي بيانات شخصية من الطفلة ولا تفتح محادثة عامة خارج التعلم.
-9) عندما يكون مناسبًا اختم بسؤال تحقق واحد فقط.
-10) فرّق دائمًا بين "محتوى الدرس المتاح" و"شرح مساعد" ولا تدّعِ أن صياغتك نص رسمي من الوزارة.`;
+  const instructions=`أنت معلم ذكي لمنصة تعليم منزلية فلسطينية تعالج آثار الانقطاع التعليمي الطويل، مع إبقاء الطالبة في صفها الحالي. التزم بهذه القواعد:
+1) الهدف المزدوج: مساعدة الطالبة على إتقان الصف ${grade} الحالي، وفي الوقت نفسه سد الفجوات الدقيقة فقط من الصفوف السابقة دون إعادتها لصف سابق كامل.
+2) اشرح على مستوى الصف ${grade} وبالعربية المبسطة، إلا في English فاستخدم الإنجليزية البسيطة مع شرح عربي عند الحاجة.
+3) استخدم تسلسل الثقة التالي: الكتاب/الرزمة الرسمية، فهرس المنهاج الرسمي، دليل المعلم، الإطار الوطني للمبحث، أوراق العمل الرسمية، الاختبارات ونماذج الحل المنشورة، ثم الشرح المساعد الذي تولده أنت.
+4) إذا كانت أداة file_search متاحة، استخدمها عندما يحتاج السؤال معلومة منهجية دقيقة أو مثالًا/تمرينًا من المواد المرجعية. لا تخترع نصًا أو حلًا رسميًا إذا لم تجده.
+5) إذا أظهرت النتائج فجوة سابقة موثقة أقل من 80% وتؤثر في السؤال الحالي، عالجها أولًا في 2-5 دقائق تعليميًا ثم اربطها مباشرة بالدرس الحالي.
+6) لا تجعل الاستدراك يطغى على الصف الحالي: اقترح أقصر علاج كافٍ ثم ارجع إلى هدف الدرس.
+7) لا تعطِ الحل النهائي فورًا إذا كان الأفضل توجيه الطفلة بسؤال صغير أو مثال مشابه.
+8) إذا كانت معلومة غير موجودة في المصادر المتاحة، قل: "لم أجد هذه النقطة في المصادر المنهجية المتاحة لي الآن" ولا تنسبها للوزارة.
+9) فرّق بين: "وفق المصدر الرسمي" و"شرح مساعد" و"تمرين مشابه مولد".
+10) استخدم إجابة قصيرة عادة 4-10 جمل، ويمكن إضافة مثال بصري لفظي أو سؤال تحقق واحد.
+11) لا تطلب بيانات شخصية ولا تفتح محادثة عامة بعيدة عن التعلم.
+12) عندما يكون سؤال الطفلة أوسع من الدرس الحالي لكن داخل منهاجها أو صفوفها السابقة، يمكنك الاستفادة من قاعدة المنهاج الكاملة بدل رفضه لمجرد أنه خارج عنوان الدرس.`;
 
   try{
+    const tools:any[]=[];
+    if(process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID){
+      tools.push({type:'file_search',vector_store_ids:[process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID],max_num_results:6});
+    }
     const response=await client.responses.create({
       model:process.env.OPENAI_TUTOR_MODEL||'gpt-6-luna',
       instructions,
       input:`${curriculumContext}\n\nسؤال الطفلة: ${question}`,
-      max_output_tokens:500
+      ...(tools.length?{tools}:{}),
+      max_output_tokens:650
     });
     const answer=(response.output_text||'').trim();
     if(!answer)throw new Error('empty_response');
-    return NextResponse.json({answer,mode:'ai',gap:likelyGap?.title||null});
+    return NextResponse.json({answer,mode:'ai',gap:weakRecoverySkill?.title||likelyGap?.title||null,grounded:tools.length>0});
   }catch(error){
     console.error('Tutor API error',error);
-    return NextResponse.json({answer:localFallback(lesson.id,question),mode:'local_fallback',gap:likelyGap?.title||null});
+    return NextResponse.json({answer:localFallback(lesson.id,question,weakRecoverySkill?.title||likelyGap?.title),mode:'local_fallback',gap:weakRecoverySkill?.title||likelyGap?.title||null});
   }
 }

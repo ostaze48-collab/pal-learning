@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
 import {buildLearnerModel} from '../../../lib/learnerModel';
-import {recordCreativeOutcome} from '../../../lib/creativeLearningProfile';
+import {readCreativeOutcome,recordCreativeOutcome} from '../../../lib/creativeLearningProfile';
 import {chooseLessonExperience,type ExperienceKind,type ExperiencePlan} from '../../../lib/lessonExperience';
 import ConceptStudio,{supportsConceptStudio} from './ConceptStudio';
 import AdvancedConceptStudio,{supportsAdvancedConceptStudio} from './AdvancedConceptStudio';
@@ -18,7 +18,7 @@ export default function AdaptiveLessonExperience({lesson,diagnosticCorrect}:{les
  const localPlan=useMemo(()=>chooseLessonExperience(lesson,diagnosticCorrect,mastery,creativeSuccess),[lesson,diagnosticCorrect,mastery,creativeSuccess]);
  const [plan,setPlan]=useState<ExperiencePlan>(localPlan);const [mode,setMode]=useState<ExperienceKind>(localPlan.primary);
  const advanced=supportsAdvancedConceptStudio(lesson);const specialized=advanced||supportsConceptStudio(lesson);
- useEffect(()=>{setMastery(buildLearnerModel(lesson.student,lesson.subject).subjectMastery??null);try{const raw=localStorage.getItem(profileKey);if(raw){const p:CreativeProfile=JSON.parse(raw);if(p.attempts>0)setCreativeSuccess(Math.round(p.successes/p.attempts*100))}}catch{}},[lesson.id,lesson.student,lesson.subject,profileKey]);
+ useEffect(()=>{setMastery(buildLearnerModel(lesson.student,lesson.subject).subjectMastery??null);const exact=readCreativeOutcome(lesson.student,lesson.id);if(exact){setCreativeSuccess(exact.successRate);return}try{const raw=localStorage.getItem(profileKey);if(raw){const p:CreativeProfile=JSON.parse(raw);if(p.attempts>0)setCreativeSuccess(Math.round(p.successes/p.attempts*100));else setCreativeSuccess(null)}else setCreativeSuccess(null)}catch{setCreativeSuccess(null)}},[lesson.id,lesson.student,lesson.subject,profileKey]);
  useEffect(()=>{let alive=true;const fallback=chooseLessonExperience(lesson,diagnosticCorrect,mastery,creativeSuccess);setPlan(fallback);setMode(fallback.primary);fetch('/api/ai-teacher/experience',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:lesson.id,diagnosticCorrect,subjectMastery:mastery,recentCreativeSuccess:creativeSuccess})}).then(r=>r.json()).then(data=>{if(!alive||!data?.primary)return;const next:ExperiencePlan={primary:data.primary,secondary:data.secondary,label:String(data.label||fallback.label),icon:String(data.icon||fallback.icon),reason:String(data.reason||fallback.reason),intensity:data.intensity||fallback.intensity,visualLabel:String(data.visualLabel||fallback.visualLabel),task:data.task||fallback.task};setPlan(next);setMode(next.primary)}).catch(()=>{});return()=>{alive=false}},[lesson.id,diagnosticCorrect,mastery]);
  function recordOutcome(ok:boolean){recordCreativeOutcome(lesson.student,lesson.subject,lesson.id,ok)}
  const meta=modeMeta(mode);

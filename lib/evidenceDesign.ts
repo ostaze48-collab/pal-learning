@@ -16,6 +16,7 @@ export type EvidenceTask={
  correctIndex?:number;
  explanation?:string;
  quality:'direct'|'inferred';
+ depth:'quick'|'deep';
 };
 
 const has=(text:string,re:RegExp)=>re.test(text.toLowerCase());
@@ -52,40 +53,49 @@ function transferPrompt(lesson:Lesson){
  return `استخدمي فكرة الدرس في موقف جديد مختلف عن المثال السابق، ثم اشرحي كيف عرفتِ أنها تنطبق هنا.`;
 }
 
+function deepPriority(kind:EvidenceKind){
+ if(kind==='explain'||kind==='compare'||kind==='correct_error')return 3;
+ if(kind==='construct')return 2;
+ if(kind==='apply')return 1;
+ return 0;
+}
+
 export function buildEvidenceTasks(lesson:Lesson):EvidenceTask[]{
  const objectives=lesson.learningPoints.length?lesson.learningPoints:[lesson.summary];
  const map=buildObjectiveQuestionMap(lesson);
- return objectives.map((objective,index)=>{
+ const prepared=objectives.map((objective,index)=>{
    const kind=kindFor(lesson.subject,objective);
    const direct=map[index]?.links.find(x=>x.quality==='direct')||map[index]?.links[0];
    const q=direct?lesson.questions.find(x=>x.id===direct.questionId):lesson.questions[index%Math.max(1,lesson.questions.length)];
-   const quality=direct?.quality==='direct'?'direct':'inferred';
-   const useChoice=kind==='recognize'&&Boolean(q?.options?.length);
+   return {objective,index,kind,direct,q,quality:direct?.quality==='direct'?'direct' as const:'inferred' as const};
+ });
+ const openBudget=lesson.student==='salma'?1:2;
+ const deepIndexes=new Set(prepared
+   .map(x=>({index:x.index,priority:deepPriority(x.kind),hasQuestion:Boolean(x.q?.options?.length)}))
+   .sort((a,b)=>b.priority-a.priority||Number(a.hasQuestion)-Number(b.hasQuestion)||a.index-b.index)
+   .slice(0,openBudget)
+   .map(x=>x.index));
+ return prepared.map(({index,kind,q,quality})=>{
+   const mustWrite=!q?.options?.length;
+   const deep=mustWrite||deepIndexes.has(index);
+   const interaction:EvidenceInteraction=deep?'short_text':'choice';
    return {
      id:`${lesson.id}:evidence:${index+1}`,
      objectiveId:index+1,
      scope:'objective',
      kind,
-     interaction:useChoice?'choice':'short_text',
-     prompt:textPrompt(lesson,kind,q?.text),
+     interaction,
+     prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),
      questionId:q?.id||null,
-     options:useChoice?q?.options:undefined,
-     correctIndex:useChoice?q?.correct:undefined,
+     options:interaction==='choice'?q?.options:undefined,
+     correctIndex:interaction==='choice'?q?.correct:undefined,
      explanation:q?.explanation,
-     quality
+     quality,
+     depth:deep?'deep':'quick'
    };
  });
 }
 
 export function buildTransferTask(lesson:Lesson):EvidenceTask{
- return {
-   id:`${lesson.id}:transfer`,
-   objectiveId:0,
-   scope:'transfer',
-   kind:'transfer',
-   interaction:'short_text',
-   prompt:transferPrompt(lesson),
-   questionId:null,
-   quality:'direct'
- };
+ return {id:`${lesson.id}:transfer`,objectiveId:0,scope:'transfer',kind:'transfer',interaction:'short_text',prompt:transferPrompt(lesson),questionId:null,quality:'direct',depth:'deep'};
 }

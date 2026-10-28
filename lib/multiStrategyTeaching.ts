@@ -1,4 +1,5 @@
 import type {Lesson} from './data';
+import {readCreativeOutcome} from './creativeLearningProfile';
 
 export type TeachingStrategyId=
   |'factor_pairs'
@@ -65,7 +66,13 @@ function emptyHistory():StrategyHistory{return {strategies:{}}}
 export function readStrategyHistory(student:string,lessonId:string):StrategyHistory{if(typeof window==='undefined')return emptyHistory();const raw=localStorage.getItem(`lesson:${lessonId}:strategyHistory`);if(!raw)return emptyHistory();try{const parsed=JSON.parse(raw);return parsed&&typeof parsed==='object'?parsed:emptyHistory()}catch{return emptyHistory()}}
 function strategyScore(stat:StrategyStat|undefined){if(!stat||!stat.attempts)return 0;return (stat.understood*3+stat.partial-stat.misconception*2)/stat.attempts}
 export function chooseTeachingStrategy(lesson:Lesson,student:string,options:{diagnosticCorrect?:boolean;weakestScore?:number|null;conceptSuccess?:number|null;avoid?:TeachingStrategyId[]}={}):TeachingStrategy{
-  const candidates=getTeachingStrategies(lesson);const history=readStrategyHistory(student,lesson.id);const avoid=new Set(options.avoid||[]);const weak=options.diagnosticCorrect===false||Number(options.weakestScore??100)<65||Number(options.conceptSuccess??100)<65;const strong=options.diagnosticCorrect!==false&&Number(options.weakestScore??100)>=85&&Number(options.conceptSuccess??100)>=85;const preferred=weak?candidates.slice(0,Math.min(4,candidates.length)):strong?[...candidates].reverse():candidates;const unused=preferred.find(s=>!avoid.has(s.id)&&!(history.strategies[s.id]?.attempts));if(unused)return unused;const ranked=preferred.filter(s=>!avoid.has(s.id)).sort((a,b)=>strategyScore(history.strategies[b.id])-strategyScore(history.strategies[a.id]));return ranked[0]||candidates[0];
+  const candidates=getTeachingStrategies(lesson);const history=readStrategyHistory(student,lesson.id);const avoid=new Set(options.avoid||[]);
+  const latestConcept=readCreativeOutcome(student,lesson.id);const conceptSuccess=latestConcept?.successRate??options.conceptSuccess??100;
+  const weak=options.diagnosticCorrect===false||Number(options.weakestScore??100)<65||Number(conceptSuccess)<65;
+  const strong=options.diagnosticCorrect!==false&&Number(options.weakestScore??100)>=85&&Number(conceptSuccess)>=85;
+  const preferred=weak?candidates.slice(0,Math.min(4,candidates.length)):strong?[...candidates].reverse():candidates;
+  const unused=preferred.find(s=>!avoid.has(s.id)&&!(history.strategies[s.id]?.attempts));if(unused)return unused;
+  const ranked=preferred.filter(s=>!avoid.has(s.id)).sort((a,b)=>strategyScore(history.strategies[b.id])-strategyScore(history.strategies[a.id]));return ranked[0]||candidates[0];
 }
 export function nextTeachingStrategy(lesson:Lesson,student:string,current:TeachingStrategyId,options:{diagnosticCorrect?:boolean;weakestScore?:number|null;conceptSuccess?:number|null}={}):TeachingStrategy{const history=readStrategyHistory(student,lesson.id);const attempted=Object.entries(history.strategies).filter(([,v])=>Boolean(v?.attempts)).map(([id])=>id as TeachingStrategyId);return chooseTeachingStrategy(lesson,student,{...options,avoid:[current,...attempted]})}
 export function recordTeachingStrategyOutcome(student:string,lessonId:string,strategy:TeachingStrategyId,outcome:StrategyOutcome){if(typeof window==='undefined')return;const history=readStrategyHistory(student,lessonId);const stat=history.strategies[strategy]||{attempts:0,understood:0,partial:0,misconception:0};stat.attempts+=1;stat[outcome]+=1;stat.lastAt=new Date().toISOString();history.strategies[strategy]=stat;history.lastStrategy=strategy;localStorage.setItem(`lesson:${lessonId}:strategyHistory`,JSON.stringify(history))}

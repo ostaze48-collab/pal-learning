@@ -1,6 +1,6 @@
 export type Student={slug:string;name:string;grade:number;semester:number;emoji:string};
 export type Question={id:string;text:string;options:string[];correct:number;explanation:string};
-export type Lesson={id:string;student:string;subject:string;title:string;minutes:number;summary:string;learningPoints:string[];example:string;questions:Question[]};
+export type Lesson={id:string;student:string;subject:string;title:string;minutes:number;summary:string;learningPoints:string[];example:string;questions:Question[];kind?:'lesson'|'assessment'};
 
 export const students:Student[]=[
   {slug:'salma',name:'سلمى',grade:5,semester:1,emoji:'👧'},
@@ -28,6 +28,16 @@ export const lessons:Lesson[]=[
     {id:'q2',text:'أي عدد هو مضاعف مشترك للعددين 3 و5؟',options:['8','10','15','20'],correct:2,explanation:'15 يقبل القسمة على 3 وعلى 5، وهو مضاعف لهما.'},
     {id:'q3',text:'ما م.م.أ للعددين 5 و10؟',options:['5','10','15','20'],correct:1,explanation:'10 هو أول مضاعف مشترك للعددين 5 و10.'},
     {id:'q4',text:'عند استخدام طريقة القوائم، ماذا نفعل بعد كتابة المضاعفات؟',options:['نختار أكبر عدد','نبحث عن المشترك ثم نختار الأصغر','نجمع المضاعفات','نحذف كل الأعداد الزوجية'],correct:1,explanation:'نحدد المضاعفات المشتركة ثم نختار أصغر مضاعف موجب مشترك.'}
+  ]},
+  {id:'g5-math-unit1-check',student:'salma',subject:'الرياضيات',title:'اختبار الوحدة الأولى',minutes:15,kind:'assessment',summary:'فحص قصير يجمع مهارات العدد الأولي والتحليل والعامل المشترك الأكبر والمضاعف المشترك الأصغر.',learningPoints:['خذي وقتك واقرئي السؤال كاملًا.','استخدمي العوامل عندما يسأل السؤال عن ع.م.أ.','استخدمي المضاعفات عندما يسأل السؤال عن م.م.أ.','إذا احتجتِ، ارجعي إلى الدرس الذي ظهرت فيه المشكلة بعد الاختبار.'],example:'هذا الاختبار لا يضيف مفهومًا جديدًا؛ هدفه أن نعرف ما أتقنتِه وما يحتاج مراجعة.',questions:[
+    {id:'q1',text:'أي عدد من الآتي أولي؟',options:['21','23','25','27'],correct:1,explanation:'23 لا يقبل القسمة إلا على 1 و23.'},
+    {id:'q2',text:'أي تحليل صحيح للعدد 24 إلى عوامل أولية؟',options:['2 × 12','3 × 8','2 × 2 × 2 × 3','4 × 6'],correct:2,explanation:'2 × 2 × 2 × 3 جميعها عوامل أولية وحاصل ضربها 24.'},
+    {id:'q3',text:'ما ع.م.أ للعددين 12 و18؟',options:['2','3','6','12'],correct:2,explanation:'أكبر عامل مشترك بين 12 و18 هو 6.'},
+    {id:'q4',text:'ما م.م.أ للعددين 4 و10؟',options:['10','20','40','2'],correct:1,explanation:'20 هو أصغر مضاعف موجب مشترك بين 4 و10.'},
+    {id:'q5',text:'لماذا العدد 15 ليس أوليًا؟',options:['لأنه فردي','لأن له أكثر من عاملين','لأنه أصغر من 20','لأنه ينتهي بالرقم 5'],correct:1,explanation:'عوامل 15 هي 1 و3 و5 و15، لذلك له أكثر من عاملين.'},
+    {id:'q6',text:'ما ع.م.أ للعددين 20 و30؟',options:['5','10','15','20'],correct:1,explanation:'10 هو أكبر عامل يقسم 20 و30 دون باقٍ.'},
+    {id:'q7',text:'ما م.م.أ للعددين 6 و8؟',options:['12','18','24','48'],correct:2,explanation:'24 هو أول مضاعف مشترك بين 6 و8.'},
+    {id:'q8',text:'أي عبارة صحيحة؟',options:['كل عدد فردي أولي','العدد 1 أولي','كل عدد أولي أكبر من 1','كل عدد زوجي أولي'],correct:2,explanation:'العدد الأولي يجب أن يكون أكبر من 1 وله عاملان مختلفان فقط.'}
   ]},
   {id:'g7-math-integers',student:'sama',subject:'الرياضيات',title:'الأعداد الصحيحة',minutes:18,summary:'فهم الأعداد الموجبة والسالبة وترتيبها على خط الأعداد.',learningPoints:['الأعداد الصحيحة تشمل السالبة والصفر والموجبة.','على خط الأعداد تزداد القيمة كلما اتجهنا يمينًا.','العدد السالب الأبعد يسارًا يكون أصغر.'],example:'-8 أصغر من -2 لأن -8 يقع إلى يسار -2 على خط الأعداد.',questions:[
     {id:'q1',text:'أي عدد أصغر؟',options:['-2','-8'],correct:1,explanation:'-8 يقع إلى يسار -2 على خط الأعداد، لذلك هو الأصغر.'},

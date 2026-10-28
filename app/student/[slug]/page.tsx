@@ -29,7 +29,7 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
         (acc[unit]??=[]).push(lesson);
         return acc;
       },{});
-      const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'📚';
+      const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':subject==='English'?'🔤':'📚';
       return <section className="subjectBlock" key={subject}>
         <div className="subjectHeader"><div><span className="subjectIcon">{icon}</span><h2>{subject} — الفصل الأول</h2></div><span className="tag">{subjectLessons.filter(x=>x.kind!=='assessment').length} درسًا</span></div>
         <div style={{display:'grid',gap:22}}>{Object.entries(units).map(([unit,unitLessons])=><section key={`${subject}-${unit}`}>

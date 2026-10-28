@@ -1,7 +1,8 @@
 import type {DeepSubskill} from './deepDiagnostics';
 
 export type AdaptiveStatus='mastered'|'application_gap'|'fragile_foundation'|'fluency_gap'|'foundation_gap'|'needs_verification';
-export type AdaptiveEvidence={questionId:string;correct:boolean;mode:'entry'|'verify'|'supported';responseMs:number};
+export type AdaptiveEvidence={questionId:string;correct:boolean;mode:'entry'|'verify'|'supported';responseMs:number;selectedIndex:number};
+export type MissedFact={questionId:string;text:string;selected:string;correct:string};
 export type AdaptiveResult={
   subskillId:string;
   score:number;
@@ -11,6 +12,7 @@ export type AdaptiveResult={
   nextAction:string;
   confidence:'high'|'medium'|'low';
   evidence:AdaptiveEvidence[];
+  missedFacts:MissedFact[];
 };
 
 const fluencySensitiveIds=new Set([
@@ -46,6 +48,10 @@ export function evaluateAdaptiveSubskill(sub:DeepSubskill,evidence:AdaptiveEvide
     else {status='foundation_gap';score=35;confidence='medium'}
   }
 
+  const missedFacts:MissedFact[]=evidence.filter(x=>!x.correct).map(ev=>{
+    const q=sub.questions.find(x=>x.id===ev.questionId);
+    return {questionId:ev.questionId,text:q?.text||ev.questionId,selected:q?.options?.[ev.selectedIndex]??'غير معروف',correct:q?.options?.[q.correct]??'غير معروف'};
+  });
   const labels:Record<AdaptiveStatus,string>={
     mastered:'متقنة',
     application_gap:'الأساس موجود لكن التطبيق غير ثابت',
@@ -70,7 +76,7 @@ export function evaluateAdaptiveSubskill(sub:DeepSubskill,evidence:AdaptiveEvide
     foundation_gap:`ابدئي بالشرح المصغر، ثم ${sub.treatmentSteps[0]||'تدريب أساسي قصير'}، ثم أعيدي سؤال تحقق.`,
     needs_verification:'أجيبي عن سؤال تحقق آخر قبل تحديد الخطة.'
   };
-  return {subskillId:sub.id,score,status,label:labels[status],cause:causes[status],nextAction:next[status],confidence,evidence};
+  return {subskillId:sub.id,score,status,label:labels[status],cause:causes[status],nextAction:next[status],confidence,evidence,missedFacts};
 }
 
 export function shouldStartWithVerification(priorScore:number|undefined,questionCount:number){

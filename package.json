@@ -2,7 +2,15 @@
   "name": "salma-sama-learning",
   "version": "1.0.0",
   "private": true,
-  "scripts": {"dev":"next dev","build":"next build","start":"next start"},
+  "scripts": {
+    "dev":"next dev",
+    "build":"next build",
+    "start":"next start",
+    "kb:discover":"node scripts/curriculum-kb.mjs discover",
+    "kb:download":"node scripts/curriculum-kb.mjs download",
+    "kb:upload":"node scripts/curriculum-kb.mjs upload",
+    "kb:all":"node scripts/curriculum-kb.mjs all"
+  },
   "dependencies": {"next":"16.4.3","openai":"^6.0.0","react":"19.3.1","react-dom":"19.3.1"},
   "devDependencies": {"@types/node":"^22.0.0","@types/react":"^19.0.0","typescript":"^5.7.0"}
 }

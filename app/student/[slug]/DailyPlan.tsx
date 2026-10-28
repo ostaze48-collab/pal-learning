@@ -11,6 +11,7 @@ type SavedPlan={skillId:string;average:number;weak:Array<{id:string;title:string
 export default function DailyPlan({lessons}:{lessons:Lesson[]}){
  const [tasks,setTasks]=useState<Task[]>([]);
  const [ready,setReady]=useState(false);
+ const [recoveryFirst,setRecoveryFirst]=useState(false);
 
  useEffect(()=>{
    const now=Date.now();
@@ -34,10 +35,11 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
      const regular=incomplete.find(l=>l.subject===subject&&l.kind!=='assessment');
      const assessment=incomplete.find(l=>l.subject===subject&&l.kind==='assessment');
      const picked=regular??assessment;
-     if(picked)newTasks.push({id:picked.id,href:`/lesson/${picked.id}`,title:picked.title,subject:picked.subject,minutes:picked.kind==='assessment'?Math.min(picked.minutes,15):picked.minutes,type:picked.kind==='assessment'?'assessment':'new'});
+     if(picked)newTasks.push({id:picked.id,href:`/lesson/${picked.id}`,title:picked.title,subject:picked.subject,minutes:picked.kind==='assessment'?Math.min(picked.minutes,15):Math.min(picked.minutes,18),type:picked.kind==='assessment'?'assessment':'new'});
    });
 
    let recoveryTask:Task|undefined;
+   let severeGap=false;
    if(slug){
      const exactCandidates:Array<{skillId:string;subject:string;weak:{id:string;title:string;gradeAnchor:string;score:number}}> = [];
      const retentionCandidates:Array<{skillId:string;subject:string;subId:string;title:string;due:number}> = [];
@@ -64,19 +66,26 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
      exactCandidates.sort((a,b)=>a.weak.score-b.weak.score);
      retentionCandidates.sort((a,b)=>a.due-b.due);
      if(exactCandidates.length){
-       const exact=exactCandidates[0];
+       const exact=exactCandidates[0];severeGap=exact.weak.score<50;
        recoveryTask={id:`${exact.skillId}:${exact.weak.id}`,href:`/student/${slug}/recovery/${exact.skillId}?focus=${encodeURIComponent(exact.weak.id)}`,title:`${exact.weak.title} · ${exact.weak.gradeAnchor}`,subject:exact.subject,minutes:10,type:'recovery'};
      }else if(retentionCandidates.length){
        const due=retentionCandidates[0];
        recoveryTask={id:`retention:${due.skillId}:${due.subId}`,href:`/student/${slug}/recovery/${due.skillId}?focus=${encodeURIComponent(due.subId)}&review=1`,title:`تثبيت: ${due.title}`,subject:due.subject,minutes:5,type:'recovery'};
      }else{
        const scored=recoverySkills.map(skill=>({skill,score:Number(localStorage.getItem(`recovery:${slug}:${skill.id}`))})).filter(x=>Number.isFinite(x.score)&&localStorage.getItem(`recovery:${slug}:${x.skill.id}`)!==null&&x.score<80).sort((a,b)=>a.score-b.score);
-       if(scored.length){const {skill}=scored[0];recoveryTask={id:skill.id,href:`/student/${slug}/recovery/${skill.id}/deep`,title:`تشخيص أدق: ${skill.title}`,subject:skill.subject,minutes:10,type:'recovery'}}
+       if(scored.length){const {skill,score}=scored[0];severeGap=score<50;recoveryTask={id:skill.id,href:`/student/${slug}/recovery/${skill.id}/deep`,title:`تشخيص أدق: ${skill.title}`,subject:skill.subject,minutes:10,type:'recovery'}}
      }
    }
 
-   const currentGradeTasks=[...reviews.slice(0,1),...newTasks].slice(0,3);
-   const merged=recoveryTask?[...currentGradeTasks,recoveryTask]:currentGradeTasks;
+   const candidates=[...reviews.slice(0,1),...newTasks];
+   const currentGradeTasks:Task[]=[];let currentMinutes=0;
+   for(const task of candidates){
+     if(currentGradeTasks.length>=3)break;
+     if(currentGradeTasks.length>=2&&currentMinutes+task.minutes>45)continue;
+     currentGradeTasks.push(task);currentMinutes+=task.minutes;
+   }
+   const merged=recoveryTask?(severeGap?[recoveryTask,...currentGradeTasks]:[...currentGradeTasks,recoveryTask]):currentGradeTasks;
+   setRecoveryFirst(Boolean(recoveryTask&&severeGap));
    setTasks(merged.slice(0,4));
    setReady(true);
  },[lessons]);
@@ -85,5 +94,6 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
  if(tasks.length===0)return <section className="dailyPlan"><div><span className="tag">خطة اليوم</span><h2>لا توجد مهام مستحقة 🎉</h2><p className="muted">يمكنك اختيار أي درس للمراجعة أو التقدم في المحتوى.</p></div></section>;
 
  const icon=(subject:string)=>subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
- return <section className="dailyPlan"><div className="dailyPlanHead"><div><span className="tag">خطة اليوم</span><h2>ماذا سنتعلم اليوم؟</h2><p className="muted" style={{margin:'6px 0 0'}}>المسار الرئيس للصف الحالي، ومعه جلسة استدراك أو تثبيت واحدة فقط عند الحاجة.</p></div><strong>{tasks.reduce((s,t)=>s+t.minutes,0)} دقيقة تقريبًا</strong></div><div className="dailyTasks">{tasks.map(task=><div className={`dailyTask ${task.type==='recovery'?'recoveryTask':''}`} key={`${task.type}-${task.id}`}><div className="dailyTaskIcon">{task.type==='review'?'🔄':task.type==='assessment'?'📝':task.type==='recovery'?'🧩':icon(task.subject)}</div><div style={{flex:1}}><div className="muted" style={{fontSize:12}}>{task.type==='review'?'مراجعة مستحقة':task.type==='assessment'?'اختبار وحدة':task.type==='recovery'?(task.title.startsWith('تثبيت:')?'تحقق من ثبات المهارة':'استدراك دقيق'):task.subject} · {task.minutes} دقائق</div><strong>{task.title}</strong></div><Link className="btn" href={task.href} onClick={()=>{if(task.type==='review')localStorage.setItem(`lesson:${task.id}:reviewMode`,'1')}}>{task.type==='review'?'راجعي':task.type==='recovery'?(task.title.startsWith('تثبيت:')?'تحققي':'ثبتي هذه النقطة'):'ابدئي'}</Link></div>)}</div></section>;
+ const currentMinutes=tasks.filter(t=>t.type!=='recovery').reduce((s,t)=>s+t.minutes,0);const recoveryMinutes=tasks.filter(t=>t.type==='recovery').reduce((s,t)=>s+t.minutes,0);
+ return <section className="dailyPlan"><div className="dailyPlanHead"><div><span className="tag">خطة اليوم</span><h2>ماذا سنتعلم اليوم؟</h2><p className="muted" style={{margin:'6px 0 0'}}>{recoveryFirst?'هناك فجوة تأسيسية قوية؛ نثبتها أولًا في جلسة قصيرة ثم نعود مباشرة إلى الصف الحالي.':'المسار الرئيس للصف الحالي، ومعه جلسة استدراك أو تثبيت واحدة فقط عند الحاجة.'}</p></div><div style={{textAlign:'left'}}><strong>{tasks.reduce((s,t)=>s+t.minutes,0)} دقيقة تقريبًا</strong><div className="muted" style={{fontSize:12,marginTop:4}}>الصف الحالي {currentMinutes}د · الاستدراك {recoveryMinutes}د</div></div></div><div className="dailyTasks">{tasks.map(task=><div className={`dailyTask ${task.type==='recovery'?'recoveryTask':''}`} key={`${task.type}-${task.id}`}><div className="dailyTaskIcon">{task.type==='review'?'🔄':task.type==='assessment'?'📝':task.type==='recovery'?'🧩':icon(task.subject)}</div><div style={{flex:1}}><div className="muted" style={{fontSize:12}}>{task.type==='review'?'مراجعة مستحقة':task.type==='assessment'?'اختبار وحدة':task.type==='recovery'?(task.title.startsWith('تثبيت:')?'تحقق من ثبات المهارة':'استدراك دقيق'):task.subject} · {task.minutes} دقائق</div><strong>{task.title}</strong></div><Link className="btn" href={task.href} onClick={()=>{if(task.type==='review')localStorage.setItem(`lesson:${task.id}:reviewMode`,'1')}}>{task.type==='review'?'راجعي':task.type==='recovery'?(task.title.startsWith('تثبيت:')?'تحققي':'ثبتي هذه النقطة'):'ابدئي'}</Link></div>)}</div></section>;
 }

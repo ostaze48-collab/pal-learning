@@ -72,6 +72,7 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
      }else{
        const scored=recoverySkills.map(skill=>({skill,score:Number(localStorage.getItem(`recovery:${slug}:${skill.id}`))})).filter(x=>Number.isFinite(x.score)&&localStorage.getItem(`recovery:${slug}:${x.skill.id}`)!==null&&x.score<80).sort((a,b)=>a.score-b.score);
        if(scored.length){const {skill}=scored[0];recoveryTask={id:skill.id,href:`/student/${slug}/recovery/${skill.id}/deep`,title:`تشخيص أدق: ${skill.title}`,subject:skill.subject,minutes:10,type:'recovery'}}
+     }
    }
 
    const currentGradeTasks=[...reviews.slice(0,1),...newTasks].slice(0,3);

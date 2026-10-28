@@ -3,15 +3,8 @@ import {useEffect,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
 
 type Phase='diagnostic'|'learn'|'quiz'|'remediate'|'retest';
-type Report={
- diagnosticCorrect:boolean;
- firstPassScore:number;
- finalScore:number;
- mastery:number;
- wrongQuestionIds:string[];
- status:'mastered'|'review_needed';
- completedAt:string;
-};
+type Report={diagnosticCorrect:boolean;firstPassScore:number;finalScore:number;mastery:number;wrongQuestionIds:string[];status:'mastered'|'review_needed';completedAt:string;reviewDue?:string};
+type ReviewMeta={level:number;dueAt:string};
 
 export default function LessonPlayer({lesson}:{lesson:Lesson}){
  const [phase,setPhase]=useState<Phase>('diagnostic');
@@ -31,6 +24,11 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
  useEffect(()=>{
    const raw=localStorage.getItem(`lesson:${lesson.id}:report`);
    if(raw){try{setReport(JSON.parse(raw))}catch{}}
+   const reviewMode=localStorage.getItem(`lesson:${lesson.id}:reviewMode`)==='1';
+   if(reviewMode){
+     localStorage.removeItem(`lesson:${lesson.id}:reviewMode`);
+     setDone(false);setPhase('quiz');return;
+   }
    if(localStorage.getItem(`lesson:${lesson.id}`)==='done')setDone(true);
  },[lesson.id]);
 
@@ -43,14 +41,23 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
 
  function complete(finalCorrect:number,wrongIds:string[]){
    const mastery=lesson.questions.length?Math.round(finalCorrect/lesson.questions.length*100):100;
-   const data:Report={diagnosticCorrect,firstPassScore:score,finalScore:finalCorrect,mastery,wrongQuestionIds:wrongIds,status:mastery>=80?'mastered':'review_needed',completedAt:new Date().toISOString()};
+   const status:Report['status']=mastery>=80?'mastered':'review_needed';
+   let oldReview:ReviewMeta|undefined;
+   const rawReview=localStorage.getItem(`lesson:${lesson.id}:review`);
+   if(rawReview){try{oldReview=JSON.parse(rawReview)}catch{}}
+   const level=Math.min((oldReview?.level??0)+1,5);
+   const intervals=[1,3,7,14,30];
+   const days=status==='review_needed'?1:intervals[level-1];
+   const due=new Date(Date.now()+days*24*60*60*1000).toISOString();
+   const data:Report={diagnosticCorrect,firstPassScore:score,finalScore:finalCorrect,mastery,wrongQuestionIds:wrongIds,status,completedAt:new Date().toISOString(),reviewDue:due};
    localStorage.setItem(`lesson:${lesson.id}`,'done');
    localStorage.setItem(`lesson:${lesson.id}:score`,String(finalCorrect));
    localStorage.setItem(`lesson:${lesson.id}:report`,JSON.stringify(data));
+   localStorage.setItem(`lesson:${lesson.id}:review`,JSON.stringify({level,dueAt:due}));
    setReport(data);setDone(true);
  }
 
- if(done)return <div className="card result"><h2>{report?.status==='review_needed'?'📌 أُنجز الدرس ويحتاج مراجعة':'🌟 أحسنتِ!'}</h2><p>{report?`مستوى الإتقان: ${report.mastery}%`:'أكملتِ هذا الدرس على هذا الجهاز.'}</p>{report&&<div className="masteryGrid"><div><strong>{report.diagnosticCorrect?'✓':'○'}</strong><span>التشخيص</span></div><div><strong>{report.firstPassScore}/{lesson.questions.length}</strong><span>المحاولة الأولى</span></div><div><strong>{report.mastery}%</strong><span>الإتقان النهائي</span></div></div>}<p className="muted">{report?.status==='review_needed'?'سيظهر هذا الدرس في لوحة الأب كدرس يحتاج مراجعة قصيرة.':'يمكنك الانتقال للدرس التالي أو إعادة التدريب لاحقًا.'}</p><button className="btn secondary" onClick={reset}>إعادة الدرس</button></div>;
+ if(done)return <div className="card result"><h2>{report?.status==='review_needed'?'📌 أُنجز الدرس ويحتاج مراجعة':'🌟 أحسنتِ!'}</h2><p>{report?`مستوى الإتقان: ${report.mastery}%`:'أكملتِ هذا الدرس على هذا الجهاز.'}</p>{report&&<div className="masteryGrid"><div><strong>{report.diagnosticCorrect?'✓':'○'}</strong><span>التشخيص</span></div><div><strong>{report.firstPassScore}/{lesson.questions.length}</strong><span>المحاولة الأولى</span></div><div><strong>{report.mastery}%</strong><span>الإتقان النهائي</span></div></div>}<p className="muted">{report?.reviewDue?`المراجعة القادمة: ${new Date(report.reviewDue).toLocaleDateString('ar')}`:report?.status==='review_needed'?'سيظهر هذا الدرس في لوحة الأب كدرس يحتاج مراجعة قصيرة.':'يمكنك الانتقال للدرس التالي أو إعادة التدريب لاحقًا.'}</p><button className="btn secondary" onClick={reset}>إعادة الدرس</button></div>;
 
  const diagnostic=lesson.questions[0];
  if(phase==='diagnostic')return <div className="card"><span className="tag">فحص سريع · لا يدخل في الدرجة</span><h2 style={{marginTop:12}}>قبل أن نبدأ</h2><p className="muted">سؤال واحد يساعدنا على معرفة نقطة البداية المناسبة.</p><h3>{diagnostic.text}</h3><div className="choice">{diagnostic.options.map((o,i)=>{const cls=diagnosticSelected===null?'option':i===diagnostic.correct?'option ok':i===diagnosticSelected?'option bad':'option';return <button key={o} className={cls} onClick={()=>{if(diagnosticSelected!==null)return;setDiagnosticSelected(i);setDiagnosticCorrect(i===diagnostic.correct)}}>{o}</button>})}</div>{diagnosticSelected!==null&&<div style={{marginTop:16}}><div className="result"><strong>{diagnosticSelected===diagnostic.correct?'ممتاز، لديكِ أساس جيد ✅':'جيد، سنبني الفكرة خطوة خطوة'}</strong><p>{diagnostic.explanation}</p></div><button className="btn" style={{marginTop:12}} onClick={()=>setPhase('learn')}>ابدئي التعلم</button></div>}</div>;
@@ -63,29 +70,12 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
    const idx=wrong[retestStep];
    const q=lesson.questions[idx];
    function answerRetest(i:number){if(selected!==null)return;setSelected(i);if(i===q.correct)setRetestCorrect(v=>v+1)}
-   function nextRetest(){
-     const currentCorrect=selected===q.correct;
-     const gained=retestCorrect+(currentCorrect?1:0);
-     const missedNow=currentCorrect?retestMissed:[...retestMissed,idx];
-     if(retestStep===wrong.length-1){
-       const finalCorrect=score+gained;
-       complete(finalCorrect,missedNow.map(i=>lesson.questions[i].id));return;
-     }
-     setRetestMissed(missedNow);setRetestStep(v=>v+1);setSelected(null);
-   }
+   function nextRetest(){const currentCorrect=selected===q.correct;const gained=retestCorrect+(currentCorrect?1:0);const missedNow=currentCorrect?retestMissed:[...retestMissed,idx];if(retestStep===wrong.length-1){complete(score+gained,missedNow.map(i=>lesson.questions[i].id));return}setRetestMissed(missedNow);setRetestStep(v=>v+1);setSelected(null)}
    return <div className="card"><span className="tag">إعادة اختبار · {retestStep+1} من {wrong.length}</span><h2>{q.text}</h2><div className="choice">{q.options.map((o,i)=>{const cls=selected===null?'option':i===q.correct?'option ok':i===selected?'option bad':'option';return <button key={o} className={cls} onClick={()=>answerRetest(i)}>{o}</button>})}</div>{selected!==null&&<div style={{marginTop:16}}><div className="result"><strong>{selected===q.correct?'تم إتقان هذه النقطة ✅':'ما زالت تحتاج مراجعة صغيرة'}</strong><p>{q.explanation}</p></div><button className="btn" style={{marginTop:12}} onClick={nextRetest}>{retestStep===wrong.length-1?'عرض النتيجة':'السؤال التالي'}</button></div>}</div>;
  }
 
  const q=lesson.questions[step];
  function answer(i:number){if(selected!==null)return;setSelected(i);if(i===q.correct)setScore(v=>v+1);else setWrong(v=>[...v,step])}
- function next(){
-   const finalFirstPass=score+(selected===q.correct?1:0);
-   if(step===lesson.questions.length-1){
-     const percent=Math.round(finalFirstPass/lesson.questions.length*100);
-     if(percent>=80){complete(finalFirstPass,[])}else{setScore(finalFirstPass);setPhase('remediate')}
-     return;
-   }
-   setStep(v=>v+1);setSelected(null);
- }
+ function next(){const finalFirstPass=score+(selected===q.correct?1:0);if(step===lesson.questions.length-1){const percent=Math.round(finalFirstPass/lesson.questions.length*100);if(percent>=80){complete(finalFirstPass,[])}else{setScore(finalFirstPass);setPhase('remediate')}return}setStep(v=>v+1);setSelected(null)}
  return <div className="card"><div className="muted">تدريب · سؤال {step+1} من {lesson.questions.length}</div><div className="progress" style={{margin:'10px 0 20px'}}><span style={{width:`${((step+1)/lesson.questions.length)*100}%`}}/></div><h2>{q.text}</h2><div className="choice">{q.options.map((o,i)=>{const cls=selected===null?'option':i===q.correct?'option ok':i===selected?'option bad':'option';return <button key={o} className={cls} onClick={()=>answer(i)}>{o}</button>})}</div>{selected!==null&&<div style={{marginTop:16}}><div className="result"><strong>{selected===q.correct?'إجابة صحيحة ✅':'نراجعها معًا'}</strong><p>{q.explanation}</p></div><button className="btn" style={{marginTop:12}} onClick={next}>{step===lesson.questions.length-1?'تحليل النتيجة':'السؤال التالي'}</button></div>}<div className="muted" style={{marginTop:16,fontSize:12}}>الإجابات الصحيحة حتى الآن: {score}</div></div>;
 }

@@ -26,22 +26,30 @@ export function getFoundationGoals(student:string){
 
 export function getNextOpenFoundationGoal(student:string){
   if(typeof window==='undefined')return null;
+  const now=Date.now();
   for(const goal of getFoundationGoals(student)){
     for(const subskillId of goal.subskillIds){
       const scoreRaw=localStorage.getItem(`recoveryDeep:${student}:${goal.skillId}:${subskillId}`);
       const score=scoreRaw===null?null:Number(scoreRaw);
       const reviewRaw=localStorage.getItem(`recoveryReview:${student}:${goal.skillId}:${subskillId}`);
-      let retentionStable=false;
-      if(reviewRaw){
-        try{
-          const review=JSON.parse(reviewRaw);
-          retentionStable=Number(review.stage)>=2&&Number(review.score)>=80;
-        }catch{}
+      let review:{stage?:number;score?:number;dueAt?:string;status?:string}|null=null;
+      if(reviewRaw){try{review=JSON.parse(reviewRaw)}catch{}}
+
+      // Never measured, invalid, or still below mastery: keep it on the private goal list now.
+      if(score===null||!Number.isFinite(score)||score<80)return {...goal,subskillId,score};
+
+      // Mastered once: let spaced review scheduling decide when it comes back.
+      // While the retention check is in the future, move on to another open subskill.
+      if(review){
+        const stage=Number(review.stage||0);const reviewScore=Number(review.score||score);const due=review.dueAt?new Date(review.dueAt).getTime():NaN;
+        if(stage>=2&&reviewScore>=80)continue;
+        if(Number.isFinite(due)&&due>now)continue;
+        // A due retention check is handled by DailyPlan's retention queue, so do not duplicate it here.
+        if(review.status==='retention_check'&&Number.isFinite(due)&&due<=now)continue;
       }
-      // Unmeasured or not yet stable stays on the teacher's private verification list.
-      if(score===null||!Number.isFinite(score)||score<80||!retentionStable){
-        return {...goal,subskillId,score};
-      }
+
+      // Mastery exists but review metadata is missing/incomplete: verify once so the goal is not silently lost.
+      return {...goal,subskillId,score};
     }
   }
   return null;

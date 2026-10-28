@@ -53,6 +53,26 @@ export function getStudent(slug:string){return students.find(s=>s.slug===slug)}
 export function getLesson(id:string){return lessons.find(l=>l.id===id)}
 export function getStudentLessons(slug:string){return lessons.filter(l=>l.student===slug)}
 
+export function getOfficialSourceUrl(lesson:Lesson){
+  const grade=lesson.student==='salma'?5:7;
+  if(grade===5){
+    if(lesson.subject==='الرياضيات')return 'https://elearn.edu.ps/c5/ma5-p1/';
+    if(lesson.subject==='اللغة العربية')return 'https://elearn.edu.ps/c5/ar5-p1/';
+    if(lesson.subject==='English')return 'https://elearn.edu.ps/c5/eng5-p1/';
+    if(lesson.subject==='العلوم والحياة')return 'https://elearn.edu.ps/c5-old/sc5-p1/';
+  }
+  if(lesson.subject==='الرياضيات')return 'https://elearn.edu.ps/c7/ma7-p1/';
+  if(lesson.subject==='اللغة العربية')return 'https://elearn.edu.ps/c7/';
+  if(lesson.subject==='English')return 'https://elearn.edu.ps/c7/en7-p1/';
+  if(lesson.subject==='العلوم والحياة')return 'https://elearn.edu.ps/c7/sc7-p1/';
+  return 'https://elearn.edu.ps/';
+}
+
+export function getLessonSourceLabel(lesson:Lesson){
+  if(lesson.kind==='assessment')return 'اختبار داخلي أنشأته المنصة لقياس الإتقان؛ ليس اختبارًا رسميًا من الوزارة.';
+  return 'عنوان ومسار الدرس مرتبطان بالمحتوى المنشور في البوابة التعليمية الفلسطينية. الشرح والأمثلة والأسئلة هنا محتوى داعم أنشأته المنصة للتعلم والتدريب، وليست نصًا رسميًا من الوزارة.';
+}
+
 export function getLessonUnit(lesson:Lesson){
   const id=lesson.id;
 
@@ -73,7 +93,7 @@ export function getLessonUnit(lesson:Lesson){
 
   if(lesson.subject==='اللغة العربية'){
     if(lesson.student==='salma'){
-      if(['g5-ar-reading-blessings','g5-ar-poem-call-you','g5-ar-reading-horse-regret','g5-ar-poem-nurse','g5-ar-reading-memory','g5-ar-poem-refugee-cry'].includes(id)) return 'الوحدة 1 · قراءة ونصوص';
+      if(['g5-ar-reading-blessings','g5-ar-poem-call-you','g5-ar-reading-village','g5-ar-poem-village','g5-ar-reading-horse-regret','g5-ar-poem-nurse','g5-ar-reading-memory','g5-ar-poem-refugee-cry'].includes(id)) return 'الوحدة 1 · قراءة ونصوص';
       if(['g5-ar-noun-types','g5-ar-pronouns','g5-ar-verb-tenses'].includes(id)) return 'الوحدة 2 · القواعد اللغوية';
       if(['g5-ar-solar-lunar-l','g5-ar-ta-spelling','g5-ar-ta-marbuta-haa'].includes(id)) return 'الوحدة 3 · الإملاء';
       return 'مراجعة العربية';

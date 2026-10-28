@@ -7,6 +7,7 @@ type Mode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'ch
 type Card={title:string;body:string;kind:'explain'|'example'|'tip'|'check'};
 type Content={title:string;intro:string;cards:Card[];checkQuestion?:{text:string;hint:string};teacherNote?:string};
 type Weakness={title:string;score:number;gradeAnchor?:string;cause?:string;missedFacts?:Array<{text:string;selected:string;correct:string}>};
+type CheckResult={outcome:'understood'|'partial'|'misconception';feedback:string;recommendedMode:Mode};
 
 const modes:Array<{id:Mode;label:string;icon:string}>=[
   {id:'simplify',label:'اشرح أبسط',icon:'🪶'},
@@ -28,6 +29,9 @@ export default function AITeacherLesson({lesson}:{lesson:Lesson}){
   const [error,setError]=useState('');
   const [hintOpen,setHintOpen]=useState(false);
   const [speaking,setSpeaking]=useState(false);
+  const [checkAnswer,setCheckAnswer]=useState('');
+  const [checking,setChecking]=useState(false);
+  const [checkResult,setCheckResult]=useState<CheckResult|null>(null);
 
   const weaknesses=useMemo<Weakness[]>(()=>{
     if(typeof window==='undefined')return [];
@@ -41,7 +45,7 @@ export default function AITeacherLesson({lesson}:{lesson:Lesson}){
   },[lesson.id,lesson.student,lesson.subject]);
 
   async function load(nextMode:Mode,force=false){
-    setMode(nextMode);setLoading(true);setError('');setHintOpen(false);
+    setMode(nextMode);setLoading(true);setError('');setHintOpen(false);setCheckAnswer('');setCheckResult(null);
     const fingerprint=weaknesses.map(w=>`${w.title}:${w.score}`).join('|').slice(0,240);
     const key=`aiLesson:${lesson.id}:${nextMode}:${fingerprint}`;
     if(!force){const cached=localStorage.getItem(key);if(cached){try{const parsed=JSON.parse(cached);if(parsed?.content){setContent(parsed.content);setLoading(false);return}}catch{}}}
@@ -49,11 +53,17 @@ export default function AITeacherLesson({lesson}:{lesson:Lesson}){
       const res=await fetch('/api/ai-teacher/lesson',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:lesson.id,mode:nextMode,weaknesses,previousExplanation:nextMode==='overview'?'':content.intro+' '+content.cards.map(c=>c.body).join(' ')})});
       const data=await res.json();
       if(!res.ok||!data?.content)throw new Error('bad_response');
-      setContent(data.content);localStorage.setItem(key,JSON.stringify({content:data.content,at:new Date().toISOString()}));
+      setContent(data.content);
+      localStorage.setItem(key,JSON.stringify({content:data.content,at:new Date().toISOString()}));
+      localStorage.setItem(`aiTeacherTrace:${lesson.id}`,JSON.stringify({at:new Date().toISOString(),mode:nextMode,grounded:Boolean(data.grounded),webUsed:Boolean(data.webUsed),engine:data.mode||'unknown'}));
     }catch{setError('تعذر تحديث الشرح الآن، لذلك سأستخدم الشرح المحفوظ في المنصة.');setContent(localContent(lesson))}finally{setLoading(false)}
   }
 
-  useEffect(()=>{load('overview')},[lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    const weakest=weaknesses[0]?.score;
+    const firstMode:Mode=typeof weakest==='number'&&weakest<50?'simplify':typeof weakest==='number'&&weakest<80?'step_by_step':'overview';
+    load(firstMode);
+  },[lesson.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(()=>()=>{if(typeof window!=='undefined'&&'speechSynthesis' in window)window.speechSynthesis.cancel()},[]);
 
   function speak(){
@@ -63,14 +73,26 @@ export default function AITeacherLesson({lesson}:{lesson:Lesson}){
     const u=new SpeechSynthesisUtterance(text);u.lang=lesson.subject==='English'?'en-US':'ar-SA';u.rate=.88;u.onend=()=>setSpeaking(false);u.onerror=()=>setSpeaking(false);setSpeaking(true);window.speechSynthesis.cancel();window.speechSynthesis.speak(u);
   }
 
+  async function submitCheck(){
+    if(!content.checkQuestion||!checkAnswer.trim()||checking)return;
+    setChecking(true);setCheckResult(null);
+    try{
+      const res=await fetch('/api/ai-teacher/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:lesson.id,question:content.checkQuestion.text,answer:checkAnswer})});
+      const data=await res.json();if(!res.ok)throw new Error('bad_check');
+      const result:CheckResult={outcome:data.outcome,feedback:data.feedback,recommendedMode:data.recommendedMode};setCheckResult(result);
+      localStorage.setItem(`aiUnderstanding:${lesson.id}`,JSON.stringify({...result,answer:checkAnswer,at:new Date().toISOString()}));
+      if(result.outcome!=='understood')setTimeout(()=>load(result.recommendedMode||'step_by_step',true),1600);
+    }catch{setCheckResult({outcome:'partial',feedback:'سنثبت الفكرة أكثر في التدريب التالي.',recommendedMode:'step_by_step'})}finally{setChecking(false)}
+  }
+
   const cardIcon=(kind:Card['kind'])=>kind==='example'?'🧩':kind==='tip'?'💡':kind==='check'?'🎯':'📖';
   return <section className="aiLessonTeacher">
     <div className="aiLessonHead"><div><span className="tag">🤖 المعلم الذكي</span><h2>{content.title}</h2><p>{loading?'أراجع الدرس ومستواك لأختار أفضل طريقة للشرح…':content.intro}</p></div><button className="btn secondary" onClick={speak}>{speaking?'⏹ إيقاف':'🔊 استمعي'}</button></div>
-    {weaknesses.length>0&&<div className="aiTeacherAware"><strong>سأبدأ من النقطة المناسبة لكِ</strong><span>لاحظت أن هناك مهارة سابقة تحتاج دعمًا، لذلك سأشرح هذا الدرس دون افتراض أنها متقنة بالكامل.</span></div>}
+    {weaknesses.length>0&&<div className="aiTeacherAware"><strong>سأبدأ من النقطة المناسبة لكِ</strong><span>لاحظت أن هناك مهارة سابقة تحتاج دعمًا، لذلك لن أفترض أنها متقنة وسأربطها بالدرس الحالي أثناء الشرح.</span></div>}
     <div className="aiTeachingModes">{modes.map(m=><button key={m.id} className={mode===m.id?'active':''} disabled={loading} onClick={()=>load(m.id,true)}><span>{m.icon}</span>{m.label}</button>)}</div>
     {error&&<div className="activityHint"><strong>ملاحظة</strong><p>{error}</p></div>}
     {loading?<div className="aiTeacherLoading"><span/><span/><span/><p>أبني الشرح المناسب…</p></div>:<div className="aiLessonCards">{content.cards.map((c,i)=><article className={`aiLessonCard ${c.kind}`} key={`${c.title}-${i}`}><div className="aiLessonCardIcon">{cardIcon(c.kind)}</div><div><h3>{c.title}</h3><p>{c.body}</p></div></article>)}</div>}
-    {!loading&&content.checkQuestion&&<div className="aiCheckCard"><span className="tag">تحقق سريع</span><h3>{content.checkQuestion.text}</h3><button className="btn secondary" onClick={()=>setHintOpen(v=>!v)}>{hintOpen?'إخفاء التلميح':'أريد تلميحًا'}</button>{hintOpen&&<p>{content.checkQuestion.hint}</p>}</div>}
-    {!loading&&<div className="aiTeacherActions"><button className="btn secondary" onClick={()=>load(mode,true)}>🔄 شرح جديد بنفس الطريقة</button><span className="muted">إذا لم تصل الفكرة، غيّري طريقة الشرح بدل إعادة نفس الكلام.</span></div>}
+    {!loading&&content.checkQuestion&&<div className="aiCheckCard"><span className="tag">تحقق من الفهم</span><h3>{content.checkQuestion.text}</h3><textarea className="aiCheckInput" rows={2} value={checkAnswer} onChange={e=>setCheckAnswer(e.target.value.slice(0,700))} placeholder="اكتبي إجابتك بكلماتك…"/><div className="aiCheckActions"><button className="btn" disabled={!checkAnswer.trim()||checking} onClick={submitCheck}>{checking?'أراجع إجابتك…':'تحقق من إجابتي'}</button><button className="btn secondary" onClick={()=>setHintOpen(v=>!v)}>{hintOpen?'إخفاء التلميح':'أريد تلميحًا'}</button></div>{hintOpen&&<p className="aiHint">{content.checkQuestion.hint}</p>}{checkResult&&<div className={`aiCheckFeedback ${checkResult.outcome}`}><strong>{checkResult.outcome==='understood'?'ممتاز، الفكرة وصلت ✅':checkResult.outcome==='partial'?'فهم جيد لكنه يحتاج تثبيتًا':'وجدت نقطة تحتاج شرحًا مختلفًا'}</strong><p>{checkResult.feedback}</p>{checkResult.outcome!=='understood'&&<small>سأغيّر طريقة الشرح تلقائيًا الآن…</small>}</div>}</div>}
+    {!loading&&<div className="aiTeacherActions"><button className="btn secondary" onClick={()=>load(mode,true)}>🔄 شرح جديد بنفس الطريقة</button><span className="muted">إذا لم تصل الفكرة، المعلم يستطيع تغيير الأسلوب بدل تكرار نفس الكلام.</span></div>}
   </section>;
 }

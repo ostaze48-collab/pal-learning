@@ -3,6 +3,7 @@ import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
 import LessonPlayer from './LessonPlayer';
 
 const subjectIcons:Record<string,string>={'الرياضيات':'➗','العلوم والحياة':'🔬','اللغة العربية':'📚','English':'🌍'};
+const subjectClasses:Record<string,string>={'الرياضيات':'subjectMath','العلوم والحياة':'subjectScience','اللغة العربية':'subjectArabic','English':'subjectEnglish'};
 
 export default async function LessonPage({params}:{params:Promise<{lessonId:string}>}){
  const {lessonId}=await params;
@@ -14,8 +15,9 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
  const previous=currentIndex>0?subjectLessons[currentIndex-1]:null;
  const next=currentIndex>=0&&currentIndex<subjectLessons.length-1?subjectLessons[currentIndex+1]:null;
  const isSalma=student.slug==='salma';
+ const subjectClass=subjectClasses[lesson.subject]??'subjectMath';
 
- return <main className={`lessonJourney ${isSalma?'themeSalma':'themeSama'}`}><div className="wrap lessonJourneyWrap">
+ return <main className={`lessonJourney ${isSalma?'themeSalma':'themeSama'} ${subjectClass}`}><div className="wrap lessonJourneyWrap">
   <header className="kidTopbar lessonTopbar"><Link className="backBubble" href={`/student/${student.slug}`}>→ دروسي</Link><div className="lessonTopTitle"><span>{subjectIcons[lesson.subject]??'📘'}</span><strong>{lesson.subject}</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
 
   <section className="lessonMissionHead">

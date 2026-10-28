@@ -11,28 +11,42 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
 
   const items=getStudentLessons(slug);
   const subjects=items.reduce<Record<string,typeof items>>((acc,lesson)=>{(acc[lesson.subject]??=[]).push(lesson);return acc;},{});
+  const subjectEntries=Object.entries(subjects);
 
   return <main className="shell"><div className="wrap">
     <div className="top"><Link href="/" className="btn secondary">← الرئيسية</Link><div className="brand">{student.name}</div></div>
-    <section className="card" style={{marginBottom:18}}><span className="tag">الصف {student.grade===5?'الخامس':'السابع'} · الفصل الأول</span><h1 style={{marginBottom:6}}>مرحبًا {student.name} {student.emoji}</h1><p className="muted">اختاري المادة، ثم تابعي الوحدات والدروس بالترتيب. تم تحسين هذا العرض للاستخدام من اللابتوب، مع بقاء الهاتف مدعومًا بالكامل.</p><StudentProgress lessonIds={items.map(i=>i.id)}/></section>
+    <section className="card" style={{marginBottom:18}}><span className="tag">الصف {student.grade===5?'الخامس':'السابع'} · الفصل الأول</span><h1 style={{marginBottom:6}}>مرحبًا {student.name} {student.emoji}</h1><p className="muted">ابدئي من خطة اليوم أو اختاري المادة والوحدة مباشرة. تم تحسين هذا العرض للاستخدام من اللابتوب، مع بقاء الهاتف مدعومًا.</p><StudentProgress lessonIds={items.map(i=>i.id)}/></section>
     <DailyPlan lessons={items}/>
 
-    <div className="subjectGrid">{Object.entries(subjects).map(([subject,subjectLessons])=>{
-      const units=subjectLessons.reduce<Record<string,typeof subjectLessons>>((acc,lesson)=>{const unit=getLessonUnit(lesson);(acc[unit]??=[]).push(lesson);return acc;},{});
-      const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
-      return <section className="subjectBlock" key={subject}>
-        <div className="subjectHeader"><div><span className="subjectIcon">{icon}</span><h2>{subject} — الفصل الأول</h2></div><span className="tag">{subjectLessons.filter(x=>x.kind!=='assessment').length} درسًا</span></div>
-        <div className="unitStack">{Object.entries(units).map(([unit,unitLessons])=><section key={`${subject}-${unit}`}>
-          <div className="unitTitle"><strong>{unit}</strong><span className="muted">{unitLessons.filter(x=>x.kind!=='assessment').length} دروس</span></div>
-          <div className="lessonList">{unitLessons.map((l,i)=>{
-            const lessonNumber=unitLessons.slice(0,i+1).filter(x=>x.kind!=='assessment').length;
-            return <div className={`lesson ${l.kind==='assessment'?'assessment':''}`} key={l.id}>
-              <div style={{flex:1}}><div className="lessonMeta"><div className="muted" style={{fontSize:12}}>{l.kind==='assessment'?'اختبار الوحدة':`الدرس ${lessonNumber}`} · {l.minutes} دقيقة</div><LessonStatus lessonId={l.id}/></div><h3 style={{margin:'4px 0'}}>{l.title}</h3><div className="muted">{l.summary}</div></div>
-              <Link className="btn" href={`/lesson/${l.id}`}>{l.kind==='assessment'?'ابدئي الاختبار':'ابدئي'}</Link>
-            </div>
-          })}</div>
-        </section>)}</div>
-      </section>
-    })}</div>
+    <div className="studentDesktopLayout">
+      <aside className="subjectNav card">
+        <div className="muted" style={{fontSize:12,fontWeight:900,marginBottom:10}}>المواد</div>
+        {subjectEntries.map(([subject,subjectLessons],index)=>{
+          const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
+          return <a className="subjectNavLink" href={`#subject-${index}`} key={subject}><span>{icon}</span><span style={{flex:1}}>{subject}</span><small>{subjectLessons.filter(x=>x.kind!=='assessment').length}</small></a>
+        })}
+        <div className="subjectNavHint">انتقلي بسرعة بين المواد من هذه القائمة أثناء الدراسة على اللابتوب.</div>
+      </aside>
+
+      <div className="learningMain">
+        {subjectEntries.map(([subject,subjectLessons],subjectIndex)=>{
+          const units=subjectLessons.reduce<Record<string,typeof subjectLessons>>((acc,lesson)=>{const unit=getLessonUnit(lesson);(acc[unit]??=[]).push(lesson);return acc;},{});
+          const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
+          return <section className="subjectBlock" id={`subject-${subjectIndex}`} key={subject}>
+            <div className="subjectHeader"><div><span className="subjectIcon">{icon}</span><h2>{subject} — الفصل الأول</h2></div><span className="tag">{subjectLessons.filter(x=>x.kind!=='assessment').length} درسًا</span></div>
+            <div className="unitStack">{Object.entries(units).map(([unit,unitLessons])=><section key={`${subject}-${unit}`}>
+              <div className="unitTitle"><strong>{unit}</strong><span className="muted">{unitLessons.filter(x=>x.kind!=='assessment').length} دروس</span></div>
+              <div className="lessonList">{unitLessons.map((l,i)=>{
+                const lessonNumber=unitLessons.slice(0,i+1).filter(x=>x.kind!=='assessment').length;
+                return <div className={`lesson ${l.kind==='assessment'?'assessment':''}`} key={l.id}>
+                  <div style={{flex:1}}><div className="lessonMeta"><div className="muted" style={{fontSize:12}}>{l.kind==='assessment'?'اختبار الوحدة':`الدرس ${lessonNumber}`} · {l.minutes} دقيقة</div><LessonStatus lessonId={l.id}/></div><h3 style={{margin:'4px 0'}}>{l.title}</h3><div className="muted">{l.summary}</div></div>
+                  <Link className="btn" href={`/lesson/${l.id}`}>{l.kind==='assessment'?'ابدئي الاختبار':'ابدئي'}</Link>
+                </div>
+              })}</div>
+            </section>)}</div>
+          </section>
+        })}
+      </div>
+    </div>
   </div></main>
 }

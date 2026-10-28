@@ -1,8 +1,9 @@
 import type {Lesson} from './data';
 import {buildObjectiveQuestionMap} from './objectiveCoverage';
+import {getExplicitEvidenceSpecs} from './evidenceSpecs';
 
 export type EvidenceKind='recognize'|'apply'|'explain'|'construct'|'compare'|'correct_error'|'transfer';
-export type EvidenceInteraction='choice'|'short_text';
+export type EvidenceInteraction='choice'|'short_text'|'match'|'order';
 
 export type EvidenceTask={
  id:string;
@@ -17,6 +18,9 @@ export type EvidenceTask={
  explanation?:string;
  quality:'direct'|'inferred';
  depth:'quick'|'deep';
+ pairs?:Array<{item:string;target:string}>;
+ targets?:string[];
+ orderItems?:string[];
 };
 
 const has=(text:string,re:RegExp)=>re.test(text.toLowerCase());
@@ -60,7 +64,33 @@ function deepPriority(kind:EvidenceKind){
  return 0;
 }
 
+function explicitTasks(lesson:Lesson):EvidenceTask[]|null{
+ const specs=getExplicitEvidenceSpecs(lesson.id);if(!specs)return null;
+ return specs.map(spec=>{
+   const q=spec.questionId?lesson.questions.find(x=>x.id===spec.questionId):undefined;
+   const deep=spec.interaction==='short_text';
+   return {
+    id:`${lesson.id}:evidence:${spec.objectiveId}`,
+    objectiveId:spec.objectiveId,
+    scope:'objective' as const,
+    kind:spec.kind,
+    interaction:spec.interaction,
+    prompt:spec.prompt,
+    questionId:q?.id||null,
+    options:spec.interaction==='choice'?q?.options:undefined,
+    correctIndex:spec.interaction==='choice'?q?.correct:undefined,
+    explanation:q?.explanation,
+    quality:spec.quality,
+    depth:deep?'deep' as const:'quick' as const,
+    pairs:spec.pairs,
+    targets:spec.targets,
+    orderItems:spec.orderItems
+   };
+ });
+}
+
 export function buildEvidenceTasks(lesson:Lesson):EvidenceTask[]{
+ const explicit=explicitTasks(lesson);if(explicit)return explicit;
  const objectives=lesson.learningPoints.length?lesson.learningPoints:[lesson.summary];
  const map=buildObjectiveQuestionMap(lesson);
  const prepared=objectives.map((objective,index)=>{
@@ -70,29 +100,10 @@ export function buildEvidenceTasks(lesson:Lesson):EvidenceTask[]{
    return {objective,index,kind,direct,q,quality:direct?.quality==='direct'?'direct' as const:'inferred' as const};
  });
  const openBudget=lesson.student==='salma'?1:2;
- const deepIndexes=new Set(prepared
-   .map(x=>({index:x.index,priority:deepPriority(x.kind),hasQuestion:Boolean(x.q?.options?.length)}))
-   .sort((a,b)=>b.priority-a.priority||Number(a.hasQuestion)-Number(b.hasQuestion)||a.index-b.index)
-   .slice(0,openBudget)
-   .map(x=>x.index));
+ const deepIndexes=new Set(prepared.map(x=>({index:x.index,priority:deepPriority(x.kind),hasQuestion:Boolean(x.q?.options?.length)})).sort((a,b)=>b.priority-a.priority||Number(a.hasQuestion)-Number(b.hasQuestion)||a.index-b.index).slice(0,openBudget).map(x=>x.index));
  return prepared.map(({index,kind,q,quality})=>{
-   const mustWrite=!q?.options?.length;
-   const deep=mustWrite||deepIndexes.has(index);
-   const interaction:EvidenceInteraction=deep?'short_text':'choice';
-   return {
-     id:`${lesson.id}:evidence:${index+1}`,
-     objectiveId:index+1,
-     scope:'objective',
-     kind,
-     interaction,
-     prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),
-     questionId:q?.id||null,
-     options:interaction==='choice'?q?.options:undefined,
-     correctIndex:interaction==='choice'?q?.correct:undefined,
-     explanation:q?.explanation,
-     quality,
-     depth:deep?'deep':'quick'
-   };
+   const mustWrite=!q?.options?.length;const deep=mustWrite||deepIndexes.has(index);const interaction:EvidenceInteraction=deep?'short_text':'choice';
+   return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),questionId:q?.id||null,options:interaction==='choice'?q?.options:undefined,correctIndex:interaction==='choice'?q?.correct:undefined,explanation:q?.explanation,quality,depth:deep?'deep':'quick'};
  });
 }
 

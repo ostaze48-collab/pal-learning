@@ -1,7 +1,7 @@
 import {curriculumSources,getRecoveryGradeBand} from './curriculumKnowledge';
 import {getExternalResources} from './externalResources';
 
-export type ResourceKind='current'|'recovery'|'worksheet'|'guide'|'framework'|'external';
+export type ResourceKind='current'|'recovery'|'summary'|'worksheet'|'guide'|'framework'|'external';
 export type ResourceCard={id:string;title:string;url:string;kind:ResourceKind;gradeLabel:string;trust:string;description:string};
 
 export function getResourceBank(currentGrade:number):ResourceCard[]{
@@ -13,11 +13,12 @@ export function getResourceBank(currentGrade:number):ResourceCard[]{
     let kind:ResourceKind='framework';
     if(source.kind==='worksheet')kind='worksheet';
     else if(source.kind==='teacher-guide')kind='guide';
-    else if(source.kind==='curriculum'||source.kind==='package')kind=source.grades?.includes(currentGrade)?'current':'recovery';
+    else if(source.kind==='package')kind='summary';
+    else if(source.kind==='textbook'||source.kind==='curriculum')kind=source.grades?.includes(currentGrade)?'current':'recovery';
     cards.push({
       id:source.id,title:source.title,url:source.url,kind,
       gradeLabel:source.grades?.includes(currentGrade)?`الصف ${currentGrade}`:source.grades?.filter(g=>previous.includes(g)).length?`مرجع للصفوف ${source.grades.filter(g=>previous.includes(g)).join('، ')}`:'مرجع عام',
-      trust:source.authority==='official'?'رسمي':'داعم رسمي',description:source.note
+      trust:source.kind==='textbook'?'كتاب وزاري — المصدر الأساسي':source.kind==='package'?'رزمة طوارئ — ملخص':source.authority==='official'?'رسمي':'داعم رسمي',description:source.note
     });
   }
   for(const source of getExternalResources(currentGrade)){
@@ -27,8 +28,10 @@ export function getResourceBank(currentGrade:number):ResourceCard[]{
 }
 
 export const resourceUsePolicy=[
-  {label:'رسمي',description:'الكتاب، الرزمة، فهرس المنهاج والإطار الوطني: المرجع الأعلى للمعلومة.'},
-  {label:'داعم رسمي',description:'دليل المعلم وأوراق العمل: تستخدم للشرح والتدريب والتقويم.'},
+  {label:'الكتاب الوزاري',description:'المصدر الأول للتعلم: منه نأخذ محتوى الدرس، المفاهيم، المصطلحات، التسلسل والمستوى العلمي المطلوب.'},
+  {label:'دليل المعلم',description:'يساعد في اختيار أفضل طريقة للشرح والتقويم بعد تثبيت محتوى الدرس من الكتاب.'},
+  {label:'الرزمة التعليمية',description:'ملخص طوارئ وحد أدنى للتعلم. تستخدم للمراجعة السريعة ولا تقود الشرح الموسع.'},
+  {label:'أوراق العمل والاختبارات',description:'تستخدم للتدريب والتشخيص والتثبيت بعد الشرح، وليست بديلًا عن الكتاب.'},
   {label:'خارجي مساند',description:'اختبارات وشروح وحلول من مواقع تعليمية خارجية. نستخدمها للمقارنة والتدريب فقط، ولا ننسبها للوزارة.'},
-  {label:'AI مساعد',description:'ينشئ أمثلة وتمارين جديدة مشابهة، ولا يصفها بأنها نص أو حل رسمي.'}
+  {label:'AI مساعد',description:'يبسط محتوى الكتاب ويولّد أمثلة وتمارين ووسائل شرح جديدة، لكنه لا يغيّر المفهوم المنهجي ولا يصف المحتوى المولد بأنه نص رسمي.'}
 ];

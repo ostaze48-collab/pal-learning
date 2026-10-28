@@ -1,9 +1,11 @@
 import {grade5NumberTheoryLessons} from './grade5NumberTheory';
 import {grade5FractionLessons} from './grade5Fractions';
 import {grade5DecimalLessons} from './grade5Decimals';
+import {grade5GeometryLessons} from './grade5Geometry';
 import {grade7MathLessons} from './grade7Math';
 import {grade7GeometryLessons} from './grade7Geometry';
 import {grade7ProportionLessons} from './grade7Proportion';
+import {grade7StatisticsLessons} from './grade7Statistics';
 
 export type Student={slug:string;name:string;grade:number;semester:number;emoji:string};
 export type Question={id:string;text:string;options:string[];correct:number;explanation:string};
@@ -18,9 +20,11 @@ export const lessons:Lesson[]=[
   ...grade5NumberTheoryLessons,
   ...grade5FractionLessons,
   ...grade5DecimalLessons,
+  ...grade5GeometryLessons,
   ...grade7MathLessons,
   ...grade7GeometryLessons,
-  ...grade7ProportionLessons
+  ...grade7ProportionLessons,
+  ...grade7StatisticsLessons
 ];
 
 export function getStudent(slug:string){return students.find(s=>s.slug===slug)}

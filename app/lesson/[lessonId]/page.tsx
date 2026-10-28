@@ -9,14 +9,6 @@ import EvidenceStudio from './EvidenceStudio';
 const subjectIcons:Record<string,string>={'الرياضيات':'➗','العلوم والحياة':'🔬','اللغة العربية':'📚','English':'🌍'};
 const subjectClasses:Record<string,string>={'الرياضيات':'subjectMath','العلوم والحياة':'subjectScience','اللغة العربية':'subjectArabic','English':'subjectEnglish'};
 
-function sideTip(subject:string){
- if(subject==='العلوم والحياة')return {icon:'🔎',title:'فكري كعالمة',text:'شاهدي الدليل أولًا، ثم اسألي: ماذا يعني ما رأيته؟'};
- if(subject==='الرياضيات')return {icon:'🧩',title:'شاهدي العلاقة',text:'إذا بدت الرموز صعبة، ارجعي إلى الرسم أو المثال الصغير ثم حاولي من جديد.'};
- if(subject==='اللغة العربية')return {icon:'📖',title:'ابدئي من المعنى',text:'افهمي الجملة أو الموقف أولًا، وبعدها يصبح اكتشاف النمط أسهل.'};
- if(subject==='English')return {icon:'💬',title:'Meaning first',text:'Understand the situation first, then notice the language pattern.'};
- return {icon:'💡',title:'خذيها خطوة خطوة',text:'شاهدي المثال، جربي الفكرة، ثم استخدميها بنفسك.'};
-}
-
 export default async function LessonPage({params}:{params:Promise<{lessonId:string}>}){
  const {lessonId}=await params;
  const lesson=getLesson(lessonId);
@@ -29,29 +21,40 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
  const isSalma=student.slug==='salma';
  const isAssessment=lesson.kind==='assessment';
  const subjectClass=subjectClasses[lesson.subject]??'subjectMath';
- const tip=sideTip(lesson.subject);
+ const subjectIcon=subjectIcons[lesson.subject]??'📘';
  const hasFullBlueprint=!isAssessment&&lesson.learningPoints.length>0&&lesson.learningPoints.every((_,index)=>Boolean(getTeachingScenes(lesson,index)?.length));
 
  return <main className={`lessonJourney ${isSalma?'themeSalma':'themeSama'} ${subjectClass} ${hasFullBlueprint?'hasTeachingBlueprint':''}`}><div className="wrap lessonJourneyWrap">
-  {hasFullBlueprint&&<style>{`.hasTeachingBlueprint .creativeLessonLab{display:none}`}</style>}
+  <style>{`
+   .lessonJourney .kidLessonLayout{display:block!important;max-width:940px;margin-inline:auto}
+   .lessonJourney .lessonMainPane{width:100%;min-width:0}
+   .lessonJourney .goalCard{display:none!important}
+   .lessonJourney .lessonMissionHead{max-width:860px;margin:10px auto 18px;display:block!important;text-align:center;padding:10px 8px!important;background:transparent!important;border:0!important;box-shadow:none!important}
+   .lessonJourney .lessonMissionHead h1{margin:8px 0 7px;font-size:clamp(30px,6vw,48px);line-height:1.2}
+   .lessonJourney .lessonMissionHead p{max-width:690px;margin:0 auto;color:#667773;line-height:1.8;font-size:15px}
+   .lessonJourney .missionFacts{display:flex!important;justify-content:center;gap:8px;margin-top:12px}
+   .lessonJourney .missionFacts>div{display:inline-flex!important;align-items:center;gap:6px;min-width:0!important;padding:7px 11px!important;border-radius:999px!important;background:var(--subject-soft,#f2f6f5)!important;border:0!important;box-shadow:none!important}
+   .lessonJourney .missionFacts strong{font-size:13px!important}.lessonJourney .missionFacts small{font-size:12px!important}.lessonJourney .missionFacts span{font-size:15px!important}
+   .lessonJourney .lessonTopbar{max-width:940px;margin-inline:auto}
+   .lessonJourney .lessonNavKid{max-width:940px;margin-inline:auto}
+   ${hasFullBlueprint?'.hasTeachingBlueprint .creativeLessonLab{display:none!important}':''}
+   @media(max-width:700px){.lessonJourney .lessonJourneyWrap{width:min(100% - 18px,940px)!important}.lessonJourney .lessonMissionHead{margin-top:2px;padding-inline:4px!important}.lessonJourney .lessonMissionHead h1{font-size:30px}.lessonJourney .lessonMissionHead p{font-size:14px}.lessonJourney .missionFacts{margin-top:9px}.lessonJourney .lessonNavKid{margin-top:18px}.lessonJourney .lessonTopbar{margin-bottom:4px}}
+  `}</style>
   {!isAssessment&&<ObjectiveCoverageBridge lesson={lesson}/>} 
   {!isAssessment&&<EvidenceStudio lesson={lesson}/>} 
-  <header className="kidTopbar lessonTopbar"><Link className="backBubble" href={`/student/${student.slug}`}>→ دروسي</Link><div className="lessonTopTitle"><span>{subjectIcons[lesson.subject]??'📘'}</span><strong>{lesson.subject}</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
+  <header className="kidTopbar lessonTopbar"><Link className="backBubble" href={`/student/${student.slug}`}>→ دروسي</Link><div className="lessonTopTitle"><span>{subjectIcon}</span><strong>{lesson.subject}</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
 
   <section className="lessonMissionHead">
-    <div className="missionCopy"><span className="questEyebrow">{isAssessment?'🏆 تحدي قصير':'✨ رحلة تعلم'}</span><h1>{lesson.title}</h1><p>{lesson.summary}</p></div>
-    <div className="missionFacts"><div><span>⏱</span><strong>{lesson.minutes}</strong><small>دقيقة تقريبًا</small></div><div><span>{isAssessment?'🎯':'🧭'}</span><strong>{isAssessment?lesson.questions.length:4}</strong><small>{isAssessment?'أسئلة':'مراحل تعلم'}</small></div></div>
+    <div className="missionCopy"><span className="questEyebrow">{isAssessment?'🏆 تحدي صغير':'✨ هيا نكتشف'}</span><h1>{lesson.title}</h1><p>{lesson.summary}</p></div>
+    <div className="missionFacts"><div><span>⏱</span><strong>{lesson.minutes}</strong><small>دقائق تقريبًا</small></div>{isAssessment&&<div><span>🎯</span><strong>{lesson.questions.length}</strong><small>أسئلة</small></div>}</div>
   </section>
 
   <div className="kidLessonLayout">
     <section className="lessonMainPane">{!isAssessment&&<LearningCanvas lesson={lesson}/>}<LessonRunner lesson={lesson}/></section>
-    <aside className="goalCard">
-      <div className="goalCardIcon">{isAssessment?'🎯':tip.icon}</div><span>{isAssessment?'قبل أن تبدأي':'تلميح صغير'}</span><h2>{isAssessment?'خذي وقتك':tip.title}</h2><p>{isAssessment?'اقرئي كل سؤال بهدوء. إذا ظهر خطأ، سنستخدمه فقط لمعرفة ما يحتاج مراجعة قصيرة لاحقًا.':tip.text}</p>
-    </aside>
   </div>
 
   <nav className="lessonNavKid" aria-label="التنقل بين الدروس">
-    {previous?<Link href={`/lesson/${previous.id}`}><span>→</span><div><small>الدرس السابق</small><strong>{previous.title}</strong></div></Link>:<span/>}
+    {previous?<Link href={`/lesson/${previous.id}`}><span>→</span><div><small>السابق</small><strong>{previous.title}</strong></div></Link>:<span/>}
     {next&&<Link className="nextLessonLink" href={`/lesson/${next.id}`}><div><small>بعدها</small><strong>{next.title}</strong></div><span>←</span></Link>}
   </nav>
  </div></main>;

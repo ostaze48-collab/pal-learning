@@ -7,7 +7,7 @@ export default function AIAnswerCoach({lessonId,questionId,selectedIndex,fallbac
   const [data,setData]=useState<Feedback|null>(null);const [loading,setLoading]=useState(true);
   useEffect(()=>{
     let cancelled=false;setLoading(true);setData(null);
-    fetch('/api/ai-teacher/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId,questionId,selectedIndex})}).then(r=>r.json()).then(x=>{if(!cancelled)setData(x)}).catch(()=>{if(!cancelled)setData({correct:false,feedback:fallback,microExample:'',misconception:'',action:'reinforce',mode:'local'})}).finally(()=>{if(!cancelled)setLoading(false)});
+    fetch('/api/ai-teacher/feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId,questionId,selectedIndex})}).then(r=>r.json()).then(x=>{if(cancelled)return;setData(x);try{localStorage.setItem(`aiAnswerFeedback:${lessonId}:${questionId}`,JSON.stringify({...x,selectedIndex,at:new Date().toISOString()}))}catch{}}).catch(()=>{if(!cancelled)setData({correct:false,feedback:fallback,microExample:'',misconception:'',action:'reinforce',mode:'local'})}).finally(()=>{if(!cancelled)setLoading(false)});
     return()=>{cancelled=true};
   },[lessonId,questionId,selectedIndex,fallback]);
   if(loading)return <div className="aiAnswerCoach loading"><strong>🤖 المعلم يراجع طريقة تفكيرك…</strong></div>;

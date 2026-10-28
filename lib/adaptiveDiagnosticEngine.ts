@@ -1,6 +1,6 @@
 import type {DeepSubskill} from './deepDiagnostics';
 
-export type AdaptiveStatus='mastered'|'application_gap'|'fragile_foundation'|'foundation_gap'|'needs_verification';
+export type AdaptiveStatus='mastered'|'application_gap'|'fragile_foundation'|'fluency_gap'|'foundation_gap'|'needs_verification';
 export type AdaptiveEvidence={questionId:string;correct:boolean;mode:'entry'|'verify'|'supported';responseMs:number};
 export type AdaptiveResult={
   subskillId:string;
@@ -13,6 +13,10 @@ export type AdaptiveResult={
   evidence:AdaptiveEvidence[];
 };
 
+function isFluencySensitive(subskillId:string){
+  return /^tables-/.test(subskillId)||['division-inverse','addition-carry','subtraction-borrow','phonics-basic','phonics-blending','core-vocabulary','basic-spelling'].includes(subskillId);
+}
+
 export function evaluateAdaptiveSubskill(sub:DeepSubskill,evidence:AdaptiveEvidence[],priorScore?:number):AdaptiveResult{
   const entry=evidence.find(x=>x.mode==='entry');
   const verify=evidence.find(x=>x.mode==='verify'||x.mode==='supported');
@@ -22,12 +26,19 @@ export function evaluateAdaptiveSubskill(sub:DeepSubskill,evidence:AdaptiveEvide
   let confidence:'high'|'medium'|'low'='medium';
 
   if(entry&&verify){
-    if(entry.correct&&verify.correct){status='mastered';score=100;confidence='high'}
+    if(entry.correct&&verify.correct){
+      const avgMs=(entry.responseMs+verify.responseMs)/2;
+      if(isFluencySensitive(sub.id)&&avgMs>15000){status='fluency_gap';score=75;confidence='high'}
+      else {status='mastered';score=100;confidence='high'}
+    }
     else if(entry.correct&&!verify.correct){status='application_gap';score=65;confidence='high'}
     else if(!entry.correct&&verify.correct){status='fragile_foundation';score=65;confidence='high'}
     else {status='foundation_gap';score=25;confidence='high'}
   }else if(only){
-    if(only.correct&&typeof priorScore==='number'&&priorScore>=90){status='mastered';score=100;confidence='medium'}
+    if(only.correct&&typeof priorScore==='number'&&priorScore>=90){
+      if(isFluencySensitive(sub.id)&&only.responseMs>15000){status='fluency_gap';score=75;confidence='medium'}
+      else {status='mastered';score=100;confidence='medium'}
+    }
     else if(only.correct){status='needs_verification';score=80;confidence='low'}
     else {status='foundation_gap';score=35;confidence='medium'}
   }
@@ -36,13 +47,15 @@ export function evaluateAdaptiveSubskill(sub:DeepSubskill,evidence:AdaptiveEvide
     mastered:'متقنة',
     application_gap:'الأساس موجود لكن التطبيق غير ثابت',
     fragile_foundation:'المعلومة موجودة لكنها تحتاج تثبيتًا',
+    fluency_gap:'الإجابة صحيحة لكن الاستدعاء بطيء',
     foundation_gap:'فجوة تأسيسية واضحة',
     needs_verification:'تحتاج سؤال تحقق إضافي'
   };
   const causes:Record<AdaptiveStatus,string>={
     mastered:'الإجابات تشير إلى فهم ثابت وقدرة على التطبيق.',
     application_gap:'نجحت في الأساس ثم أخطأت في التحقق؛ الاحتمال الأقرب هو ضعف نقل القاعدة إلى مثال جديد أو الانتباه للخطوات.',
-    fragile_foundation:'الإجابة الأولى كانت خاطئة ثم تحسن الأداء بعد التلميح؛ هذا يشير إلى أن الأساس موجود لكنه غير مستقر أو بطيء الاستدعاء.',
+    fragile_foundation:'الإجابة الأولى كانت خاطئة ثم تحسن الأداء بعد التلميح؛ هذا يشير إلى أن الأساس موجود لكنه غير مستقر.',
+    fluency_gap:'الإجابات صحيحة، لكن زمن الاستجابة طويل في مهارة يفترض أن تصبح تلقائية؛ المشكلة الأقرب هي بطء الاستدعاء لا ضعف الفهم.',
     foundation_gap:`الأداء يشير إلى أن مفهوم «${sub.title}» نفسه يحتاج إعادة بناء قصيرة قبل الاستمرار.`,
     needs_verification:'لدينا دليل واحد فقط، لذلك لا نريد الحكم على المهارة بسرعة.'
   };
@@ -50,6 +63,7 @@ export function evaluateAdaptiveSubskill(sub:DeepSubskill,evidence:AdaptiveEvide
     mastered:'انتقلي إلى المهارة التالية دون علاج إضافي.',
     application_gap:`طبقي ${sub.title} على مثالين جديدين ثم سؤال تحقق دون مساعدة.`,
     fragile_foundation:`راجعي الفكرة الأساسية في ${sub.title} ثم تدربي على 3 أسئلة قصيرة للاستدعاء السريع.`,
+    fluency_gap:`استخدمي تدريب سرعة قصير من 6 محاولات على ${sub.title} دون شرح طويل، ثم أعيدي سؤال تحقق واحد.`,
     foundation_gap:`ابدئي بالشرح المصغر، ثم ${sub.treatmentSteps[0]||'تدريب أساسي قصير'}، ثم أعيدي سؤال تحقق.`,
     needs_verification:'أجيبي عن سؤال تحقق آخر قبل تحديد الخطة.'
   };

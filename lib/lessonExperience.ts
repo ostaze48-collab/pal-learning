@@ -1,6 +1,7 @@
 import type {Lesson} from './data';
 import {chooseVisualStrategy} from './visualTeaching';
 import {buildTeacherSessionPlan} from './teacherBrain';
+import {getLessonReadiness} from './masteryEngine';
 
 export type ExperienceKind='slides'|'puzzle'|'game'|'experiment'|'story'|'challenge'|'sort';
 export type CognitiveTask='build_model'|'discover_pattern'|'classify'|'sequence'|'cause_effect'|'apply_rule'|'retrieve';
@@ -31,7 +32,10 @@ export function chooseLessonExperience(lesson:Lesson,diagnosticCorrect:boolean,s
   const visual=chooseVisualStrategy(lesson);
   const task=chooseCognitiveTask(lesson);
   const text=lessonText(lesson);
-  const brain=buildTeacherSessionPlan(lesson,{diagnosticCorrect,subjectMastery,conceptSuccess:recentCreativeSuccess});
+  const readiness=getLessonReadiness(lesson.student,lesson.id);
+  const prerequisiteScores=(readiness?.weakPrerequisites||[]).map(x=>x.score).filter((x):x is number=>typeof x==='number');
+  const prerequisiteWeakest=prerequisiteScores.length?Math.min(...prerequisiteScores):readiness?.readinessStatus==='check'?70:null;
+  const brain=buildTeacherSessionPlan(lesson,{diagnosticCorrect,subjectMastery,conceptSuccess:recentCreativeSuccess,weakestScore:prerequisiteWeakest});
   const needsSupport=brain.level==='rebuild'||brain.level==='guided';
   const strong=brain.level==='independent'||brain.level==='stretch';
   let primary:ExperienceKind='slides';let secondary:ExperienceKind='challenge';
@@ -61,6 +65,6 @@ export function chooseLessonExperience(lesson:Lesson,diagnosticCorrect:boolean,s
   const labels:Record<ExperienceKind,[string,string]>={slides:['عرض مصور قصير','🖼️'],puzzle:['لغز الفكرة','🧩'],game:['لعبة تعلم','🎮'],experiment:['تجربة وتوقع','🧪'],story:['قصة أو موقف','📚'],challenge:['تحدي ذكي','🏁'],sort:['رتّبي وصنّفي','🧲']};
   const [label,icon]=labels[primary];
   const taskReason:Record<CognitiveTask,string>={build_model:'هذا المفهوم يحتاج بناء نموذج وتحريكه، لا حفظ تعريف فقط.',discover_pattern:'أفضل طريق هنا هو اكتشاف النمط قبل إعطاء القاعدة.',classify:'المهمة الأساسية هي التمييز والتصنيف بين حالات متشابهة.',sequence:'الفهم يعتمد على ترتيب الخطوات وبناء التسلسل.',cause_effect:'الفكرة علمية سببية؛ نبدأ بتوقع ثم دليل ثم تفسير.',apply_rule:'المطلوب استخدام القاعدة في مثال، لا ترديدها فقط.',retrieve:'نثبت الفكرة باسترجاع نشط وتطبيق قصير.'};
-  const levelReason=` ${brain.reason}`;
-  return {primary,secondary,label,icon,reason:taskReason[task]+levelReason,intensity:brain.activityIntensity,visualLabel:visual.label,task};
+  const prerequisiteReason=readiness?.readinessStatus==='blocked'?' توجد مهارة سابقة ضعيفة مرتبطة مباشرة بهذا الدرس، لذلك نخفف التحدي ونبني الجسر أولًا.':readiness?.readinessStatus==='check'?' توجد مهارة سابقة لم تُثبت بعد؛ نبدأ بتحقق قصير قبل رفع التحدي.':'';
+  return {primary,secondary,label,icon,reason:taskReason[task]+' '+brain.reason+prerequisiteReason,intensity:brain.activityIntensity,visualLabel:visual.label,task};
 }

@@ -8,12 +8,12 @@ const root=process.cwd();
 const cfg=JSON.parse(await fsp.readFile(path.join(root,'curriculum/direct-resources.json'),'utf8'));
 const outDir=path.join(root,'curriculum/books');
 const manifestPath=path.join(root,'curriculum/books-manifest.json');
-const UA='Salma-Sama-Official-Books/1.2';
+const UA='Salma-Sama-Official-Books/1.3';
 
 function sha256(buffer){return crypto.createHash('sha256').update(buffer).digest('hex')}
 function slug(s){return String(s).replace(/\s+/g,'-').replace(/[\\/:*?"<>|]/g,'-')}
 function fileNameFor(x){return `g${x.grade}-s${x.semester}-${slug(x.subject)}-${path.basename(new URL(x.url).pathname)}`}
-function metadataFor(x,fileName,hash,bytes){return `# Official Palestinian Curriculum Book\n\n- File: ${fileName}\n- Title: ${x.label}\n- Grade: ${x.grade}\n- Semester: ${x.semester}\n- Subject: ${x.subject}\n- Resource type: ${x.kind}\n- Authority: ${x.authority}\n- Source priority: ${x.sourcePriority}\n- Source page: ${x.sourcePage}\n- Original URL: ${x.url}\n- Verification before this run: ${x.verification}\n- SHA-256: ${hash}\n- Bytes: ${bytes}\n\n## Grounding policy\nThis official textbook is a primary curriculum source. Use it before worksheets, external summaries, or AI-generated supporting explanations when answering curriculum questions for this grade and subject.\n`;}
+function metadataFor(x,fileName,hash,bytes){return `# Official Palestinian Ministry Textbook\n\n- File: ${fileName}\n- Title: ${x.label}\n- Grade: ${x.grade}\n- Semester: ${x.semester}\n- Subject: ${x.subject}\n- Resource type: textbook\n- Document role: primary_teaching_source\n- Authority: ${x.authority}\n- Source priority: 120\n- Source page: ${x.sourcePage}\n- Original URL: ${x.url}\n- Verification before this run: ${x.verification}\n- SHA-256: ${hash}\n- Bytes: ${bytes}\n\n## Grounding policy\nThis Ministry textbook is the PRIMARY source for teaching the lesson: concepts, terminology, sequence and curriculum examples. Use it before teacher guides, worksheets, assessments, emergency packages, external summaries or AI-generated explanations. Emergency learning packages are minimum-learning summaries only and must not replace this textbook when building an expanded lesson.\n`;}
 
 async function verifyPdf(url){
   const res=await fetch(url,{headers:{Range:'bytes=0-15','user-agent':UA},redirect:'follow'});
@@ -59,24 +59,24 @@ async function prepare(){
     await fsp.writeFile(filePath,buffer);
     const hash=sha256(buffer);const metaPath=`${filePath}.meta.md`;
     await fsp.writeFile(metaPath,metadataFor(x,fileName,hash,buffer.length),'utf8');
-    prepared.push({...x,fileName,filePath,metaPath,sha256:hash,bytes:buffer.length,verifiedNow:'pdf_signature'});
+    prepared.push({...x,kind:'textbook',documentRole:'primary_teaching_source',sourcePriority:120,fileName,filePath,metaPath,sha256:hash,bytes:buffer.length,verifiedNow:'pdf_signature'});
     console.log('book verified',x.grade,x.subject,buffer.length,hash.slice(0,12));
   }
-  await fsp.writeFile(manifestPath,JSON.stringify({preparedAt:new Date().toISOString(),count:prepared.length,books:prepared},null,2));
-  console.log(`prepared ${prepared.length} official books -> ${manifestPath}`);
+  await fsp.writeFile(manifestPath,JSON.stringify({preparedAt:new Date().toISOString(),count:prepared.length,policy:'textbook_primary',books:prepared},null,2));
+  console.log(`prepared ${prepared.length} official textbooks -> ${manifestPath}`);
   return prepared;
 }
 
-function attributesFor(book,role){return {grade:Number(book.grade),semester:Number(book.semester),subject:String(book.subject),kind:String(book.kind),authority:String(book.authority),source_priority:Number(book.sourcePriority||100),document_role:role}}
+function attributesFor(book,role){return {grade:Number(book.grade),semester:Number(book.semester),subject:String(book.subject),kind:'textbook',authority:String(book.authority),source_priority:120,document_role:role==='book'?'primary_teaching_source':'metadata',teaching_role:'primary'}}
 
 async function upload(prepared){
   if(!process.env.OPENAI_API_KEY)throw new Error('OPENAI_API_KEY is required to create/upload the curriculum vector store.');
   const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
   let vectorStoreId=process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID;
   if(!vectorStoreId){
-    const store=await client.vectorStores.create({name:'Palestinian Curriculum - Salma Sama - Official Core'});
+    const store=await client.vectorStores.create({name:'Palestinian Ministry Textbooks - Salma Sama - Primary Teaching Core'});
     vectorStoreId=store.id;
-    console.log('created vector store',vectorStoreId);
+    console.log('created textbook vector store',vectorStoreId);
   }
   let indexed=0;
   for(const book of prepared){
@@ -89,7 +89,7 @@ async function upload(prepared){
       indexed++;
     }
   }
-  const state={vectorStoreId,uploadedAt:new Date().toISOString(),books:prepared.length,indexedFiles:indexed,attributes:['grade','semester','subject','kind','authority','source_priority','document_role']};
+  const state={vectorStoreId,uploadedAt:new Date().toISOString(),books:prepared.length,indexedFiles:indexed,policy:'textbook_primary',attributes:['grade','semester','subject','kind','authority','source_priority','document_role','teaching_role']};
   await fsp.writeFile(path.join(root,'curriculum/vector-store-books.json'),JSON.stringify(state,null,2));
   console.log(`OPENAI_CURRICULUM_VECTOR_STORE_ID=${vectorStoreId}`);
 }

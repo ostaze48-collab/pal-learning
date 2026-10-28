@@ -3,7 +3,7 @@ import {getStudent,getStudentLessons,getLessonUnit} from '../../../lib/data';
 import StudentProgress from './StudentProgress';
 import SubjectProgressMini from './SubjectProgressMini';
 import DailyPlan from './DailyPlan';
-import LessonStatus from './LessonStatus';
+import UnitLearningPath from './UnitLearningPath';
 import RecoveryStatus from './RecoveryStatus';
 
 const subjectInfo:Record<string,{icon:string,label:string,desc:string,tone:string}>={
@@ -67,14 +67,7 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
           <div className="subjectHeader kidSubjectHeader"><div><span className="subjectIcon">{meta.icon}</span><div><small>مسار المادة</small><h2>{meta.label}</h2></div></div><div className="subjectHeaderProgress"><SubjectProgressMini lessonIds={subjectLessons.map(x=>x.id)}/><span className="lessonCountPill">{subjectLessons.filter(x=>x.kind!=='assessment').length} درس</span></div></div>
           <div className="unitStack">{Object.entries(units).map(([unit,unitLessons],unitIndex)=><section className="kidUnit" key={`${subject}-${unit}`}>
             <div className="unitTitle kidUnitTitle"><div><span className="unitNumber">{unitIndex+1}</span><strong>{unit}</strong></div><span>{unitLessons.filter(x=>x.kind!=='assessment').length} خطوات</span></div>
-            <div className="lessonList kidLessonList">{unitLessons.map((l,i)=>{
-              const lessonNumber=unitLessons.slice(0,i+1).filter(x=>x.kind!=='assessment').length;
-              return <div className={`lesson kidLesson ${l.kind==='assessment'?'assessment':''}`} key={l.id}>
-                <div className="lessonNumberOrb">{l.kind==='assessment'?'★':lessonNumber}</div>
-                <div className="kidLessonText"><div className="lessonMeta"><span>{l.kind==='assessment'?'تحدي الوحدة':`${l.minutes} دقيقة تقريبًا`}</span><LessonStatus lessonId={l.id}/></div><h3>{l.title}</h3><p>{l.summary}</p></div>
-                <Link className="kidLessonBtn" href={`/lesson/${l.id}`}>{l.kind==='assessment'?'ابدئي التحدي':'ابدئي'} <b>←</b></Link>
-              </div>
-            })}</div>
+            <UnitLearningPath lessons={unitLessons}/>
           </section>)}</div>
         </section>
       })}

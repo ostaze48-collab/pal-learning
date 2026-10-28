@@ -10,6 +10,16 @@ export type KnowledgeNode={
  evidence:MasteryEvidence[];weakPrerequisites:Array<{id:string;title:string;score:number|null}>;
 };
 export type KnowledgeMap={student:string;nodes:KnowledgeNode[];nextRecommended?:KnowledgeNode;blockedNext?:KnowledgeNode;updatedAt:string};
+export type TeacherEvidenceDecision={
+ decision:'advance'|'review'|'targeted_reteach';
+ reviewAt?:string;
+ focus?:string;
+ reason:string;
+ confidence:number;
+ evidence:{quiz:number|null;understanding:number|null;concept:number|null;mastery:number|null};
+ generatedAt:string;
+ source:'combined_lesson_evidence';
+};
 
 const gapToRecovery:Record<string,string>={
  multiplication_facts:'math-mult-div',division_facts:'math-mult-div',factors:'math-mult-div',integer_number_line:'math-number-sense',fraction_basics:'math-fractions'
@@ -48,6 +58,43 @@ function recoveryTitle(id:string){return recoverySkills.find(x=>x.id===id)?.titl
 
 function readJson(key:string){if(typeof window==='undefined')return null;const raw=localStorage.getItem(key);if(!raw)return null;try{return JSON.parse(raw)}catch{return null}}
 function finite(v:unknown){return Number.isFinite(Number(v))?Number(v):null}
+function clampScore(v:number|null){return v===null?null:Math.max(0,Math.min(100,Math.round(v)))}
+
+function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidenceDecision|null{
+ if(!report)return null;
+ const quiz=clampScore(finite(report?.quizMastery));
+ const understanding=clampScore(finite(report?.understandingScore));
+ const concept=clampScore(finite(report?.conceptScore));
+ const mastery=clampScore(finite(report?.mastery));
+ const available=[quiz,understanding,concept].filter(x=>x!==null).length;
+ const confidence=available>=3?92:available===2?80:64;
+ const generatedAt=new Date().toISOString();
+ const base={confidence,evidence:{quiz,understanding,concept,mastery},generatedAt,source:'combined_lesson_evidence' as const};
+ const misconception=understanding!==null&&understanding<=40;
+ const weakConcept=concept!==null&&concept<70;
+ const evidenceConflict=quiz!==null&&quiz>=80&&((understanding!==null&&understanding<65)||(concept!==null&&concept<65));
+ if(misconception||weakConcept||evidenceConflict){
+   const focus=misconception?`تفسير الفكرة في ${lesson.title}`:weakConcept?`فهم الفكرة عمليًا في ${lesson.title}`:`ربط الحل بالفهم في ${lesson.title}`;
+   const reason=misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.';
+   return {decision:'targeted_reteach',focus,reason,...base};
+ }
+ const partialUnderstanding=understanding!==null&&understanding<80;
+ const fragileConcept=concept!==null&&concept<80;
+ if(mastery!==null&&mastery>=80&&!partialUnderstanding&&!fragileConcept){
+   return {decision:'advance',reason:'الأدلة المتاحة متوافقة: الحل والتفسير/التفاعل يدعمان الانتقال إلى الخطوة التالية.',...base};
+ }
+ const reviewAt=String(report?.reviewDue||new Date(Date.now()+24*60*60*1000).toISOString());
+ const reason=mastery!==null&&mastery>=80?'الإتقان جيد لكن أحد أدلة الفهم ما زال هشًا؛ نحتاج مراجعة قصيرة لاحقة للتأكد من الثبات.':'الإتقان الكلي لم يصل بعد إلى حد التقدم بثقة؛ نراجع نقطة قصيرة ثم نعيد القياس.';
+ return {decision:'review',reviewAt,reason,...base};
+}
+
+function persistTeacherDecision(lesson:Lesson,report:any){
+ if(typeof window==='undefined'||!report)return null;
+ const existing=readJson(`lesson:${lesson.id}:teacherDecision`)||readJson(`teacherDecision:${lesson.id}`);
+ if(existing?.manual===true)return existing;
+ const decision=deriveTeacherEvidenceDecision(lesson,report);if(!decision)return existing;
+ const packed=JSON.stringify(decision);localStorage.setItem(`lesson:${lesson.id}:teacherDecision`,packed);localStorage.setItem(`teacherDecision:${lesson.id}`,packed);return decision;
+}
 
 function foundationEvidence(student:string,id:string):MasteryEvidence[]{
  if(typeof window==='undefined')return [];
@@ -62,7 +109,7 @@ function lessonEvidence(lesson:Lesson):MasteryEvidence[]{
  if(typeof window==='undefined')return [];
  const ev:MasteryEvidence[]=[];const report=readJson(`lesson:${lesson.id}:report`);const mastery=finite(report?.mastery);if(mastery!==null)ev.push({source:'lesson_mastery',score:mastery,weight:1,at:String(report?.completedAt||'')});
  const creative=readJson(`conceptStudio:${lesson.student}:${lesson.id}`)||readJson(`creativeProfile:${lesson.student}:${lesson.id}`);const c=finite(creative?.successRate);if(c!==null)ev.push({source:'concept_studio',score:c,weight:0.55,at:String(creative?.lastAt||creative?.at||'')});
- const decision=readJson(`lesson:${lesson.id}:teacherDecision`)||readJson(`teacherDecision:${lesson.id}`);if(decision?.decision==='targeted_reteach')ev.push({source:'teacher_decision',score:55,weight:0.75,note:String(decision.focus||'')});else if(decision?.decision==='review')ev.push({source:'teacher_decision',score:78,weight:0.45});else if(decision?.decision==='advance')ev.push({source:'teacher_decision',score:92,weight:0.35});
+ const decision=persistTeacherDecision(lesson,report)||readJson(`lesson:${lesson.id}:teacherDecision`)||readJson(`teacherDecision:${lesson.id}`);if(decision?.decision==='targeted_reteach')ev.push({source:'teacher_decision',score:55,weight:0.75,note:String(decision.focus||'')});else if(decision?.decision==='review')ev.push({source:'teacher_decision',score:78,weight:0.45,note:String(decision.reason||'')});else if(decision?.decision==='advance')ev.push({source:'teacher_decision',score:92,weight:0.35,note:String(decision.reason||'')});
  return ev;
 }
 

@@ -3,6 +3,7 @@ import type {TeachingMode} from './teachingProfile';
 import type {TeachingStrategy} from './multiStrategyTeaching';
 import {buildTeacherSessionPlan} from './teacherBrain';
 import {getLessonReadiness} from './masteryEngine';
+import {getCreativeLessonBlueprint} from './creativeLessonBlueprint';
 
 export type LocalTeachingMode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 export type LocalTeacherContent={title:string;intro:string;cards:Array<{title:string;body:string;kind:'explain'|'example'|'tip'|'check'}>;checkQuestion?:{text:string;hint:string};teacherNote?:string};
@@ -82,14 +83,21 @@ export function buildLocalTeachingContent(lesson:Lesson,mode:LocalTeachingMode='
  const requested=mode!=='overview'&&mode!=='check'?mode as TeachingMode:options.preferredMode;
  const plan=buildTeacherSessionPlan(lesson,{diagnosticCorrect:options.diagnosticCorrect,weakestScore:effectiveWeakness,conceptSuccess:options.conceptSuccess,subjectMastery:options.subjectMastery,preferredMode:requested,lastUnderstanding:options.lastUnderstanding});
  const activeMode:LocalTeachingMode=mode==='overview'?plan.entryMode:mode;
+ const blueprint=getCreativeLessonBlueprint(lesson);
  const prerequisiteIntro=readiness?.readinessStatus==='blocked'&&readiness.weakPrerequisites[0]?`قبل أن نتقدم بعيدًا في فكرة اليوم سنثبت خطوة صغيرة تساعدنا: ${readiness.weakPrerequisites[0].title}. `:readiness?.readinessStatus==='check'&&readiness.weakPrerequisites[0]?`خلال الشرح سنتأكد سريعًا من خطوة تساعدنا: ${readiness.weakPrerequisites[0].title}. `:'';
  const introPrefix=plan.level==='rebuild'?'سنفهم درس اليوم أولًا، وإذا احتجنا خطوة مساعدة سنأخذها داخل الشرح ثم نعود مباشرة. ':plan.level==='guided'?'سأعطيك دعمًا صغيرًا ثم أجعلك تجربين بنفسك. ':plan.level==='stretch'?'أنتِ قوية في الأساس؛ سنختصر التمهيد ونصل أسرع إلى التحدي. ':'';
- const strategy=options.teachingStrategy;const special=strategyCards(lesson,strategy);const points=lesson.learningPoints.slice(0,plan.level==='stretch'?3:4);const cards:Card[]=[...special];
- if(!special.length&&points.length){if(activeMode==='step_by_step')points.forEach((p,i)=>cards.push({title:`الخطوة ${i+1}`,body:p,kind:'explain'}));else if(activeMode==='simplify')points.forEach((p,i)=>cards.push({title:`فكرة صغيرة ${i+1}`,body:p,kind:'explain'}));else points.forEach((p,i)=>cards.push({title:i===0?'الفكرة الأساسية':`نربط معها ${i+1}`,body:p,kind:'explain'}))}
+ const strategy=options.teachingStrategy;const special=strategyCards(lesson,strategy);const points=lesson.learningPoints.slice(0,plan.level==='stretch'?2:3);const cards:Card[]=[...special];
+ if(!special.length){
+  cards.push({title:'ندخل الفكرة بطريقة مختلفة',body:blueprint.hook,kind:'explain'});
+  cards.push({title:'الصورة التي نريد أن تبقى في ذهنك',body:blueprint.mentalModel,kind:'tip'});
+  if(points.length){if(activeMode==='step_by_step')points.forEach((p,i)=>cards.push({title:`الخطوة ${i+1}`,body:p,kind:'explain'}));else if(activeMode==='simplify')points.forEach((p,i)=>cards.push({title:`فكرة صغيرة ${i+1}`,body:p,kind:'explain'}));else points.forEach((p,i)=>cards.push({title:i===0?'الفكرة الأساسية':`نربط معها ${i+1}`,body:p,kind:'explain'}))}
+ }
  if(!special.some(c=>c.kind==='example'))cards.push({title:'مثال من الدرس',body:lesson.example,kind:'example'});
+ if(!special.length)cards.push({title:'انتبهي لهذا الفخ',body:blueprint.commonTrap,kind:'tip'});
  const thinkingTip=lesson.subject==='الرياضيات'?'لا تحفظي النتيجة وحدها؛ قارني كل خطوة بالعلاقة أو النموذج البصري في الدرس.':lesson.subject==='العلوم والحياة'?'بعد المثال اسألي: ماذا لاحظت؟ ما الدليل؟ وما السبب أو التفسير؟':lesson.subject==='English'?'ابدئي بمعنى الجملة والسياق ثم لاحظي النمط اللغوي وطبّقيه في مثال جديد.':'ابدئي بالمعنى والسياق، ثم لاحظي النمط أو القاعدة وطبّقيها في جملة جديدة.';
- if(!special.length)cards.push({title:`كيف أفكر؟ · ${plan.visualLabel}`,body:thinkingTip,kind:'tip'});
- if(plan.level==='stretch'&&!special.some(c=>c.kind==='check'))cards.push({title:'تحدي التفكير',body:'حاولي تفسير لماذا تعمل الفكرة، ثم طبقيها على مثال مختلف بدل إعادة نفس المثال.',kind:'check'});
- const q=lesson.questions[0];const strategyIntro=strategy?`سنفهم الدرس اليوم بطريقة «${strategy.label}». `:'';
- return {title:lesson.title,intro:`${introPrefix}${strategyIntro}${lesson.summary}${prerequisiteIntro}`,cards:cards.slice(0,7),checkQuestion:{text:q?.text||'اشرحي الفكرة بكلماتك.',hint:q?.explanation||'ارجعي إلى الفكرة الأساسية ومثال الدرس.'},teacherNote:`شرح محلي احتياطي مبني فقط على محتوى الدرس المسجل من المنهاج. الاستراتيجية: ${strategy?.label||'متدرجة'}. الجاهزية: ${readiness?.readinessStatus||'غير مقاسة'}. خطة الجلسة: ${plan.reason} قاعدة الانتقال: ${plan.transitionRule}`};
+ if(!special.length&&cards.length<7)cards.push({title:`كيف أفكر؟ · ${plan.visualLabel}`,body:thinkingTip,kind:'tip'});
+ if(plan.level==='stretch'&&!special.some(c=>c.kind==='check'))cards.push({title:'تحدي التفكير',body:blueprint.transferChallenge,kind:'check'});
+ const strategyIntro=strategy?`سنفهم الدرس اليوم بطريقة «${strategy.label}». `:'';
+ const conceptualCheck=blueprint.masteryEvidence[0]||'اشرحي الفكرة بكلماتك.';
+ return {title:lesson.title,intro:`${introPrefix}${strategyIntro}${lesson.summary}${prerequisiteIntro}`,cards:cards.slice(0,7),checkQuestion:{text:`أثبتِي لي فهمك بطريقتك: ${conceptualCheck}`,hint:`فكري في مثال الدرس، وتجنبي هذا الخطأ الشائع: ${blueprint.commonTrap}`},teacherNote:`شرح محلي احتياطي مبني على محتوى الدرس المسجل من المنهاج وبصمة التدريس الخاصة به. الاستراتيجية: ${strategy?.label||'متدرجة'}. الجاهزية: ${readiness?.readinessStatus||'غير مقاسة'}. خطة الجلسة: ${plan.reason} قاعدة الانتقال: ${plan.transitionRule}`};
 }

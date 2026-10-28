@@ -26,15 +26,18 @@ export function recordTeachingUse(student:string,subject:string,mode:TeachingMod
 
 export function recordTeachingOutcome(student:string,subject:string,mode:TeachingMode,outcome:'understood'|'partial'|'misconception'){
   const profile=readTeachingProfile(student,subject);const stats={...(profile.modes[mode]||defaultStats())};if(outcome==='understood')stats.understood+=1;else if(outcome==='partial')stats.partial+=1;else stats.misconception+=1;stats.score=effectiveness(stats);profile.modes={...profile.modes,[mode]:stats};
-  const candidates=(Object.entries(profile.modes) as Array<[TeachingMode,ModeStats]>).filter(([,s])=>s.uses>=2).sort((a,b)=>b[1].score-a[1].score);
-  profile.preferredMode=candidates[0]?.[0]||profile.preferredMode;profile.updatedAt=new Date().toISOString();localStorage.setItem(profileKey(student,subject),JSON.stringify(profile));return profile;
+  const candidates=(Object.entries(profile.modes) as Array<[TeachingMode,ModeStats]>).filter(([m,s])=>m!=='check'&&s.uses>=2&&s.score>0).sort((a,b)=>b[1].score-a[1].score||b[1].understood-a[1].understood);
+  profile.preferredMode=candidates[0]?.[0];profile.updatedAt=new Date().toISOString();localStorage.setItem(profileKey(student,subject),JSON.stringify(profile));return profile;
 }
 
 export function chooseTeachingMode(student:string,subject:string,diagnosticCorrect:boolean,weakestScore?:number):TeachingMode{
-  if(!diagnosticCorrect)return 'simplify';
-  if(typeof weakestScore==='number'&&weakestScore<50)return 'simplify';
-  if(typeof weakestScore==='number'&&weakestScore<80)return 'step_by_step';
-  const preferred=readTeachingProfile(student,subject).preferredMode;
-  if(preferred&&preferred!=='check')return preferred;
+  const profile=readTeachingProfile(student,subject);
+  const candidates=(Object.entries(profile.modes) as Array<[TeachingMode,ModeStats]>).filter(([m,s])=>m!=='check'&&s.uses>=2&&s.score>0).sort((a,b)=>b[1].score-a[1].score);
+  const proven=candidates[0]?.[0];
+  if(!diagnosticCorrect)return weakestScore!==undefined&&weakestScore<35?'simplify':'step_by_step';
+  if(typeof weakestScore==='number'&&weakestScore<40)return 'simplify';
+  if(typeof weakestScore==='number'&&weakestScore<65)return proven==='simplify'||proven==='step_by_step'?proven:'step_by_step';
+  if(typeof weakestScore==='number'&&weakestScore<80)return proven||'step_by_step';
+  if(proven){const stats=profile.modes[proven];if(stats&&stats.misconception<=stats.understood)return proven}
   return 'overview';
 }

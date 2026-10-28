@@ -1,0 +1,21 @@
+{
+  "description": "Official/official-support Palestinian curriculum pages used to discover curriculum files for grades relevant to Salma and Sama.",
+  "pages": [
+    {"url":"https://www.moe.edu.ps/gaza/subjects","kind":"package","authority":"official","grades":[1,2,3,4,5,6,7,8]},
+    {"url":"https://elearn.edu.ps/c2/","kind":"curriculum","authority":"official","grades":[2]},
+    {"url":"https://elearn.edu.ps/c3/","kind":"curriculum","authority":"official","grades":[3]},
+    {"url":"https://elearn.edu.ps/c4/","kind":"curriculum","authority":"official","grades":[4]},
+    {"url":"https://elearn.edu.ps/c5/","kind":"curriculum","authority":"official","grades":[5]},
+    {"url":"https://elearn.edu.ps/c6/","kind":"curriculum","authority":"official","grades":[6]},
+    {"url":"https://elearn.edu.ps/c7/","kind":"curriculum","authority":"official","grades":[7]},
+    {"url":"https://elearn.edu.ps/c4_guides/","kind":"teacher-guide","authority":"official-support","grades":[4]},
+    {"url":"https://elearn.edu.ps/c5_guides/","kind":"teacher-guide","authority":"official-support","grades":[5]},
+    {"url":"https://elearn.edu.ps/c6_guides/","kind":"teacher-guide","authority":"official-support","grades":[6]},
+    {"url":"https://elearn.edu.ps/c7_guides/","kind":"teacher-guide","authority":"official-support","grades":[7]},
+    {"url":"https://elearn.edu.ps/worksheets/","kind":"worksheet","authority":"official-support","grades":[1,2,3,4,5,6,7,8,9,10,11,12]},
+    {"url":"https://elearn.edu.ps/g-line/","kind":"framework","authority":"official","grades":[1,2,3,4,5,6,7,8,9,10,11,12]},
+    {"url":"https://elearn.edu.ps/palcirdocs/","kind":"framework","authority":"official","grades":[1,2,3,4,5,6,7,8,9,10,11,12]}
+  ],
+  "targetGrades": [2,3,4,5,6,7],
+  "targetSubjects": ["الرياضيات","اللغة العربية","لغتنا الجميلة","اللغة الإنجليزية","English","العلوم والحياة"]
+}

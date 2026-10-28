@@ -24,7 +24,7 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
      const done=localStorage.getItem(`lesson:${l.id}`)==='done';
      if(!done){incomplete.push(l);return}
      let teacherHandled=false;
-     const rawDecision=localStorage.getItem(`teacherDecision:${l.id}`);
+     const rawDecision=localStorage.getItem(`teacherDecision:${l.id}`)||localStorage.getItem(`lesson:${l.id}:teacherDecision`);
      if(rawDecision){try{const decision=JSON.parse(rawDecision) as TeacherDecision;if(decision.decision==='targeted_reteach'){reviews.push({id:l.id,href:`/lesson/${l.id}`,title:decision.focus?`ثبتي: ${decision.focus}`:`ثبتي نقطة من ${l.title}`,subject:l.subject,minutes:8,type:'reteach'});teacherHandled=true}else if(decision.decision==='review'){const due=decision.reviewAt?new Date(decision.reviewAt).getTime()<=now:false;if(due){reviews.push({id:l.id,href:`/lesson/${l.id}`,title:l.title,subject:l.subject,minutes:5,type:'review'});teacherHandled=true}}}catch{}}
      if(teacherHandled)return;
      let due=false;

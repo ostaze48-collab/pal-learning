@@ -23,6 +23,7 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
  const [diagnosticSelected,setDiagnosticSelected]=useState<number|null>(null);
  const [retestStep,setRetestStep]=useState(0);
  const [retestCorrect,setRetestCorrect]=useState(0);
+ const [retestMissed,setRetestMissed]=useState<number[]>([]);
  const [done,setDone]=useState(false);
  const [report,setReport]=useState<Report|null>(null);
  const [helpOpen,setHelpOpen]=useState(false);
@@ -37,7 +38,7 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
    localStorage.removeItem(`lesson:${lesson.id}`);
    localStorage.removeItem(`lesson:${lesson.id}:score`);
    localStorage.removeItem(`lesson:${lesson.id}:report`);
-   setDone(false);setReport(null);setPhase('diagnostic');setStep(0);setSelected(null);setScore(0);setWrong([]);setDiagnosticSelected(null);setDiagnosticCorrect(false);setRetestStep(0);setRetestCorrect(0);setHelpOpen(false);
+   setDone(false);setReport(null);setPhase('diagnostic');setStep(0);setSelected(null);setScore(0);setWrong([]);setDiagnosticSelected(null);setDiagnosticCorrect(false);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setHelpOpen(false);
  }
 
  function complete(finalCorrect:number,wrongIds:string[]){
@@ -56,20 +57,21 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
 
  if(phase==='learn')return <div className="card"><div className="muted">تعلم أولًا</div><h2 style={{marginTop:6}}>الفكرة الأساسية</h2><div style={{display:'grid',gap:10,margin:'14px 0'}}>{lesson.learningPoints.map((point,i)=><div key={point} className="lesson"><strong>{i+1}</strong><div>{point}</div></div>)}</div><div className="result"><strong>مثال محلول</strong><p style={{lineHeight:1.9,marginBottom:0}}>{lesson.example}</p></div><button className="btn secondary" style={{marginTop:12,marginInlineStart:8}} onClick={()=>setHelpOpen(v=>!v)}>لم أفهم</button>{helpOpen&&<div className="helpBox"><strong>شرح أبسط</strong><p>{lesson.learningPoints[0]}</p><p className="muted">ركزي على المثال المحلول، ثم جربي التدريب. إذا أخطأتِ سيعيد لك النظام فقط النقطة التي تحتاجينها.</p></div>}<button className="btn" style={{marginTop:16}} onClick={()=>setPhase('quiz')}>ابدئي التدريب</button></div>;
 
- if(phase==='remediate')return <div className="card"><span className="tag">علاج مخصص</span><h2>سنراجع فقط ما أخطأتِ فيه</h2><p className="muted">لا حاجة لإعادة الدرس كاملًا.</p><div style={{display:'grid',gap:10}}>{wrong.map((idx,n)=>{const q=lesson.questions[idx];const point=lesson.learningPoints[Math.min(idx,lesson.learningPoints.length-1)];return <div className="remediation" key={q.id}><strong>{n+1}. {q.text}</strong><p>{q.explanation}</p><div className="muted">تذكري: {point}</div></div>})}</div><button className="btn" style={{marginTop:16}} onClick={()=>{setRetestStep(0);setSelected(null);setPhase('retest')}}>اختبار قصير من جديد</button></div>;
+ if(phase==='remediate')return <div className="card"><span className="tag">علاج مخصص</span><h2>سنراجع فقط ما أخطأتِ فيه</h2><p className="muted">لا حاجة لإعادة الدرس كاملًا.</p><div style={{display:'grid',gap:10}}>{wrong.map((idx,n)=>{const q=lesson.questions[idx];const point=lesson.learningPoints[Math.min(idx,lesson.learningPoints.length-1)];return <div className="remediation" key={q.id}><strong>{n+1}. {q.text}</strong><p>{q.explanation}</p><div className="muted">تذكري: {point}</div></div>})}</div><button className="btn" style={{marginTop:16}} onClick={()=>{setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSelected(null);setPhase('retest')}}>اختبار قصير من جديد</button></div>;
 
  if(phase==='retest'){
    const idx=wrong[retestStep];
    const q=lesson.questions[idx];
    function answerRetest(i:number){if(selected!==null)return;setSelected(i);if(i===q.correct)setRetestCorrect(v=>v+1)}
    function nextRetest(){
-     const gained=retestCorrect+(selected===q.correct?1:0);
+     const currentCorrect=selected===q.correct;
+     const gained=retestCorrect+(currentCorrect?1:0);
+     const missedNow=currentCorrect?retestMissed:[...retestMissed,idx];
      if(retestStep===wrong.length-1){
        const finalCorrect=score+gained;
-       const stillWrong=wrong.filter((_,i)=>i>retestStep || (i===retestStep&&selected!==q.correct)).map(i=>lesson.questions[i].id);
-       complete(finalCorrect,stillWrong);return;
+       complete(finalCorrect,missedNow.map(i=>lesson.questions[i].id));return;
      }
-     setRetestStep(v=>v+1);setSelected(null);
+     setRetestMissed(missedNow);setRetestStep(v=>v+1);setSelected(null);
    }
    return <div className="card"><span className="tag">إعادة اختبار · {retestStep+1} من {wrong.length}</span><h2>{q.text}</h2><div className="choice">{q.options.map((o,i)=>{const cls=selected===null?'option':i===q.correct?'option ok':i===selected?'option bad':'option';return <button key={o} className={cls} onClick={()=>answerRetest(i)}>{o}</button>})}</div>{selected!==null&&<div style={{marginTop:16}}><div className="result"><strong>{selected===q.correct?'تم إتقان هذه النقطة ✅':'ما زالت تحتاج مراجعة صغيرة'}</strong><p>{q.explanation}</p></div><button className="btn" style={{marginTop:12}} onClick={nextRetest}>{retestStep===wrong.length-1?'عرض النتيجة':'السؤال التالي'}</button></div>}</div>;
  }

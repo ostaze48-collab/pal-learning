@@ -5,7 +5,8 @@ import {gapSkills,lessonPrerequisites} from '../../../lib/skillGraph';
 import {getCurriculumSources,getRecoveryGradeBand} from '../../../lib/curriculumKnowledge';
 import {recoverySkills} from '../../../lib/recoverySkills';
 
-type DeepGap={title:string;score:number;gradeAnchor:string;parentSkillId:string};
+type MissedFact={text:string;selected:string;correct:string};
+type DeepGap={title:string;score:number;gradeAnchor:string;parentSkillId:string;cause?:string;missedFacts?:MissedFact[]};
 type LearnerState={
   diagnosticCorrect?:boolean;
   mastery?:number;
@@ -62,7 +63,10 @@ export async function POST(request:Request){
   const grade=student.grade;
   const sourceList=uniqueSources.map((s,i)=>`${i+1}. ${s.title} — ${s.kind} — ثقة ${s.priority}/100 — ${s.url}`).join('\n');
   const recoveryList=Object.entries(recoveryProfile).map(([id,score])=>{const skill=recoverySkills.find(s=>s.id===id);return skill?`- ${skill.title}: ${score}% (${skill.strand})`:null}).filter(Boolean).join('\n');
-  const deepList=Object.values(deepRecoveryProfile).sort((a,b)=>a.score-b.score).map(x=>`- ${x.title}: ${x.score}% — مرجع متوقع ${x.gradeAnchor}`).join('\n');
+  const deepList=Object.values(deepRecoveryProfile).sort((a,b)=>a.score-b.score).map(x=>{
+    const errors=(x.missedFacts||[]).map(m=>`${m.text} | اختارت: ${m.selected} | الصحيح: ${m.correct}`).join(' ؛ ');
+    return `- ${x.title}: ${x.score}% — مرجع متوقع ${x.gradeAnchor}${x.cause?` — تشخيص: ${x.cause}`:''}${errors?` — أخطاء محددة: ${errors}`:''}`;
+  }).join('\n');
 
   const curriculumContext=`
 الطالبة: ${student.name}
@@ -86,7 +90,7 @@ ${recoveryList||'- لم يكتمل فحص الفجوات لهذه المادة �
 
 نتائج التشخيص العميق للمهارات الفرعية:
 ${deepList||'- لا يوجد تشخيص عميق محفوظ حتى الآن.'}
-أضعف فجوة دقيقة موثقة: ${weakDeep?`${weakDeep.title} (${weakDeep.score}%) — مرجعها المتوقع ${weakDeep.gradeAnchor}`:'لا توجد فجوة فرعية موثقة أقل من 80%.'}
+أضعف فجوة دقيقة موثقة: ${weakDeep?`${weakDeep.title} (${weakDeep.score}%) — مرجعها المتوقع ${weakDeep.gradeAnchor}${weakDeep.cause?` — ${weakDeep.cause}`:''}`:'لا توجد فجوة فرعية موثقة أقل من 80%.'}
 أضعف مهارة عامة: ${weakRecoverySkill?`${weakRecoverySkill.title} (${weakRecovery?.[1]}%) — ${weakRecoverySkill.whyItMatters}`:'لا توجد فجوة عامة موثقة أقل من 80%.'}
 فجوة محتملة من أخطاء الدرس: ${likelyGap?`${likelyGap.title} — ${likelyGap.why}`:'لم تحدد.'}
 
@@ -101,7 +105,7 @@ ${sourceList}
 
   const instructions=`أنت معلم ذكي لمنصة تعليم منزلية فلسطينية تعالج آثار الانقطاع التعليمي الطويل، مع إبقاء الطالبة في صفها الحالي. التزم بهذه القواعد:
 1) الهدف المزدوج: مساعدة الطالبة على إتقان الصف ${grade} الحالي، وفي الوقت نفسه سد الفجوات الدقيقة فقط من الصفوف السابقة دون إعادتها لصف سابق كامل.
-2) إذا وُجدت فجوة فرعية موثقة من التشخيص العميق، فهي أعلى أولوية من اسم المجال العام. عالج الجزء المحدد فقط مثل جدول 7 و8 أو past simple، ولا تعيد كل الوحدة.
+2) إذا وُجدت فجوة فرعية موثقة من التشخيص العميق، فهي أعلى أولوية من اسم المجال العام. استخدم الأخطاء المحددة المسجلة لتكوين مثال مشابه دون إعادة السؤال نفسه حرفيًا.
 3) اشرح على مستوى الصف ${grade} وبالعربية المبسطة، إلا في English فاستخدم الإنجليزية البسيطة مع شرح عربي عند الحاجة.
 4) استخدم تسلسل الثقة التالي: الكتاب/الرزمة الرسمية، فهرس المنهاج الرسمي، دليل المعلم، الإطار الوطني للمبحث، أوراق العمل الرسمية، الاختبارات ونماذج الحل المنشورة، ثم الشرح المساعد الذي تولده أنت.
 5) إذا كانت أداة file_search متاحة، استخدمها عندما يحتاج السؤال معلومة منهجية دقيقة أو مثالًا/تمرينًا من المواد المرجعية. لا تخترع نصًا أو حلًا رسميًا إذا لم تجده.

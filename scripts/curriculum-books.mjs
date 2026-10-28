@@ -8,12 +8,41 @@ const root=process.cwd();
 const cfg=JSON.parse(await fsp.readFile(path.join(root,'curriculum/direct-resources.json'),'utf8'));
 const outDir=path.join(root,'curriculum/books');
 const manifestPath=path.join(root,'curriculum/books-manifest.json');
-const UA='Salma-Sama-Official-Books/1.0';
+const UA='Salma-Sama-Official-Books/1.1';
 
 function sha256(buffer){return crypto.createHash('sha256').update(buffer).digest('hex')}
 function slug(s){return String(s).replace(/\s+/g,'-').replace(/[\\/:*?"<>|]/g,'-')}
 function fileNameFor(x){return `g${x.grade}-s${x.semester}-${slug(x.subject)}-${path.basename(new URL(x.url).pathname)}`}
 function metadataFor(x,fileName,hash,bytes){return `# Official Palestinian Curriculum Book\n\n- File: ${fileName}\n- Title: ${x.label}\n- Grade: ${x.grade}\n- Semester: ${x.semester}\n- Subject: ${x.subject}\n- Resource type: ${x.kind}\n- Authority: ${x.authority}\n- Source priority: ${x.sourcePriority}\n- Source page: ${x.sourcePage}\n- Original URL: ${x.url}\n- Verification before this run: ${x.verification}\n- SHA-256: ${hash}\n- Bytes: ${bytes}\n\n## Grounding policy\nThis official textbook is a primary curriculum source. Use it before worksheets, external summaries, or AI-generated supporting explanations when answering curriculum questions for this grade and subject.\n`;}
+
+async function verifyPdf(url){
+  const res=await fetch(url,{headers:{Range:'bytes=0-15','user-agent':UA},redirect:'follow'});
+  const buffer=Buffer.from(await res.arrayBuffer());
+  return {valid:res.ok&&buffer.subarray(0,5).toString()==='%PDF-',status:res.status,type:String(res.headers.get('content-type')||''),finalUrl:res.url,signature:buffer.subarray(0,5).toString()};
+}
+
+async function probe(){
+  const subjects=[['الرياضيات','ma'],['اللغة العربية','ar'],['English','en'],['العلوم والحياة','sc']];
+  const grades=[2,3,4,6];
+  let valid=0;
+  for(const grade of grades){
+    for(const [subject,code] of subjects){
+      const variants=[`${code}${grade}-p1.pdf`];
+      if(code==='sc')variants.push(`${code}${grade}-p01.pdf`);
+      let found=false;
+      for(const name of variants){
+        const url=`https://elearn.azureedge.net/Books/c${grade}/${name}`;
+        try{
+          const result=await verifyPdf(url);
+          console.log(`PRIOR_BOOK ${result.valid?'VALID':'INVALID'} | ${grade} | ${subject} | HTTP ${result.status} | ${result.type} | ${result.signature.replace(/\s+/g,'_')} | ${result.finalUrl}`);
+          if(result.valid){valid++;found=true;break}
+        }catch(error){console.log(`PRIOR_BOOK ERROR | ${grade} | ${subject} | ${url} | ${error.message}`)}
+      }
+      if(!found)console.log(`PRIOR_BOOK MISSING | ${grade} | ${subject}`);
+    }
+  }
+  console.log(`PRIOR_BOOK_SUMMARY | ${valid} valid books`);
+}
 
 async function prepare(){
   await fsp.mkdir(outDir,{recursive:true});
@@ -62,7 +91,8 @@ async function upload(prepared){
 }
 
 const command=process.argv[2]||'prepare';
-if(command==='prepare')await prepare();
+if(command==='probe')await probe();
+else if(command==='prepare')await prepare();
 else if(command==='upload'){const prepared=fs.existsSync(manifestPath)?JSON.parse(await fsp.readFile(manifestPath,'utf8')).books:await prepare();await upload(prepared)}
 else if(command==='all'){const prepared=await prepare();await upload(prepared)}
-else throw new Error('Use: prepare | upload | all');
+else throw new Error('Use: probe | prepare | upload | all');

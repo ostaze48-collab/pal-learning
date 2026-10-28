@@ -2,6 +2,7 @@ import type {Lesson} from './data';
 import {buildObjectiveQuestionMap} from './objectiveCoverage';
 import {buildEvidenceTasks} from './evidenceDesign';
 import {getTeachingScenes} from './teachingBlueprints';
+import {getTeachingVisual} from './teachingVisuals';
 
 export type LessonQualityIssue={
  severity:'blocker'|'warning';
@@ -19,6 +20,9 @@ export type LessonQualityResult={
  directEvidenceObjectives:number;
  teachingBlueprintObjectives:number;
  teachingBlueprintPercent:number;
+ teachingSceneCount:number;
+ interactiveTeachingScenes:number;
+ interactiveTeachingPercent:number;
  evidenceKinds:string[];
  evidenceInteractions:string[];
  richInteractionCount:number;
@@ -31,7 +35,7 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
    if(!lesson.questions.length)issues.push({severity:'blocker',code:'NO_QUESTIONS',message:'الاختبار لا يحتوي أسئلة.'});
    else if(lesson.questions.length<3)issues.push({severity:'warning',code:'TOO_FEW_QUESTIONS',message:'الاختبار قصير جدًا وقد لا يعطي صورة مستقرة عن الوحدة.'});
    const blockers=issues.filter(x=>x.severity==='blocker').length;const warnings=issues.filter(x=>x.severity==='warning').length;
-   return {lessonId:lesson.id,kind:'assessment',ready:blockers===0,score:Math.max(0,100-blockers*30-warnings*7),objectiveCount:0,directEvidenceObjectives:0,teachingBlueprintObjectives:0,teachingBlueprintPercent:0,evidenceKinds:['assessment'],evidenceInteractions:['choice'],richInteractionCount:0,issues};
+   return {lessonId:lesson.id,kind:'assessment',ready:blockers===0,score:Math.max(0,100-blockers*30-warnings*7),objectiveCount:0,directEvidenceObjectives:0,teachingBlueprintObjectives:0,teachingBlueprintPercent:0,teachingSceneCount:0,interactiveTeachingScenes:0,interactiveTeachingPercent:0,evidenceKinds:['assessment'],evidenceInteractions:['choice'],richInteractionCount:0,issues};
  }
 
  const objectiveCount=lesson.learningPoints.length;
@@ -41,8 +45,13 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
  if(!lesson.example?.trim())issues.push({severity:'warning',code:'NO_EXAMPLE',message:'الدرس يحتاج مثالًا أو موقفًا تطبيقيًا واضحًا.'});
  if(objectiveCount&&lesson.questions.length<objectiveCount)issues.push({severity:'warning',code:'TOO_FEW_QUESTIONS',message:`عدد الأسئلة (${lesson.questions.length}) أقل من عدد الأهداف الداخلية (${objectiveCount})، لذلك يجب أن تعوض مهام الدليل هذا النقص.`});
 
- const teachingBlueprintObjectives=Array.from({length:objectiveCount},(_,index)=>Boolean(getTeachingScenes(lesson,index)?.length)).filter(Boolean).length;
+ const plans=Array.from({length:objectiveCount},(_,index)=>getTeachingScenes(lesson,index)||[]);
+ const teachingBlueprintObjectives=plans.filter(scenes=>scenes.length>0).length;
  const teachingBlueprintPercent=objectiveCount?Math.round(teachingBlueprintObjectives/objectiveCount*100):0;
+ const teachingSceneCount=plans.reduce((sum,scenes)=>sum+scenes.length,0);
+ let interactiveTeachingScenes=0;
+ plans.forEach((scenes,objectiveIndex)=>scenes.forEach((_,sceneIndex)=>{if(getTeachingVisual(lesson.id,objectiveIndex+1,sceneIndex+1))interactiveTeachingScenes++}));
+ const interactiveTeachingPercent=teachingSceneCount?Math.round(interactiveTeachingScenes/teachingSceneCount*100):0;
  if(objectiveCount&&teachingBlueprintObjectives===0)issues.push({severity:'warning',code:'GENERIC_TEACHING_ONLY',message:'الدرس ما زال يعتمد على قالب شرح عام؛ يحتاج Teaching Blueprint إبداعيًا مصممًا خصيصًا لأهدافه.'});
  else if(teachingBlueprintObjectives<objectiveCount)issues.push({severity:'warning',code:'PARTIAL_TEACHING_BLUEPRINT',message:`الشرح الإبداعي المخصص يغطي ${teachingBlueprintObjectives} من ${objectiveCount} أهداف فقط.`});
 
@@ -52,11 +61,11 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
  if(objectiveCount>=3&&evidenceKinds.length<2&&evidenceInteractions.length<2)issues.push({severity:'warning',code:'WEAK_EVIDENCE_VARIETY',message:'كل الأهداف تقريبًا تُقاس بالطريقة نفسها؛ يفضّل تنويع دليل الفهم بين تطبيق وتفسير ومطابقة/ترتيب/تجربة عندما تسمح طبيعة الدرس.'});
  const blockers=issues.filter(x=>x.severity==='blocker').length;const warnings=issues.filter(x=>x.severity==='warning').length;
  const score=Math.max(0,100-blockers*22-warnings*7);
- return {lessonId:lesson.id,kind:'learning',ready:blockers===0,score,objectiveCount,directEvidenceObjectives,teachingBlueprintObjectives,teachingBlueprintPercent,evidenceKinds,evidenceInteractions,richInteractionCount,issues};
+ return {lessonId:lesson.id,kind:'learning',ready:blockers===0,score,objectiveCount,directEvidenceObjectives,teachingBlueprintObjectives,teachingBlueprintPercent,teachingSceneCount,interactiveTeachingScenes,interactiveTeachingPercent,evidenceKinds,evidenceInteractions,richInteractionCount,issues};
 }
 
 export function auditCurriculum(lessons:Lesson[]){
  const results=lessons.map(auditLessonQuality);const learning=results.filter(x=>x.kind==='learning');const assessments=results.filter(x=>x.kind==='assessment');const interactions:Record<string,number>={};for(const result of learning)for(const interaction of result.evidenceInteractions)interactions[interaction]=(interactions[interaction]||0)+1;
- const totalObjectives=learning.reduce((s,x)=>s+x.objectiveCount,0);const blueprintObjectives=learning.reduce((s,x)=>s+x.teachingBlueprintObjectives,0);
- return {lessons:results,learningLessons:learning.length,assessments:assessments.length,ready:results.filter(x=>x.ready).length,blocked:results.filter(x=>!x.ready).length,averageScore:learning.length?Math.round(learning.reduce((s,x)=>s+x.score,0)/learning.length):0,interactionCoverage:interactions,lessonsWithRichInteractions:learning.filter(x=>x.richInteractionCount>0).length,lessonsWithTeachingBlueprint:learning.filter(x=>x.teachingBlueprintObjectives>0).length,teachingBlueprintObjectiveCoverage:totalObjectives?Math.round(blueprintObjectives/totalObjectives*100):0,generatedAt:new Date().toISOString()};
+ const totalObjectives=learning.reduce((s,x)=>s+x.objectiveCount,0);const blueprintObjectives=learning.reduce((s,x)=>s+x.teachingBlueprintObjectives,0);const totalTeachingScenes=learning.reduce((s,x)=>s+x.teachingSceneCount,0);const interactiveTeachingScenes=learning.reduce((s,x)=>s+x.interactiveTeachingScenes,0);
+ return {lessons:results,learningLessons:learning.length,assessments:assessments.length,ready:results.filter(x=>x.ready).length,blocked:results.filter(x=>!x.ready).length,averageScore:learning.length?Math.round(learning.reduce((s,x)=>s+x.score,0)/learning.length):0,interactionCoverage:interactions,lessonsWithRichInteractions:learning.filter(x=>x.richInteractionCount>0).length,lessonsWithTeachingBlueprint:learning.filter(x=>x.teachingBlueprintObjectives>0).length,teachingBlueprintObjectiveCoverage:totalObjectives?Math.round(blueprintObjectives/totalObjectives*100):0,interactiveTeachingSceneCoverage:totalTeachingScenes?Math.round(interactiveTeachingScenes/totalTeachingScenes*100):0,generatedAt:new Date().toISOString()};
 }

@@ -43,10 +43,10 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
 
     <section className="subjectPickerSection">
       <div className="sectionTitleKid"><div><span>🧭</span><h2>اختاري مادة</h2></div><p>كل بطاقة تأخذك مباشرة إلى دروس المادة.</p></div>
-      <div className="subjectPicker">{subjectEntries.map(([subject,subjectLessons])=>{
+      <div className="subjectPicker">{subjectEntries.map(([subject,subjectLessons],subjectIndex)=>{
         const meta=subjectInfo[subject]??{icon:'📘',label:subject,desc:'تعلم خطوة بخطوة',tone:'subjectColor1'};
         const lessonCount=subjectLessons.filter(x=>x.kind!=='assessment').length;
-        return <a className={`subjectPickCard ${meta.tone}`} href={`#subject-${subject}`} key={subject}>
+        return <a className={`subjectPickCard ${meta.tone}`} href={`#subject-${subjectIndex}`} key={subject}>
           <span className="subjectPickIcon">{meta.icon}</span><div><strong>{meta.label}</strong><small>{meta.desc}</small></div><b>{lessonCount}</b>
         </a>
       })}</div>
@@ -59,10 +59,10 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
     </div>
 
     <div className="learningMain kidLearningMain">
-      {subjectEntries.map(([subject,subjectLessons])=>{
+      {subjectEntries.map(([subject,subjectLessons],subjectIndex)=>{
         const units=subjectLessons.reduce<Record<string,typeof subjectLessons>>((acc,lesson)=>{const unit=getLessonUnit(lesson);(acc[unit]??=[]).push(lesson);return acc;},{});
         const meta=subjectInfo[subject]??{icon:'📘',label:subject,desc:'تعلم خطوة بخطوة',tone:'subjectColor1'};
-        return <section className={`subjectBlock kidSubjectBlock ${meta.tone}`} id={`subject-${subject}`} key={subject}>
+        return <section className={`subjectBlock kidSubjectBlock ${meta.tone}`} id={`subject-${subjectIndex}`} key={subject}>
           <div className="subjectHeader kidSubjectHeader"><div><span className="subjectIcon">{meta.icon}</span><div><small>مسار المادة</small><h2>{meta.label}</h2></div></div><span className="lessonCountPill">{subjectLessons.filter(x=>x.kind!=='assessment').length} درس</span></div>
           <div className="unitStack">{Object.entries(units).map(([unit,unitLessons],unitIndex)=><section className="kidUnit" key={`${subject}-${unit}`}>
             <div className="unitTitle kidUnitTitle"><div><span className="unitNumber">{unitIndex+1}</span><strong>{unit}</strong></div><span>{unitLessons.filter(x=>x.kind!=='assessment').length} خطوات</span></div>

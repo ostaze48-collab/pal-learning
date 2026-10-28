@@ -4,6 +4,7 @@ import type {Lesson} from '../../../lib/data';
 import {buildLearnerModel} from '../../../lib/learnerModel';
 import {chooseLessonExperience,type ExperienceKind,type ExperiencePlan} from '../../../lib/lessonExperience';
 import ConceptStudio,{supportsConceptStudio} from './ConceptStudio';
+import AdvancedConceptStudio,{supportsAdvancedConceptStudio} from './AdvancedConceptStudio';
 
 type CreativeProfile={attempts:number;successes:number};
 function modeMeta(kind:ExperienceKind){
@@ -15,14 +16,14 @@ export default function AdaptiveLessonExperience({lesson,diagnosticCorrect}:{les
  const profileKey=`creativeProfile:${lesson.student}:${lesson.subject}`;
  const localPlan=useMemo(()=>chooseLessonExperience(lesson,diagnosticCorrect,mastery,creativeSuccess),[lesson,diagnosticCorrect,mastery,creativeSuccess]);
  const [plan,setPlan]=useState<ExperiencePlan>(localPlan);const [mode,setMode]=useState<ExperienceKind>(localPlan.primary);
- const specialized=supportsConceptStudio(lesson);
+ const advanced=supportsAdvancedConceptStudio(lesson);const specialized=advanced||supportsConceptStudio(lesson);
  useEffect(()=>{setMastery(buildLearnerModel(lesson.student,lesson.subject).subjectMastery??null);try{const raw=localStorage.getItem(profileKey);if(raw){const p:CreativeProfile=JSON.parse(raw);if(p.attempts>0)setCreativeSuccess(Math.round(p.successes/p.attempts*100))}}catch{}},[lesson.id,lesson.student,lesson.subject,profileKey]);
- useEffect(()=>{let alive=true;const fallback=chooseLessonExperience(lesson,diagnosticCorrect,mastery,creativeSuccess);setPlan(fallback);setMode(fallback.primary);fetch('/api/ai-teacher/experience',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:lesson.id,diagnosticCorrect,subjectMastery:mastery,recentCreativeSuccess:creativeSuccess})}).then(r=>r.json()).then(data=>{if(!alive||!data?.primary)return;const next:ExperiencePlan={primary:data.primary,secondary:data.secondary,label:String(data.label||fallback.label),icon:String(data.icon||fallback.icon),reason:String(data.reason||fallback.reason),intensity:data.intensity||fallback.intensity,visualLabel:String(data.visualLabel||fallback.visualLabel)};setPlan(next);setMode(next.primary)}).catch(()=>{});return()=>{alive=false}},[lesson.id,diagnosticCorrect,mastery]);
+ useEffect(()=>{let alive=true;const fallback=chooseLessonExperience(lesson,diagnosticCorrect,mastery,creativeSuccess);setPlan(fallback);setMode(fallback.primary);fetch('/api/ai-teacher/experience',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:lesson.id,diagnosticCorrect,subjectMastery:mastery,recentCreativeSuccess:creativeSuccess})}).then(r=>r.json()).then(data=>{if(!alive||!data?.primary)return;const next:ExperiencePlan={primary:data.primary,secondary:data.secondary,label:String(data.label||fallback.label),icon:String(data.icon||fallback.icon),reason:String(data.reason||fallback.reason),intensity:data.intensity||fallback.intensity,visualLabel:String(data.visualLabel||fallback.visualLabel),task:data.task||fallback.task};setPlan(next);setMode(next.primary)}).catch(()=>{});return()=>{alive=false}},[lesson.id,diagnosticCorrect,mastery]);
  function recordOutcome(ok:boolean){let p:CreativeProfile={attempts:0,successes:0};try{const raw=localStorage.getItem(profileKey);if(raw)p=JSON.parse(raw)}catch{}p={attempts:Number(p.attempts||0)+1,successes:Number(p.successes||0)+(ok?1:0)};localStorage.setItem(profileKey,JSON.stringify(p));}
  const meta=modeMeta(mode);
  return <section className="creativeLessonLab">
    <div className="creativeLabHead"><div className="creativeLabIcon">{specialized?'🧠':meta.icon}</div><div><span>معلمتك اختارت طريقة التعلم هذه</span><h3>{specialized?'مختبر الفكرة التفاعلي':meta.label}</h3><p>{plan.reason} <b>التمثيل المناسب:</b> {plan.visualLabel}.</p></div><span className={`creativeLevel ${plan.intensity}`}>{plan.intensity==='guided'?'موجّه':plan.intensity==='challenge'?'تحدٍ أعلى':'متوازن'}</span></div>
-   {specialized&&<ConceptStudio lesson={lesson} onOutcome={recordOutcome}/>} 
+   {advanced?<AdvancedConceptStudio lesson={lesson} onOutcome={recordOutcome}/>:specialized?<ConceptStudio lesson={lesson} onOutcome={recordOutcome}/>:null}
    {specialized&&<div className="creativeSecondaryLabel"><span>✨ طريقة ثانية للتثبيت</span><small>يمكنك تجربة نشاط آخر بعد مختبر الفكرة.</small></div>}
    <div className={`creativeModeSwitch ${specialized?'secondaryModes':''}`}><button className={mode===plan.primary?'active':''} onClick={()=>setMode(plan.primary)}>{modeMeta(plan.primary).icon} {modeMeta(plan.primary).label}</button>{plan.secondary!==plan.primary&&<button className={mode===plan.secondary?'active':''} onClick={()=>setMode(plan.secondary)}>{modeMeta(plan.secondary).icon} {modeMeta(plan.secondary).label}</button>}</div>
    {mode==='slides'&&<MiniSlides lesson={lesson}/>} 

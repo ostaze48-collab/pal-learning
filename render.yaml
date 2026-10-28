@@ -1,59 +1,7 @@
 services:
   - type: web
-    name: pal-learning-api
-    runtime: python
-    rootDir: apps/api
-    buildCommand: pip install -r requirements.txt
-    startCommand: alembic upgrade head && python -m app.db.bootstrap && uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /ready
-    envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: pal-learning-db
-          property: connectionString
-      - key: JWT_SECRET
-        generateValue: true
-      - key: ALLOWED_ORIGINS
-        value: https://pal-learning-web.onrender.com
-      - key: EXPERIMENTAL_DEMO
-        value: "true"
-      - key: AI_PROVIDER
-        value: LOCAL_MOCK
-      - key: STORAGE_BACKEND
-        value: R2
-      - key: R2_BUCKET
-        sync: false
-      - key: R2_ENDPOINT_URL
-        sync: false
-      - key: R2_ACCESS_KEY_ID
-        sync: false
-      - key: R2_SECRET_ACCESS_KEY
-        sync: false
-      - key: R2_PUBLIC_BASE_URL
-        sync: false
-      - key: STAGING_PREVIEW_TTL_SECONDS
-        value: "900"
-      - key: MAX_SOURCE_BYTES
-        value: "73400320"
-      - key: SOURCE_FETCH_TIMEOUT_SECONDS
-        value: "45"
-      - key: CURRICULUM_SOURCE_HOSTS
-        value: moe.edu.ps,www.sh-pal.com,sh-pal.com,download.sh-pal.com,elearn.edu.ps,elearnps.blob.core.windows.net
-      # Real AI stays opt-in to avoid accidental spend. When ready, set in the dashboard:
-      # AI_PROVIDER=OPENAI, OPENAI_API_KEY, OPENAI_MODEL (or OPENAI_MODEL_BALANCED).
-
-  - type: web
-    name: pal-learning-web
+    name: salma-sama-learning
     runtime: node
-    rootDir: apps/web
     buildCommand: npm install && npm run build
     startCommand: npm run start -- -p $PORT
     healthCheckPath: /
-    envVars:
-      - key: NEXT_PUBLIC_API_URL
-        sync: false
-
-databases:
-  - name: pal-learning-db
-    databaseName: pal_learning_db
-    user: pal_learning_db_user

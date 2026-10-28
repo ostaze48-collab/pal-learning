@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {getStudent,getStudentLessons,getLessonUnit} from '../../../lib/data';
 import StudentProgress from './StudentProgress';
+import SubjectProgressMini from './SubjectProgressMini';
 import DailyPlan from './DailyPlan';
 import LessonStatus from './LessonStatus';
 import RecoveryStatus from './RecoveryStatus';
@@ -47,7 +48,7 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
         const meta=subjectInfo[subject]??{icon:'📘',label:subject,desc:'تعلم خطوة بخطوة',tone:'subjectColor1'};
         const lessonCount=subjectLessons.filter(x=>x.kind!=='assessment').length;
         return <a className={`subjectPickCard ${meta.tone}`} href={`#subject-${subjectIndex}`} key={subject}>
-          <span className="subjectPickIcon">{meta.icon}</span><div><strong>{meta.label}</strong><small>{meta.desc}</small></div><b>{lessonCount}</b>
+          <span className="subjectPickIcon">{meta.icon}</span><div className="subjectPickCopy"><strong>{meta.label}</strong><small>{meta.desc}</small><SubjectProgressMini lessonIds={subjectLessons.map(x=>x.id)}/></div><b className="subjectLessonCount">{lessonCount}</b>
         </a>
       })}</div>
     </section>
@@ -63,7 +64,7 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
         const units=subjectLessons.reduce<Record<string,typeof subjectLessons>>((acc,lesson)=>{const unit=getLessonUnit(lesson);(acc[unit]??=[]).push(lesson);return acc;},{});
         const meta=subjectInfo[subject]??{icon:'📘',label:subject,desc:'تعلم خطوة بخطوة',tone:'subjectColor1'};
         return <section className={`subjectBlock kidSubjectBlock ${meta.tone}`} id={`subject-${subjectIndex}`} key={subject}>
-          <div className="subjectHeader kidSubjectHeader"><div><span className="subjectIcon">{meta.icon}</span><div><small>مسار المادة</small><h2>{meta.label}</h2></div></div><span className="lessonCountPill">{subjectLessons.filter(x=>x.kind!=='assessment').length} درس</span></div>
+          <div className="subjectHeader kidSubjectHeader"><div><span className="subjectIcon">{meta.icon}</span><div><small>مسار المادة</small><h2>{meta.label}</h2></div></div><div className="subjectHeaderProgress"><SubjectProgressMini lessonIds={subjectLessons.map(x=>x.id)}/><span className="lessonCountPill">{subjectLessons.filter(x=>x.kind!=='assessment').length} درس</span></div></div>
           <div className="unitStack">{Object.entries(units).map(([unit,unitLessons],unitIndex)=><section className="kidUnit" key={`${subject}-${unit}`}>
             <div className="unitTitle kidUnitTitle"><div><span className="unitNumber">{unitIndex+1}</span><strong>{unit}</strong></div><span>{unitLessons.filter(x=>x.kind!=='assessment').length} خطوات</span></div>
             <div className="lessonList kidLessonList">{unitLessons.map((l,i)=>{
@@ -78,5 +79,5 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
         </section>
       })}
     </div>
-  </div></main>
+  </div></main>;
 }

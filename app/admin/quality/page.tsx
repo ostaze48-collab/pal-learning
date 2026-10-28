@@ -17,39 +17,40 @@ export default function QualityDashboard(){
  const directEvidence=learningRows.reduce((s,x)=>s+x.directEvidenceObjectives,0);
  const evidenceCoverage=totalObjectives?Math.round(directEvidence/totalObjectives*100):0;
  const richCoverage=audit.learningLessons?Math.round(audit.lessonsWithRichInteractions/audit.learningLessons*100):0;
- const sorted=[...audit.lessons].sort((a,b)=>Number(a.ready)-Number(b.ready)||a.teachingBlueprintPercent-b.teachingBlueprintPercent||a.score-b.score);
+ const sorted=[...audit.lessons].sort((a,b)=>Number(a.ready)-Number(b.ready)||a.teachingBlueprintPercent-b.teachingBlueprintPercent||a.interactiveTeachingPercent-b.interactiveTeachingPercent||a.score-b.score);
  const interactionRows=Object.entries(audit.interactionCoverage).sort((a,b)=>b[1]-a[1]);
  return <main className={styles.page}><div className={styles.wrap}>
-  <header className={styles.head}><div><span className={styles.tag}>لوحة الإدارة · جودة المحتوى</span><h1>هل كل درس يعلّم ويقيس ما يجب؟</h1><p>أولوية الجودة تبدأ من الشرح الإبداعي الكامل، ثم دليل التعلم والقياس. هذه الشاشة لا تظهر للأطفال.</p></div><div className={styles.note}>آخر تدقيق: {new Date(audit.generatedAt).toLocaleString('ar')}</div></header>
+  <header className={styles.head}><div><span className={styles.tag}>لوحة الإدارة · جودة المحتوى</span><h1>هل كل درس يعلّم ويقيس ما يجب؟</h1><p>أولوية الجودة تبدأ من الشرح الإبداعي الكامل، ثم التمثيل البصري والتفاعل، ثم دليل التعلم والقياس.</p></div><div className={styles.note}>آخر تدقيق: {new Date(audit.generatedAt).toLocaleString('ar')}</div></header>
   <section className={styles.summary}>
-   <div className={styles.metric}><strong>{audit.learningLessons}</strong><span>دروس تعلم فعلية</span></div>
-   <div className={styles.metric}><strong>{audit.teachingBlueprintObjectiveCoverage}%</strong><span>الأهداف ذات شرح إبداعي مخصص</span></div>
+   <div className={styles.metric}><strong>{audit.teachingBlueprintObjectiveCoverage}%</strong><span>الأهداف ذات شرح مخصص</span></div>
+   <div className={styles.metric}><strong>{audit.interactiveTeachingSceneCoverage}%</strong><span>مشاهد الشرح ذات نموذج/تفاعل فعلي</span></div>
    <div className={styles.metric}><strong>{evidenceCoverage}%</strong><span>الأهداف ذات دليل تحقق مباشر</span></div>
-   <div className={styles.metric}><strong>{richCoverage}%</strong><span>دروس تستخدم تفاعلًا غنيًا</span></div>
+   <div className={styles.metric}><strong>{richCoverage}%</strong><span>دروس تستخدم أدلة تفاعلية غنية</span></div>
   </section>
   <section className={styles.panel}>
-   <div className={styles.sectionTitle}><h2>جودة الشرح أولًا</h2><span className={styles.tag}>{audit.lessonsWithTeachingBlueprint} درس بدأ يحصل على Blueprint مخصص</span></div>
+   <div className={styles.sectionTitle}><h2>جودة الشرح أولًا</h2><span className={styles.tag}>{audit.lessonsWithTeachingBlueprint} من {audit.learningLessons} درس بدأ يحصل على Blueprint مخصص</span></div>
    <div className={styles.bar}><span style={{width:`${audit.teachingBlueprintObjectiveCoverage}%`}}/></div>
-   <p className={styles.note}>Teaching Blueprint يعني أن الهدف لا يعتمد فقط على قالب المادة العام؛ له مشاهد وأمثلة وأسئلة تفكير صُممت خصيصًا لبناء فكرته عند الطفل.</p>
+   <div className={styles.filters}><span className={styles.pill}>🎬 Blueprint للأهداف · {audit.teachingBlueprintObjectiveCoverage}%</span><span className={styles.pill}>🧩 مشاهد بصرية/تفاعلية · {audit.interactiveTeachingSceneCoverage}%</span></div>
+   <p className={styles.note}>Blueprint يعني أن الفكرة لها مسار شرح مصمم خصيصًا. التفاعل البصري يقيس خطوة إضافية: هل المشهد نفسه يحتوي نموذجًا أو تجربة أو أداة يتعامل معها الطفل، وليس نصًا فقط؟</p>
   </section>
   <section className={styles.panel}>
    <div className={styles.sectionTitle}><h2>صحة دروس التعلم</h2><span className={styles.tag}>متوسط الجودة {audit.averageScore}%</span></div>
    <div className={styles.bar}><span style={{width:`${audit.averageScore}%`}}/></div>
    <div className={styles.filters}><span className={styles.pill}>⛔ محجوب {blocked.length}</span><span className={styles.pill}>⚠️ يحتاج تطوير {warnings.length}</span><span className={styles.pill}>✅ نظيف {clean.length}</span><span className={styles.pill}>🎯 اختبارات مستقلة {audit.assessments}</span></div>
-   <p className={styles.note}>اختبارات الوحدة لا تدخل في متوسط جودة الشرح. الدرس الذي لا يملك شرحًا مخصصًا يظهر الآن كمهمة تطوير حتى لو كانت أسئلته جيدة.</p>
+   <p className={styles.note}>اختبارات الوحدة لا تدخل في متوسط جودة الشرح. الدرس الذي لا يملك شرحًا مخصصًا يظهر كمهمة تطوير حتى لو كانت أسئلته جيدة.</p>
   </section>
   <section className={styles.panel}>
-   <div className={styles.sectionTitle}><h2>تنوع أدلة التعلم</h2><span className={styles.note}>دروس التعلم فقط</span></div>
+   <div className={styles.sectionTitle}><h2>تنوع أدلة التعلم</h2><span className={styles.note}>بعد اكتمال الشرح</span></div>
    <div className={styles.filters}>{interactionRows.map(([kind,count])=><span className={styles.pill} key={kind}>{interactionLabel(kind)} · {count}</span>)}</div>
    <p className={styles.note}>الهدف ليس استخدام كل الأنواع في كل درس، بل اختيار الدليل الأنسب لطبيعة المهارة ومنع الاعتماد المفرط على الاختيار من متعدد.</p>
   </section>
   <section className={styles.panel}>
-   <div className={styles.sectionTitle}><h2>الدروس حسب أولوية التطوير</h2><span className={styles.note}>غياب الشرح المخصص يرفع الأولوية</span></div>
+   <div className={styles.sectionTitle}><h2>الدروس حسب أولوية التطوير</h2><span className={styles.note}>الشرح المخصص والتفاعل البصري لهما الأولوية</span></div>
    <div className={styles.table}>{sorted.map(row=>{const lesson=byLesson.get(row.lessonId);if(!lesson)return null;return <div className={styles.row} key={row.lessonId}>
     <div><Link href={`/lesson/${row.lessonId}`}><strong>{lesson.title}</strong></Link><div className={styles.subject}>{lesson.student==='salma'?'سلمى · صف 5':'سما · صف 7'} · {subjectLabel(lesson.subject)} · {row.kind==='assessment'?'اختبار':'درس تعلم'}</div></div>
     <div><span className={`${styles.status} ${!row.ready?styles.blocked:row.issues.length?styles.warning:styles.ready}`}>{!row.ready?'محجوب':row.issues.length?'تطوير':'جاهز'}</span></div>
     <div><strong>{row.kind==='learning'?`${row.teachingBlueprintPercent}%`:'—'}</strong><small> شرح مخصص</small><div className={styles.bar}><span style={{width:`${row.kind==='learning'?row.teachingBlueprintPercent:100}%`}}/></div></div>
-    <div className={styles.issues}>{row.issues.length?row.issues.slice(0,4).map((issue,i)=><span className={styles.issue} key={`${issue.code}-${i}`}>{issue.severity==='blocker'?'⛔':'⚠️'} {issue.message}</span>):<span className={styles.issue}>✅ لا توجد ملاحظات حالية</span>}{row.kind==='learning'&&row.evidenceInteractions.map(kind=><span className={styles.issue} key={kind}>تفاعل: {interactionLabel(kind)}</span>)}</div>
+    <div className={styles.issues}>{row.kind==='learning'&&<span className={styles.issue}>🧩 مشاهد تفاعلية {row.interactiveTeachingPercent}%</span>}{row.issues.length?row.issues.slice(0,3).map((issue,i)=><span className={styles.issue} key={`${issue.code}-${i}`}>{issue.severity==='blocker'?'⛔':'⚠️'} {issue.message}</span>):<span className={styles.issue}>✅ لا توجد ملاحظات حالية</span>}{row.kind==='learning'&&row.evidenceInteractions.map(kind=><span className={styles.issue} key={kind}>دليل: {interactionLabel(kind)}</span>)}</div>
    </div>})}</div>
   </section>
  </div></main>;

@@ -1,0 +1,43 @@
+'use client';
+import {useMemo,useState} from 'react';
+import type {Lesson} from '../../../lib/data';
+
+function textOf(lesson:Lesson){return [lesson.id,lesson.title,lesson.summary,...lesson.learningPoints,lesson.example].join(' ').toLowerCase()}
+export function supportsLanguageConceptStudio(lesson:Lesson){return lesson.kind!=='assessment'&&(lesson.subject==='اللغة العربية'||lesson.subject==='English')}
+
+export default function LanguageConceptStudio({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
+ const t=textOf(lesson);
+ if(/reading|قراءة|شعري|نص|text|keep-in-touch|holiday|animal-magic/.test(t))return <ReadingDetective lesson={lesson} onOutcome={onOutcome}/>;
+ if(/report|message|directions|ترتيب|كتابة|write|writing/.test(t))return <SequenceBuilder lesson={lesson} onOutcome={onOutcome}/>;
+ if(/لام شمسية|لام قمرية|التاء المربوطة|التاء المفتوحة|spelling|punctuation/.test(t))return <LanguageSort lesson={lesson} onOutcome={onOutcome}/>;
+ return <PatternBuilder lesson={lesson} onOutcome={onOutcome}/>;
+}
+
+function Head({icon,eyebrow,title,text}:{icon:string;eyebrow:string;title:string;text:string}){return <div className="languageStudioHead"><span>{icon}</span><div><small>{eyebrow}</small><h4>{title}</h4><p>{text}</p></div></div>}
+
+function ReadingDetective({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
+ const q=lesson.questions[0];const [pick,setPick]=useState<number|null>(null);const [evidence,setEvidence]=useState(false);if(!q)return null;
+ function choose(i:number){if(pick!==null)return;setPick(i);onOutcome?.(i===q.correct)}
+ return <div className="languageConceptStudio readingDetective"><Head icon="🔎" eyebrow="محقق القراءة" title={lesson.subject==='English'?'Read for meaning, then prove it':'افهمي المعنى ثم ابحثي عن الدليل'} text={lesson.subject==='English'?'Do not hunt for one word. First understand the situation, then find the detail that proves your answer.':'لا نبحث عن كلمة منفردة فقط؛ نفهم السياق أولًا ثم نربط الإجابة بدليل أو معنى واضح.'}/><div className="readingContext"><small>{lesson.subject==='English'?'Context / model':'سياق أو مثال قصير'}</small><p>{lesson.example}</p></div><div className="readingGoalRow">{lesson.learningPoints.slice(0,3).map((x,i)=><span key={i}>{i+1}. {x}</span>)}</div><h5>{q.text}</h5><div className="studioChoices">{q.options.map((x,i)=><button key={x} disabled={pick!==null} onClick={()=>choose(i)}>{x}</button>)}</div>{pick!==null&&<button className="revealEvidence" onClick={()=>setEvidence(true)}>🔎 {lesson.subject==='English'?'Show the evidence':'أرني الدليل والتفسير'}</button>}{evidence&&<div className={pick===q.correct?'studioFeedback ok':'studioFeedback learn'}><strong>{pick===q.correct?(lesson.subject==='English'?'Good reading — your answer fits the evidence':'ممتاز — ربطتِ الإجابة بالمعنى'):(lesson.subject==='English'?'Use the context, not a guess':'نعود للسياق بدل التخمين')}</strong><p>{q.explanation}</p><small>{lesson.subject==='English'?'Now say why the other choice does not fit.':'الخطوة الأقوى الآن: اشرحي لماذا لا يناسب خيار آخر المعنى.'}</small></div>}</div>
+}
+
+function PatternBuilder({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
+ const sentence=useMemo(()=>{const raw=(lesson.example||lesson.summary).split(/[.!?؟]/)[0].trim();return raw.split(/\s+/).filter(Boolean).slice(0,10)},[lesson.id,lesson.example,lesson.summary]);
+ const shuffled=useMemo(()=>sentence.map((word,i)=>({word,i,rank:(i*7+lesson.id.length*5)%19})).sort((a,b)=>a.rank-b.rank||b.i-a.i),[lesson.id,sentence.join('|')]);
+ const [picked,setPicked]=useState<number[]>([]);const [checked,setChecked]=useState(false);if(sentence.length<3)return null;
+ function add(i:number){if(checked||picked.includes(i))return;setPicked(v=>[...v,i])}
+ function check(){const ok=picked.length===sentence.length&&picked.every((x,pos)=>x===pos);setChecked(true);onOutcome?.(ok)}
+ const pattern=lesson.learningPoints.slice(0,3);
+ return <div className="languageConceptStudio patternBuilder"><Head icon="🧱" eyebrow={lesson.subject==='English'?'Pattern lab':'مختبر القاعدة'} title={lesson.subject==='English'?'Build the sentence, then notice the pattern':'ابني الجملة ثم اكتشفي النمط'} text={lesson.subject==='English'?'Meaning first. The rule becomes useful after you see how the sentence works.':'نبدأ بالمعنى والجملة، ثم نسمّي القاعدة بعد أن يظهر النمط.'}/><div className="patternHints">{pattern.map((x,i)=><span key={i}>{x}</span>)}</div><div className="builtSentence">{picked.length?picked.map((idx,n)=><button key={`${idx}-${n}`} onClick={()=>{if(!checked)setPicked(v=>v.filter((_,p)=>p!==n))}}>{sentence[idx]}</button>):<span>{lesson.subject==='English'?'Tap words to build the model sentence':'اضغطي الكلمات لبناء جملة المثال'}</span>}</div><div className="wordBank">{shuffled.map(item=><button key={item.i} disabled={picked.includes(item.i)||checked} onClick={()=>add(item.i)}>{item.word}</button>)}</div><div className="studioControls"><button onClick={()=>{setPicked([]);setChecked(false)}}>{lesson.subject==='English'?'Reset':'إعادة'}</button><button className="studioCheck" disabled={picked.length!==sentence.length} onClick={check}>{lesson.subject==='English'?'Check sentence':'تحقق من الجملة'}</button></div>{checked&&<div className={picked.every((x,pos)=>x===pos)?'studioFeedback ok':'studioFeedback learn'}><strong>{picked.every((x,pos)=>x===pos)?(lesson.subject==='English'?'⭐ Correct pattern':'⭐ ترتيب صحيح'):(lesson.subject==='English'?'Look at the model and the word roles':'راجعي وظيفة كل كلمة في الجملة')}</strong><p>{lesson.learningPoints[0]}</p></div>}</div>
+}
+
+function LanguageSort({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
+ const q=lesson.questions[0];const [pick,setPick]=useState<number|null>(null);if(!q)return null;function choose(i:number){if(pick!==null)return;setPick(i);onOutcome?.(i===q.correct)}
+ return <div className="languageConceptStudio languageSort"><Head icon="🧲" eyebrow={lesson.subject==='English'?'Notice & classify':'صنّفي من خلال الشكل والصوت'} title={lesson.title} text={lesson.subject==='English'?'Notice the pattern, then classify the example.':'شاهدي الكلمة أو الجملة، انطقيها عند الحاجة، ثم اختاري التصنيف من الدليل.'}/><div className="languageRuleCards">{lesson.learningPoints.slice(0,3).map((x,i)=><div key={i}><b>{i+1}</b><span>{x}</span></div>)}</div><h5>{q.text}</h5><div className="studioChoices">{q.options.map((x,i)=><button key={x} disabled={pick!==null} onClick={()=>choose(i)}>{x}</button>)}</div>{pick!==null&&<div className={pick===q.correct?'studioFeedback ok':'studioFeedback learn'}><strong>{pick===q.correct?'⭐ صحيح':'💡 راجعي العلامة التي تميز النوع'}</strong><p>{q.explanation}</p></div>}</div>
+}
+
+function SequenceBuilder({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
+ const source=lesson.learningPoints.slice(0,Math.min(4,lesson.learningPoints.length));const shuffled=useMemo(()=>source.map((text,i)=>({text,i,rank:(i*5+lesson.id.length)%11})).sort((a,b)=>a.rank-b.rank||b.i-a.i),[lesson.id,source.join('|')]);const [picked,setPicked]=useState<number[]>([]);const done=picked.length===source.length;const correct=done&&picked.every((x,pos)=>x===pos);if(source.length<2)return null;
+ function add(i:number){if(picked.includes(i)||done)return;const next=[...picked,i];setPicked(next);if(next.length===source.length)onOutcome?.(next.every((x,pos)=>x===pos))}
+ return <div className="languageConceptStudio sequenceBuilder"><Head icon="🗂️" eyebrow={lesson.subject==='English'?'Structure builder':'بنّاء التسلسل'} title={lesson.subject==='English'?'Put the communication in a clear order':'رتبي الأفكار حتى يصبح النص واضحًا'} text={lesson.subject==='English'?'Good writing and directions need a purpose and a logical sequence.':'الكتابة الواضحة لا تعتمد على القاعدة وحدها؛ تحتاج ترتيبًا يخدم المعنى.'}/><div className="sequenceTrack">{picked.map((idx,n)=><div key={`${idx}-${n}`}><b>{n+1}</b><span>{source[idx]}</span></div>)}</div><div className="sequenceBank">{shuffled.map(item=><button key={item.i} disabled={picked.includes(item.i)||done} onClick={()=>add(item.i)}>{item.text}</button>)}</div>{picked.length>0&&!done&&<button className="resetMini" onClick={()=>setPicked([])}>{lesson.subject==='English'?'Start again':'ابدئي من جديد'}</button>}{done&&<div className={correct?'studioFeedback ok':'studioFeedback learn'}><strong>{correct?'⭐ تسلسل منطقي':'💡 أعيدي بناء الترتيب'}</strong><p>{correct?lesson.example:(lesson.subject==='English'?'Think: opening/purpose → key details → ending.':'فكري: بداية المعنى → التفاصيل → الخاتمة أو النتيجة.')}</p><button onClick={()=>setPicked([])}>{lesson.subject==='English'?'Try again':'إعادة المحاولة'}</button></div>}</div>
+}

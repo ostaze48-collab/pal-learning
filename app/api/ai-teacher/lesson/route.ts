@@ -5,7 +5,8 @@ import {getCurriculumSources,getRecoveryGradeBand} from '../../../../lib/curricu
 
 type Mode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 type Weakness={title:string;score:number;gradeAnchor?:string;cause?:string;missedFacts?:Array<{text:string;selected:string;correct:string}>};
-type Body={lessonId?:string;mode?:Mode;weaknesses?:Weakness[];previousExplanation?:string};
+type LastCheck={answer?:string;outcome?:'understood'|'partial'|'misconception';feedback?:string};
+type Body={lessonId?:string;mode?:Mode;weaknesses?:Weakness[];previousExplanation?:string;lastCheck?:LastCheck};
 type TeacherCard={title:string;body:string;kind:'explain'|'example'|'tip'|'check'};
 type Payload={title:string;intro:string;cards:TeacherCard[];checkQuestion?:{text:string;hint:string};teacherNote?:string};
 
@@ -34,6 +35,7 @@ export async function POST(request:Request){
   const officialSources=[...priorGrades,student.grade].flatMap(g=>getCurriculumSources(g,lesson.subject));
   const sourceList=[...new Map(officialSources.map(x=>[x.id,x])).values()].slice(0,12).map(x=>`- ${x.title} | ${x.kind} | ثقة ${x.priority}/100 | ${x.url}`).join('\n');
   const weaknessText=weaknesses.length?weaknesses.map(w=>`- ${w.title}: ${w.score}%${w.gradeAnchor?` (${w.gradeAnchor})`:''}${w.cause?` — ${w.cause}`:''}${w.missedFacts?.length?` — أخطاء: ${w.missedFacts.map(m=>`${m.text} [اختارت ${m.selected}، الصحيح ${m.correct}]`).join('؛ ')}`:''}`).join('\n'):'- لا توجد فجوات دقيقة محفوظة لهذه المادة.';
+  const lastCheckText=body.lastCheck?.answer?`\nمحاولة الفهم الأخيرة للطالبة:\n- إجابة الطالبة: ${String(body.lastCheck.answer).slice(0,700)}\n- التقييم: ${body.lastCheck.outcome||'غير محدد'}\n- ملاحظة المعلم: ${String(body.lastCheck.feedback||'').slice(0,800)}\nتعليمات إعادة التدريس: لا تكرر الشرح السابق. حدد الفكرة التي سببت الخلط من هذه الإجابة، ثم أعد بناء الشرح حولها بمثال جديد أصغر وأسهل، وبعده سؤال تحقق جديد مختلف.`:'';
   const styleMap:Record<Mode,string>={overview:'اشرح الدرس شرحًا متدرجًا واضحًا من الفكرة إلى المثال ثم تحقق قصير.',simplify:'أعد الشرح بأبسط لغة ممكنة، جمل قصيرة، وفكرة واحدة في كل خطوة. لا تفترض فهم المصطلحات.',step_by_step:'حوّل الفكرة إلى خطوات مرقمة صغيرة جدًا مع مثال محلول خطوة بخطوة.',analogy:'استخدم تشبيهًا أو قصة أو تصورًا بصريًا مناسبًا لعمر الطالبة، ثم اربطه بالمفهوم الحقيقي حتى لا يبقى التشبيه مضللًا.',real_world:'اربط المفهوم بموقف من الحياة اليومية أو البيئة المحيطة ثم أعد ربطه مباشرة بهدف المنهاج.',deep:'وسّع الشرح بمعلومات إضافية صحيحة ومناسبة للعمر، مع الحفاظ على هدف الدرس الحالي وعدم إغراق الطالبة.',check:'ركز على سؤال أو سؤالين يكشفان هل فهمت الطالبة الفكرة فعلًا، مع تلميح بدل الحل المباشر.'};
   const hasCurriculumStore=Boolean(process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID);
   const instructions=`أنت المعلم الأساسي في منصة تعليم منزلية فلسطينية لطفلتين. مهمتك ليست الدردشة العامة؛ أنت معلم شخصي تكيفي.
@@ -42,13 +44,14 @@ export async function POST(request:Request){
 3) استخدم نتائج الفجوات السابقة لتحديد نقطة البداية. إذا كانت فجوة سابقة تمنع الفهم، اشرحها باختصار ثم عد للدرس الحالي.
 4) استخدم التدرج من المعلوم للمجهول، أمثلة محلولة، تمثيلًا بصريًا/لفظيًا، استرجاعًا نشطًا، وسؤال تحقق.
 5) لا تكتفِ بالتعريف: فسّر لماذا وكيف، ثم مثالًا، ومثالًا مضادًا عند فائدته.
-6) في الرياضيات لا تقفز خطوات؛ في العلوم استخدم السبب والنتيجة؛ في العربية السياق ثم القاعدة؛ في English استخدم الإنجليزية البسيطة مع توضيح عربي عند الحاجة.
-7) إذا بحثت على الويب ووجدت مصدرًا غير رسمي، لا تعامله كمرجع منهجي أساسي. استخدمه فقط كمصدر مساعد عند الحاجة.
-8) لا تعرض للطالبة تفاصيل تقنية عن المصدر أو الثقة.
-9) لا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
-10) ${styleMap[mode]}
-11) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
-  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nفجوات مرتبطة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}`;
+6) إذا وصلت لك محاولة فهم سابقة خاطئة أو جزئية، اعتبرها أهم إشارة تربوية: شخص سبب الخلط، غيّر التمثيل أو المثال أو مستوى الخطوات، ولا تكرر نفس الجمل بصياغة مختلفة فقط.
+7) في الرياضيات لا تقفز خطوات؛ في العلوم استخدم السبب والنتيجة؛ في العربية السياق ثم القاعدة؛ في English استخدم الإنجليزية البسيطة مع توضيح عربي عند الحاجة.
+8) إذا بحثت على الويب ووجدت مصدرًا غير رسمي، لا تعامله كمرجع منهجي أساسي. استخدمه فقط كمصدر مساعد عند الحاجة.
+9) لا تعرض للطالبة تفاصيل تقنية عن المصدر أو الثقة.
+10) لا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
+11) ${styleMap[mode]}
+12) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
+  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nفجوات مرتبطة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
 
   try{
     const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const tools:any[]=[];

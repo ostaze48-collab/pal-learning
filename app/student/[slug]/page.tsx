@@ -27,9 +27,10 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
           const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
           return <a className="subjectNavLink" href={`#subject-${index}`} key={subject}><span>{icon}</span><span style={{flex:1}}>{subject}</span><small>{subjectLessons.filter(x=>x.kind!=='assessment').length}</small></a>
         })}
+        <Link className="subjectNavLink" href={`/student/${slug}/practice`}><span>🎯</span><span style={{flex:1}}>مختبر التدريب</span><small>اختبار</small></Link>
         <Link className="subjectNavLink" href={`/student/${slug}/recovery`}><span>🧩</span><span style={{flex:1}}>فجوات سابقة</span><small>AI</small></Link>
         <Link className="subjectNavLink" href={`/student/${slug}/resources`}><span>📚</span><span style={{flex:1}}>بنك الموارد</span><small>موثوق</small></Link>
-        <div className="subjectNavHint">يمكنك الانتقال بين المواد، فحص الفجوات، أو فتح الكتب وأوراق العمل وأدلة المعلم من بنك الموارد.</div>
+        <div className="subjectNavHint">يمكنك الانتقال بين المواد، تشغيل اختبار مختلط، فحص الفجوات، أو فتح الكتب وأوراق العمل وأدلة المعلم.</div>
       </aside>
 
       <div className="learningMain">

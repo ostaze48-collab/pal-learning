@@ -1,7 +1,6 @@
 import Link from 'next/link';
 import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
 import LessonPlayerV2 from './LessonPlayerV2';
-import LessonProgressRail from './LessonProgressRail';
 import ObjectiveCoverageBridge from './ObjectiveCoverageBridge';
 import LearningCanvas from './LearningCanvas';
 
@@ -37,8 +36,6 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
     <div className="missionCopy"><span className="questEyebrow">{lesson.kind==='assessment'?'🏆 تحدي قصير':'✨ رحلة تعلم'}</span><h1>{lesson.title}</h1><p>{lesson.summary}</p></div>
     <div className="missionFacts"><div><span>⏱</span><strong>{lesson.minutes}</strong><small>دقيقة تقريبًا</small></div><div><span>🧭</span><strong>4</strong><small>مراحل تعلم</small></div></div>
   </section>
-
-  <LessonProgressRail/>
 
   <div className="kidLessonLayout">
     <section className="lessonMainPane"><LearningCanvas lesson={lesson}/><LessonPlayerV2 lesson={lesson}/></section>

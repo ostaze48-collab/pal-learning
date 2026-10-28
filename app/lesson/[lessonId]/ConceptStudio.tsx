@@ -2,13 +2,15 @@
 import {useMemo,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
 import {chooseVisualStrategy} from '../../../lib/visualTeaching';
+import PrimeFactorizationStudio from './PrimeFactorizationStudio';
 
 function textOf(lesson:Lesson){return [lesson.title,lesson.summary,...lesson.learningPoints,lesson.example].join(' ').toLowerCase()}
 function languageGrammarLesson(lesson:Lesson){const t=textOf(lesson);return /(ضمير|فعل|اسم|جملة|قاعدة|همزة|تعريف|تنكير|verb|tense|present|past|perfect|question|pronoun|comparative|sentence|grammar|punctuation)/i.test(t)}
-export function supportsConceptStudio(lesson:Lesson){const strategy=chooseVisualStrategy(lesson).strategy;return strategy==='fraction_model'||strategy==='geometry'||strategy==='factor_tree'||strategy==='number_line'||(lesson.subject==='العلوم والحياة'&&strategy==='cause_effect')||((lesson.subject==='English'||lesson.subject==='اللغة العربية')&&languageGrammarLesson(lesson))}
+export function supportsConceptStudio(lesson:Lesson){const strategy=chooseVisualStrategy(lesson).strategy;return lesson.id==='g5-math-prime-factorization'||strategy==='fraction_model'||strategy==='geometry'||strategy==='factor_tree'||strategy==='number_line'||(lesson.subject==='العلوم والحياة'&&strategy==='cause_effect')||((lesson.subject==='English'||lesson.subject==='اللغة العربية')&&languageGrammarLesson(lesson))}
 
 export default function ConceptStudio({lesson,onOutcome}:{lesson:Lesson;onOutcome?:(ok:boolean)=>void}){
  const strategy=chooseVisualStrategy(lesson).strategy;
+ if(lesson.id==='g5-math-prime-factorization')return <PrimeFactorizationStudio lesson={lesson} onOutcome={onOutcome}/>;
  if(strategy==='fraction_model')return <FractionStudio lesson={lesson} onOutcome={onOutcome}/>;
  if(strategy==='geometry')return <GeometryStudio lesson={lesson} onOutcome={onOutcome}/>;
  if(strategy==='factor_tree')return <FactorStudio lesson={lesson} onOutcome={onOutcome}/>;

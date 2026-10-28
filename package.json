@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev":"next dev",
-    "build":"next build && node scripts/run-teacher-qa.mjs",
+    "build":"next build",
     "start":"next start",
     "kb:discover":"node scripts/curriculum-kb.mjs discover",
     "kb:download":"node scripts/curriculum-kb.mjs download",

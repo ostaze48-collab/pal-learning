@@ -66,6 +66,6 @@ export default function LearningCanvas({lesson}:{lesson:Lesson}){
   <div className={styles.panel}><h4>{current.title}</h4><p>{current.body}</p><div className={styles.prompt}>💡 {current.prompt}</div></div>
   {reflected&&<div className={styles.reflection}><strong>ممتاز — فكري قبل المتابعة</strong><div className={styles.micro}>لا نبحث عن جملة محفوظة. نريد أن يصبح المعنى واضحًا ويمكن استخدامه.</div></div>}
   <div className={styles.actions}><button className={styles.action} onClick={()=>setReflected(v=>!v)}>🧠 أفكر قبل أن أكمل</button>{index>0&&<button className={styles.action} onClick={()=>move(index-1)}>→ السابق</button>}<button className={`${styles.action} ${styles.primary}`} onClick={()=>move(index<steps.length-1?index+1:index)}>{index<steps.length-1?'الزاوية التالية ←':'اكتملت التجربة ✓'}</button></div>
-  <div className={styles.micro}>أهداف المنهج تعمل خلف هذه التجربة لتحديد ما يجب أن يغطيه المحتوى، لكنها لا تُعرض كقائمة للطفل.</div>
+  <div className={styles.micro}>هذه مساحة تعلم وتجريب؛ لا توجد درجات هنا.</div>
  </section>;
 }

@@ -3,7 +3,7 @@ import {buildObjectiveQuestionMap} from './objectiveCoverage';
 import {getExplicitEvidenceSpecs} from './evidenceSpecs';
 
 export type EvidenceKind='recognize'|'apply'|'explain'|'construct'|'compare'|'correct_error'|'transfer';
-export type EvidenceInteraction='choice'|'short_text'|'match'|'order';
+export type EvidenceInteraction='choice'|'short_text'|'match'|'order'|'error_fix'|'experiment_choice';
 
 export type EvidenceTask={
  id:string;
@@ -21,6 +21,8 @@ export type EvidenceTask={
  pairs?:Array<{item:string;target:string}>;
  targets?:string[];
  orderItems?:string[];
+ statement?:string;
+ observation?:string;
 };
 
 const has=(text:string,re:RegExp)=>re.test(text.toLowerCase());
@@ -69,6 +71,8 @@ function explicitTasks(lesson:Lesson):EvidenceTask[]|null{
  return specs.map(spec=>{
    const q=spec.questionId?lesson.questions.find(x=>x.id===spec.questionId):undefined;
    const deep=spec.interaction==='short_text';
+   const structuredOptions=spec.options||(spec.interaction==='choice'?q?.options:undefined);
+   const structuredCorrect=spec.correctIndex??(spec.interaction==='choice'?q?.correct:undefined);
    return {
     id:`${lesson.id}:evidence:${spec.objectiveId}`,
     objectiveId:spec.objectiveId,
@@ -77,14 +81,16 @@ function explicitTasks(lesson:Lesson):EvidenceTask[]|null{
     interaction:spec.interaction,
     prompt:spec.prompt,
     questionId:q?.id||null,
-    options:spec.interaction==='choice'?q?.options:undefined,
-    correctIndex:spec.interaction==='choice'?q?.correct:undefined,
-    explanation:q?.explanation,
+    options:structuredOptions,
+    correctIndex:structuredCorrect,
+    explanation:spec.explanation||q?.explanation,
     quality:spec.quality,
     depth:deep?'deep' as const:'quick' as const,
     pairs:spec.pairs,
     targets:spec.targets,
-    orderItems:spec.orderItems
+    orderItems:spec.orderItems,
+    statement:spec.statement,
+    observation:spec.observation
    };
  });
 }

@@ -6,7 +6,8 @@ import {getCurriculumSources,getRecoveryGradeBand} from '../../../../lib/curricu
 type Mode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 type Weakness={title:string;score:number;gradeAnchor?:string;cause?:string;missedFacts?:Array<{text:string;selected:string;correct:string}>};
 type LastCheck={answer?:string;outcome?:'understood'|'partial'|'misconception';feedback?:string};
-type Body={lessonId?:string;mode?:Mode;weaknesses?:Weakness[];previousExplanation?:string;lastCheck?:LastCheck};
+type LearnerModelInput={preferredTeachingMode?:string;teachingModeScores?:Record<string,number>;subjectMastery?:number|null;recentLessons?:Array<{title?:string;mastery?:number;understandingOutcome?:string;understandingFeedback?:string}>;gaps?:Array<{title?:string;score?:number;gradeAnchor?:string;cause?:string}>;misconceptions?:Array<{misconception?:string;feedback?:string}>};
+type Body={lessonId?:string;mode?:Mode;weaknesses?:Weakness[];previousExplanation?:string;lastCheck?:LastCheck;learnerModel?:LearnerModelInput};
 type TeacherCard={title:string;body:string;kind:'explain'|'example'|'tip'|'check'};
 type Payload={title:string;intro:string;cards:TeacherCard[];checkQuestion?:{text:string;hint:string};teacherNote?:string};
 
@@ -23,6 +24,17 @@ function validate(value:any):Payload|null{
   if(value.checkQuestion&&typeof value.checkQuestion.text==='string')out.checkQuestion={text:value.checkQuestion.text.slice(0,500),hint:String(value.checkQuestion.hint||'').slice(0,500)};
   if(typeof value.teacherNote==='string')out.teacherNote=value.teacherNote.slice(0,400);return out;
 }
+function learnerSummary(model:LearnerModelInput|undefined){
+  if(!model)return '- لا يوجد ملف تعلم موحد بعد.';
+  const lines:string[]=[];
+  if(Number.isFinite(Number(model.subjectMastery)))lines.push(`- متوسط إتقان المادة: ${Number(model.subjectMastery)}%`);
+  if(model.preferredTeachingMode)lines.push(`- أسلوب الشرح الأكثر نجاحًا سابقًا: ${model.preferredTeachingMode}`);
+  if(model.teachingModeScores){const top=Object.entries(model.teachingModeScores).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,4);if(top.length)lines.push(`- فعالية أساليب الشرح: ${top.map(([m,s])=>`${m}=${s}`).join('، ')}`)}
+  const recent=(model.recentLessons||[]).slice(0,5);if(recent.length){lines.push('- آخر إشارات التعلم:');for(const x of recent)lines.push(`  • ${String(x.title||'درس')}: إتقان ${Number(x.mastery)||0}%${x.understandingOutcome?`، فهم=${x.understandingOutcome}`:''}${x.understandingFeedback?`، ملاحظة=${String(x.understandingFeedback).slice(0,220)}`:''}`)}
+  const gaps=(model.gaps||[]).slice(0,6);if(gaps.length){lines.push('- فجوات ذات أولوية:');for(const g of gaps)lines.push(`  • ${String(g.title||'مهارة')}: ${Number(g.score)||0}%${g.gradeAnchor?` (${g.gradeAnchor})`:''}${g.cause?` — ${String(g.cause).slice(0,220)}`:''}`)}
+  const misconceptions=(model.misconceptions||[]).slice(0,6);if(misconceptions.length){lines.push('- سوء فهم رُصد في تدريبات سابقة:');for(const m of misconceptions)lines.push(`  • ${String(m.misconception||'').slice(0,260)}${m.feedback?` — ${String(m.feedback).slice(0,260)}`:''}`)}
+  return lines.join('\n')||'- لا توجد إشارات محفوظة بعد.';
+}
 
 export async function POST(request:Request){
   let body:Body;try{body=await request.json()}catch{return NextResponse.json({error:'invalid_json'},{status:400})}
@@ -36,28 +48,31 @@ export async function POST(request:Request){
   const sourceList=[...new Map(officialSources.map(x=>[x.id,x])).values()].slice(0,12).map(x=>`- ${x.title} | ${x.kind} | ثقة ${x.priority}/100 | ${x.url}`).join('\n');
   const weaknessText=weaknesses.length?weaknesses.map(w=>`- ${w.title}: ${w.score}%${w.gradeAnchor?` (${w.gradeAnchor})`:''}${w.cause?` — ${w.cause}`:''}${w.missedFacts?.length?` — أخطاء: ${w.missedFacts.map(m=>`${m.text} [اختارت ${m.selected}، الصحيح ${m.correct}]`).join('؛ ')}`:''}`).join('\n'):'- لا توجد فجوات دقيقة محفوظة لهذه المادة.';
   const lastCheckText=body.lastCheck?.answer?`\nمحاولة الفهم الأخيرة للطالبة:\n- إجابة الطالبة: ${String(body.lastCheck.answer).slice(0,700)}\n- التقييم: ${body.lastCheck.outcome||'غير محدد'}\n- ملاحظة المعلم: ${String(body.lastCheck.feedback||'').slice(0,800)}\nتعليمات إعادة التدريس: لا تكرر الشرح السابق. حدد الفكرة التي سببت الخلط من هذه الإجابة، ثم أعد بناء الشرح حولها بمثال جديد أصغر وأسهل، وبعده سؤال تحقق جديد مختلف.`:'';
+  const modelText=learnerSummary(body.learnerModel);
   const styleMap:Record<Mode,string>={overview:'اشرح الدرس شرحًا متدرجًا واضحًا من الفكرة إلى المثال ثم تحقق قصير.',simplify:'أعد الشرح بأبسط لغة ممكنة، جمل قصيرة، وفكرة واحدة في كل خطوة. لا تفترض فهم المصطلحات.',step_by_step:'حوّل الفكرة إلى خطوات مرقمة صغيرة جدًا مع مثال محلول خطوة بخطوة.',analogy:'استخدم تشبيهًا أو قصة أو تصورًا بصريًا مناسبًا لعمر الطالبة، ثم اربطه بالمفهوم الحقيقي حتى لا يبقى التشبيه مضللًا.',real_world:'اربط المفهوم بموقف من الحياة اليومية أو البيئة المحيطة ثم أعد ربطه مباشرة بهدف المنهاج.',deep:'وسّع الشرح بمعلومات إضافية صحيحة ومناسبة للعمر، مع الحفاظ على هدف الدرس الحالي وعدم إغراق الطالبة.',check:'ركز على سؤال أو سؤالين يكشفان هل فهمت الطالبة الفكرة فعلًا، مع تلميح بدل الحل المباشر.'};
   const hasCurriculumStore=Boolean(process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID);
   const instructions=`أنت المعلم الأساسي في منصة تعليم منزلية فلسطينية لطفلتين. مهمتك ليست الدردشة العامة؛ أنت معلم شخصي تكيفي.
 1) المرجع الأول هو المنهاج الفلسطيني. إذا كانت file_search متاحة فاستخدمها أولًا. وإذا لم تكن متاحة فاستعمل web_search للتحقق من المصادر الفلسطينية الرسمية، مع أولوية elearn.edu.ps وmoe.edu.ps وأي نطاق رسمي تابع لوزارة التربية والتعليم الفلسطينية.
-2) لا تستبدل هدف الدرس الحالي بمعلومة خارجية. استخدم الويب للتحقق والتوسيع فقط.
-3) استخدم نتائج الفجوات السابقة لتحديد نقطة البداية. إذا كانت فجوة سابقة تمنع الفهم، اشرحها باختصار ثم عد للدرس الحالي.
-4) استخدم التدرج من المعلوم للمجهول، أمثلة محلولة، تمثيلًا بصريًا/لفظيًا، استرجاعًا نشطًا، وسؤال تحقق.
-5) لا تكتفِ بالتعريف: فسّر لماذا وكيف، ثم مثالًا، ومثالًا مضادًا عند فائدته.
-6) إذا وصلت لك محاولة فهم سابقة خاطئة أو جزئية، اعتبرها أهم إشارة تربوية: شخص سبب الخلط، غيّر التمثيل أو المثال أو مستوى الخطوات، ولا تكرر نفس الجمل بصياغة مختلفة فقط.
-7) في الرياضيات لا تقفز خطوات؛ في العلوم استخدم السبب والنتيجة؛ في العربية السياق ثم القاعدة؛ في English استخدم الإنجليزية البسيطة مع توضيح عربي عند الحاجة.
-8) إذا بحثت على الويب ووجدت مصدرًا غير رسمي، لا تعامله كمرجع منهجي أساسي. استخدمه فقط كمصدر مساعد عند الحاجة.
-9) لا تعرض للطالبة تفاصيل تقنية عن المصدر أو الثقة.
-10) لا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
-11) ${styleMap[mode]}
-12) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
-  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nفجوات مرتبطة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
+2) ملف التعلم الموحد مهم جدًا: استخدم متوسط الإتقان، الفجوات، سوء الفهم المتكرر، وأسلوب الشرح الذي أثبت نجاحه لتحديد نقطة البداية وطول الشرح ونوع المثال.
+3) لا تستبدل هدف الدرس الحالي بمعلومة خارجية. استخدم الويب للتحقق والتوسيع فقط.
+4) إذا كانت فجوة سابقة تمنع الفهم، اشرحها باختصار ثم عد للدرس الحالي.
+5) استخدم التدرج من المعلوم للمجهول، أمثلة محلولة، تمثيلًا بصريًا/لفظيًا، استرجاعًا نشطًا، وسؤال تحقق.
+6) لا تكتفِ بالتعريف: فسّر لماذا وكيف، ثم مثالًا، ومثالًا مضادًا عند فائدته.
+7) إذا وصلت لك محاولة فهم سابقة خاطئة أو جزئية، اعتبرها أهم إشارة تربوية: شخص سبب الخلط، غيّر التمثيل أو المثال أو مستوى الخطوات، ولا تكرر نفس الجمل بصياغة مختلفة فقط.
+8) إذا تكرر سوء فهم بعينه في دروس سابقة، قدّم وقاية قصيرة منه قبل الوصول للنقطة التي تسبب الخطأ.
+9) في الرياضيات لا تقفز خطوات؛ في العلوم استخدم السبب والنتيجة؛ في العربية السياق ثم القاعدة؛ في English استخدم الإنجليزية البسيطة مع توضيح عربي عند الحاجة.
+10) إذا بحثت على الويب ووجدت مصدرًا غير رسمي، لا تعامله كمرجع منهجي أساسي.
+11) لا تعرض للطالبة تفاصيل تقنية عن المصدر أو الثقة.
+12) لا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
+13) ${styleMap[mode]}
+14) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
+  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nملف التعلم الموحد للطالبة في هذه المادة:\n${modelText}\n\nفجوات مرتبطة مباشرة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
 
   try{
     const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const tools:any[]=[];
     if(hasCurriculumStore)tools.push({type:'file_search',vector_store_ids:[process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID],max_num_results:7});
     if(!hasCurriculumStore||mode==='deep'||mode==='real_world')tools.push({type:'web_search'});
-    const response=await client.responses.create({model:process.env.OPENAI_TUTOR_MODEL||'gpt-5',instructions,input:prompt,...(tools.length?{tools}:{}),max_output_tokens:1700});
+    const response=await client.responses.create({model:process.env.OPENAI_TUTOR_MODEL||'gpt-5',instructions,input:prompt,...(tools.length?{tools}:{}),max_output_tokens:1900});
     const content=validate(cleanJson(response.output_text||''));if(!content)throw new Error('invalid_teacher_payload');
     const output:any[]=Array.isArray((response as any).output)?(response as any).output:[];
     const grounded=output.some(x=>x?.type==='file_search_call');

@@ -8,6 +8,7 @@ import './kids.css';
 import './kid-journey.css';
 import './lesson-play.css';
 import './teacher-companion.css';
+import './teacher-dock.css';
 import PwaClient from './PwaClient';
 
 export const metadata:Metadata={title:'تعلم سلمى وسما',description:'منصة تعليم منزلية للرزم التعليمية الفلسطينية — الفصل الأول',manifest:'/manifest.webmanifest',icons:{icon:'/icon-192.svg'}};

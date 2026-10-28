@@ -2,7 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
 import {buildLearnerModel} from '../../../lib/learnerModel';
-import {chooseLessonExperience,type ExperienceKind} from '../../../lib/lessonExperience';
+import {chooseLessonExperience,type ExperienceKind,type ExperiencePlan} from '../../../lib/lessonExperience';
 
 function modeMeta(kind:ExperienceKind){
  const all:Record<ExperienceKind,{label:string;icon:string}>={slides:{label:'عرض مصور',icon:'🖼️'},puzzle:{label:'لغز',icon:'🧩'},game:{label:'لعبة',icon:'🎮'},experiment:{label:'تجربة وتوقع',icon:'🧪'},story:{label:'موقف وقصة',icon:'📚'},challenge:{label:'تحدي',icon:'🏁'},sort:{label:'رتّبي وصنّفي',icon:'🧲'}};return all[kind];
@@ -10,13 +10,14 @@ function modeMeta(kind:ExperienceKind){
 
 export default function AdaptiveLessonExperience({lesson,diagnosticCorrect}:{lesson:Lesson;diagnosticCorrect:boolean}){
  const [mastery,setMastery]=useState<number|null>(null);
+ const localPlan=useMemo(()=>chooseLessonExperience(lesson,diagnosticCorrect,mastery),[lesson,diagnosticCorrect,mastery]);
+ const [plan,setPlan]=useState<ExperiencePlan>(localPlan);
+ const [mode,setMode]=useState<ExperienceKind>(localPlan.primary);
  useEffect(()=>{setMastery(buildLearnerModel(lesson.student,lesson.subject).subjectMastery??null)},[lesson.id,lesson.student,lesson.subject]);
- const plan=useMemo(()=>chooseLessonExperience(lesson,diagnosticCorrect,mastery),[lesson,diagnosticCorrect,mastery]);
- const [mode,setMode]=useState<ExperienceKind>(plan.primary);
- useEffect(()=>setMode(plan.primary),[plan.primary,lesson.id]);
+ useEffect(()=>{let alive=true;const fallback=chooseLessonExperience(lesson,diagnosticCorrect,mastery);setPlan(fallback);setMode(fallback.primary);fetch('/api/ai-teacher/experience',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:lesson.id,diagnosticCorrect,subjectMastery:mastery})}).then(r=>r.json()).then(data=>{if(!alive||!data?.primary)return;const next:ExperiencePlan={primary:data.primary,secondary:data.secondary,label:String(data.label||fallback.label),icon:String(data.icon||fallback.icon),reason:String(data.reason||fallback.reason),intensity:data.intensity||fallback.intensity,visualLabel:String(data.visualLabel||fallback.visualLabel)};setPlan(next);setMode(next.primary)}).catch(()=>{});return()=>{alive=false}},[lesson.id,diagnosticCorrect,mastery]);
  const meta=modeMeta(mode);
  return <section className="creativeLessonLab">
-   <div className="creativeLabHead"><div className="creativeLabIcon">{meta.icon}</div><div><span>طريقة التعلم المختارة لكِ</span><h3>{meta.label}</h3><p>{plan.reason} <b>التمثيل المناسب:</b> {plan.visualLabel}.</p></div><span className={`creativeLevel ${plan.intensity}`}>{plan.intensity==='guided'?'موجّه':plan.intensity==='challenge'?'تحدٍ أعلى':'متوازن'}</span></div>
+   <div className="creativeLabHead"><div className="creativeLabIcon">{meta.icon}</div><div><span>معلمتك اختارت طريقة التعلم هذه</span><h3>{meta.label}</h3><p>{plan.reason} <b>التمثيل المناسب:</b> {plan.visualLabel}.</p></div><span className={`creativeLevel ${plan.intensity}`}>{plan.intensity==='guided'?'موجّه':plan.intensity==='challenge'?'تحدٍ أعلى':'متوازن'}</span></div>
    <div className="creativeModeSwitch"><button className={mode===plan.primary?'active':''} onClick={()=>setMode(plan.primary)}>{modeMeta(plan.primary).icon} {modeMeta(plan.primary).label}</button>{plan.secondary!==plan.primary&&<button className={mode===plan.secondary?'active':''} onClick={()=>setMode(plan.secondary)}>{modeMeta(plan.secondary).icon} {modeMeta(plan.secondary).label}</button>}</div>
    {mode==='slides'&&<MiniSlides lesson={lesson}/>} 
    {(mode==='puzzle'||mode==='challenge')&&<TryBeforeTell lesson={lesson} challenge={mode==='challenge'}/>} 

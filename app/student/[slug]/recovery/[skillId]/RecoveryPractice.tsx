@@ -2,6 +2,7 @@
 import {useMemo,useState} from 'react';
 import type {RecoverySkill} from '../../../../../lib/recoverySkills';
 import {getDeepDiagnostic} from '../../../../../lib/deepDiagnostics';
+import SmartPractice from './SmartPractice';
 
 export default function RecoveryPractice({slug,skill,focusId,retentionMode=false}:{slug:string;skill:RecoverySkill;focusId?:string;retentionMode?:boolean}){
  const diagnostic=getDeepDiagnostic(skill.id);
@@ -16,6 +17,12 @@ export default function RecoveryPractice({slug,skill,focusId,retentionMode=false
  const q=questions[step];
  const deepKey=focus?`recoveryDeep:${slug}:${skill.id}:${focus.id}`:null;
  const previousDeep=useMemo(()=>focus&&deepKey?Number(globalThis?.localStorage?.getItem?.(deepKey)??NaN):NaN,[deepKey,focus]);
+ const savedMistakes=useMemo(()=>{
+   if(!focus)return [];
+   const raw=globalThis?.localStorage?.getItem?.(`recoveryDeepResult:${slug}:${skill.id}:${focus.id}`);
+   if(!raw)return [];
+   try{const parsed=JSON.parse(raw);return Array.isArray(parsed?.missedFacts)?parsed.missedFacts:[]}catch{return []}
+ },[slug,skill.id,focus?.id]);
 
  function persistFocusedResult(pct:number){
    if(!focus||!diagnostic)return;
@@ -47,7 +54,7 @@ export default function RecoveryPractice({slug,skill,focusId,retentionMode=false
 
  if(phase==='done'){
    const pct=finalPct??Math.round(score/questions.length*100);
-   return <div className="card result"><h1>{pct>=80?(retentionMode?'المهارة ما زالت ثابتة ✅':'تم تثبيت المهارة ✅'):'نحتاج جلسة قصيرة أخرى'}</h1><p>{retentionMode?'راجعنا':'تدربنا على'} <strong>{title}</strong>. النتيجة الحالية: {pct}%.</p>{focus&&<p className="muted">{retentionMode?'هذا اختبار احتفاظ دون شرح مسبق.':'كان هذا علاجًا مركزًا لجزء محدد من مهارة '+skill.title+'، وليس إعادة المجال كاملًا.'}</p>}<p className="muted">{pct>=80?(retentionMode?'سيبعد النظام موعد المراجعة التالية تدريجيًا لأن المهارة بقيت ثابتة.':'ستختفي هذه النقطة من قائمة الفجوات الآن، ويحدد النظام تحققًا قصيرًا بعد 3 أيام.'):'ستعود هذه النقطة إلى خطة الاستدراك ويعاد شرحها قبل المحاولة التالية.'}</p><button className="btn" onClick={()=>history.back()}>العودة</button></div>;
+   return <><div className="card result"><h1>{pct>=80?(retentionMode?'المهارة ما زالت ثابتة ✅':'تم تثبيت المهارة ✅'):'نحتاج جلسة قصيرة أخرى'}</h1><p>{retentionMode?'راجعنا':'تدربنا على'} <strong>{title}</strong>. النتيجة الحالية: {pct}%.</p>{focus&&<p className="muted">{retentionMode?'هذا اختبار احتفاظ دون شرح مسبق.':'كان هذا علاجًا مركزًا لجزء محدد من مهارة '+skill.title+'، وليس إعادة المجال كاملًا.'}</p>}<p className="muted">{pct>=80?(retentionMode?'سيبعد النظام موعد المراجعة التالية تدريجيًا لأن المهارة بقيت ثابتة.':'ستختفي هذه النقطة من قائمة الفجوات الآن، ويحدد النظام تحققًا قصيرًا بعد 3 أيام.'):'ستعود هذه النقطة إلى خطة الاستدراك ويعاد شرحها قبل المحاولة التالية.'}</p><button className="btn" onClick={()=>history.back()}>العودة</button></div>{focus&&!retentionMode&&<SmartPractice slug={slug} skillId={skill.id} subskillId={focus.id} mistakes={savedMistakes}/>}</>;
  }
  if(phase==='learn')return <div className="card"><span className="tag">{focus?'علاج دقيق':'شرح علاجي قصير'}</span><h1>{title}</h1>{focus&&<div className="muted" style={{marginBottom:10}}>المرجع المتوقع: {focus.gradeAnchor}{Number.isFinite(previousDeep)?` · نتيجتك السابقة ${previousDeep}%`:''}</div>}<p style={{lineHeight:1.9}}>{explanation}</p>{treatmentSteps.length>0&&<div className="gapExplanation"><strong>خطة هذه الجلسة</strong><ol>{treatmentSteps.map(x=><li key={x}>{x}</li>)}</ol></div>}<div className="exampleChips">{questions.map(x=><span key={x.id}>{x.explanation}</span>)}</div><button className="btn" style={{marginTop:18}} onClick={()=>setPhase('quiz')}>ابدأ التحقق بعد الشرح</button></div>;
  function choose(i:number){if(selected!==null)return;setSelected(i)}

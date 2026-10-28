@@ -9,6 +9,8 @@ import {grade7GeometryLessons} from './grade7Geometry';
 import {grade7ProportionLessons} from './grade7Proportion';
 import {grade7StatisticsLessons} from './grade7Statistics';
 import {grade7ScienceLessons} from './grade7Science';
+import {grade7ScienceChemistryLessons} from './grade7ScienceChemistry';
+import {grade7SciencePressureLessons} from './grade7SciencePressure';
 
 export type Student={slug:string;name:string;grade:number;semester:number;emoji:string};
 export type Question={id:string;text:string;options:string[];correct:number;explanation:string};
@@ -30,7 +32,9 @@ export const lessons:Lesson[]=[
   ...grade7GeometryLessons,
   ...grade7ProportionLessons,
   ...grade7StatisticsLessons,
-  ...grade7ScienceLessons
+  ...grade7ScienceLessons,
+  ...grade7ScienceChemistryLessons,
+  ...grade7SciencePressureLessons
 ];
 
 export function getStudent(slug:string){return students.find(s=>s.slug===slug)}
@@ -46,6 +50,8 @@ export function getLessonUnit(lesson:Lesson){
       if(['g5-science-materials-properties','g5-science-separation-methods','g5-science-physical-chemical-changes','g5-science-materials-check'].includes(id)) return 'الوحدة 2 · المادة';
       return 'الوحدة 3 · الطاقة';
     }
+    if(id.startsWith('g7-science-atom') || id.includes('important-compounds') || id.includes('chemical-reactions') || id.includes('chemistry-check')) return 'الوحدة 2 · الذرة والمركبات والتفاعلات';
+    if(id.includes('atmospheric-pressure') || id.includes('pressure-check')) return 'الوحدة 3 · الضغط الجوي';
     return 'الوحدة 1 · الحركة وقوانين نيوتن';
   }
 

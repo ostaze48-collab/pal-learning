@@ -13,8 +13,6 @@ export default function RecoveryStatus({slug}:{slug:string}){
  const entries=Object.entries(scores);
  const screened=entries.length>0;
  const weak=entries.filter(([,score])=>score<80).sort((a,b)=>a[1]-b[1]);
- return <section className="recoveryStatus">
-   <div><span className="tag">مسار الاستدراك</span><h2>فجوات السنوات السابقة</h2><p className="muted">نفحص مهارات مختارة من الصفوف السابقة ونضيف علاجًا قصيرًا دون إيقاف دروس الصف الحالي.</p></div>
-   <div className="recoveryStatusSide">{screened?<><strong>{weak.length?`${weak.length} مهارات تحتاج دعمًا`:'الأساسيات جيدة حاليًا ✅'}</strong>{weak.length>0&&<span className="muted">الأولوية: {recoverySkills.find(s=>s.id===weak[0][0])?.title}</span>}</>:<strong>لم يبدأ فحص الفجوات بعد</strong>}<Link className="btn secondary" href={`/student/${slug}/recovery`}>{screened?'راجع خريطة الفجوات':'ابدأ فحص الفجوات'}</Link></div>
- </section>;
+ if(!screened)return <section className="skillBoostCard"><div className="skillBoostIcon">💪</div><div><span>قوّي مهاراتك</span><h2>تمرين صغير يساعدك في الدروس القادمة</h2><p>أسئلة قصيرة تعرفنا على المهارات التي تحتاج تدريبًا أكثر.</p></div><Link className="skillBoostBtn" href={`/student/${slug}/recovery`}>ابدئي التمرين</Link></section>;
+ return <section className={`skillBoostCard ${weak.length?'needsBoost':'allGood'}`}><div className="skillBoostIcon">{weak.length?'🧩':'🌟'}</div><div><span>{weak.length?'لديك مهمة تقوية':'ممتاز!'}</span><h2>{weak.length?`${weak.length} مهارة سنقويها خطوة خطوة`:'مهاراتك الأساسية جيدة الآن'}</h2><p>{weak.length?`نبدأ بالأهم: ${recoverySkills.find(s=>s.id===weak[0][0])?.title??'مهارة أساسية'}.`:'استمري في خطة اليوم وسنخبرك إذا احتجتِ تدريبًا إضافيًا.'}</p></div>{weak.length>0&&<Link className="skillBoostBtn" href={`/student/${slug}/recovery`}>قوّي مهارتي</Link>}</section>;
 }

@@ -10,15 +10,15 @@
     {"url":"https://elearn.edu.ps/c6/","kind":"curriculum","authority":"official","grades":[6]},
     {"url":"https://elearn.edu.ps/c7/","kind":"curriculum","authority":"official","grades":[7]},
 
-    {"url":"https://elearn.edu.ps/c5/ma5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"الرياضيات","semester":1,"crawlDepth":1,"maxChildPages":80},
-    {"url":"https://elearn.edu.ps/c5/ar5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"اللغة العربية","semester":1,"crawlDepth":1,"maxChildPages":80},
-    {"url":"https://elearn.edu.ps/c5/eng5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"English","semester":1,"crawlDepth":1,"maxChildPages":80},
-    {"url":"https://elearn.edu.ps/c5-old/sc5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"العلوم والحياة","semester":1,"crawlDepth":1,"maxChildPages":80},
+    {"url":"https://elearn.edu.ps/c5/ma5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"الرياضيات","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
+    {"url":"https://elearn.edu.ps/c5/ar5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"اللغة العربية","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
+    {"url":"https://elearn.edu.ps/c5/eng5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"English","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
+    {"url":"https://elearn.edu.ps/c5-old/sc5-p1/","kind":"curriculum","authority":"official","grades":[5],"subject":"العلوم والحياة","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
 
-    {"url":"https://elearn.edu.ps/c7/ma7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"الرياضيات","semester":1,"crawlDepth":1,"maxChildPages":80},
-    {"url":"https://elearn.edu.ps/c7/ar7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"اللغة العربية","semester":1,"crawlDepth":1,"maxChildPages":80},
-    {"url":"https://elearn.edu.ps/c7/en7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"English","semester":1,"crawlDepth":1,"maxChildPages":80},
-    {"url":"https://elearn.edu.ps/c7/sc7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"العلوم والحياة","semester":1,"crawlDepth":1,"maxChildPages":80},
+    {"url":"https://elearn.edu.ps/c7/ma7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"الرياضيات","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
+    {"url":"https://elearn.edu.ps/c7/ar7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"اللغة العربية","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
+    {"url":"https://elearn.edu.ps/c7/en7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"English","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
+    {"url":"https://elearn.edu.ps/c7/sc7-p1/","kind":"curriculum","authority":"official","grades":[7],"subject":"العلوم والحياة","semester":1,"crawlDepth":1,"maxChildPages":80,"captureHtml":true},
 
     {"url":"https://elearn.edu.ps/c4_guides/","kind":"teacher-guide","authority":"official-support","grades":[4]},
     {"url":"https://elearn.edu.ps/c5_guides/","kind":"teacher-guide","authority":"official-support","grades":[5]},

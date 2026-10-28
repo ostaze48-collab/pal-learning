@@ -6,6 +6,7 @@ import {recoverySkills} from '../../../lib/recoverySkills';
 import {getDeepDiagnostic} from '../../../lib/deepDiagnostics';
 import {buildKnowledgeMap} from '../../../lib/masteryEngine';
 import {getNextOpenFoundationGoal} from '../../../lib/foundationGoals';
+import {getOpenFoundationSignals} from '../../../lib/foundationSignals';
 
 type Task={id:string;href:string;title:string;subject:string;minutes:number;type:'review'|'reteach'|'new'|'assessment'|'recovery'};
 type SavedPlan={skillId:string;average:number;weak:Array<{id:string;title:string;gradeAnchor:string;score:number}>};
@@ -78,6 +79,13 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
        if(exactCandidates.length){const exact=exactCandidates[0];severeGap=exact.weak.score<50;recoveryTask={id:`${exact.skillId}:${exact.weak.id}`,href:`/student/${slug}/recovery/${exact.skillId}?focus=${encodeURIComponent(exact.weak.id)}`,title:`${exact.weak.title}`,subject:exact.subject,minutes:10,type:'recovery'}}
        else if(retentionCandidates.length){const due=retentionCandidates[0];recoveryTask={id:`retention:${due.skillId}:${due.subId}`,href:`/student/${slug}/recovery/${due.skillId}?focus=${encodeURIComponent(due.subId)}&review=1`,title:`ثبتي: ${due.title}`,subject:due.subject,minutes:5,type:'recovery'}}
        else {const scored=recoverySkills.map(skill=>({skill,score:Number(localStorage.getItem(`recovery:${slug}:${skill.id}`))})).filter(x=>Number.isFinite(x.score)&&localStorage.getItem(`recovery:${slug}:${x.skill.id}`)!==null&&x.score<80).sort((a,b)=>a.score-b.score);if(scored.length){const {skill,score}=scored[0];severeGap=score<50;recoveryTask={id:skill.id,href:`/student/${slug}/recovery/${skill.id}/deep`,title:skill.title,subject:skill.subject,minutes:10,type:'recovery'}}}
+       if(!recoveryTask){
+         const signal=getOpenFoundationSignals(slug)[0];
+         if(signal){
+           const skill=recoverySkills.find(s=>s.id===signal.target.skillId);const diagnostic=getDeepDiagnostic(signal.target.skillId);const sub=signal.target.focusId?diagnostic?.subskills.find(x=>x.id===signal.target.focusId):undefined;const source=lessons.find(l=>l.id===signal.sourceLessonId);
+           if(skill){const href=signal.target.focusId?`/student/${slug}/recovery/${signal.target.skillId}?focus=${encodeURIComponent(signal.target.focusId)}`:`/student/${slug}/recovery/${signal.target.skillId}/deep`;recoveryTask={id:`foundation-signal:${signal.id}`,href,title:`تحدي يساعد في ${source?.title||'درس اليوم'}: ${sub?.title||skill.title}`,subject:skill.subject,minutes:8,type:'recovery'}}
+         }
+       }
        if(!recoveryTask){
          const goal=getNextOpenFoundationGoal(slug);
          if(goal){

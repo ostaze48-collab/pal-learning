@@ -3,6 +3,7 @@ import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
 import LessonPlayerV2 from './LessonPlayerV2';
 import LessonProgressRail from './LessonProgressRail';
 import ObjectiveCoverageBridge from './ObjectiveCoverageBridge';
+import LearningCanvas from './LearningCanvas';
 
 const subjectIcons:Record<string,string>={'الرياضيات':'➗','العلوم والحياة':'🔬','اللغة العربية':'📚','English':'🌍'};
 const subjectClasses:Record<string,string>={'الرياضيات':'subjectMath','العلوم والحياة':'subjectScience','اللغة العربية':'subjectArabic','English':'subjectEnglish'};
@@ -40,7 +41,7 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
   <LessonProgressRail/>
 
   <div className="kidLessonLayout">
-    <section className="lessonMainPane"><LessonPlayerV2 lesson={lesson}/></section>
+    <section className="lessonMainPane"><LearningCanvas lesson={lesson}/><LessonPlayerV2 lesson={lesson}/></section>
     <aside className="goalCard">
       <div className="goalCardIcon">🧭</div><span>كيف سنتعلم اليوم؟</span><h2>رحلة قصيرة وواضحة</h2><ul>{journey.map(item=><li key={item}>{item}</li>)}</ul>
     </aside>

@@ -5,6 +5,7 @@ import {grade5GeometryLessons} from './grade5Geometry';
 import {grade5DataLessons} from './grade5Data';
 import {grade5ScienceLessons} from './grade5Science';
 import {grade5ArabicLessons} from './grade5Arabic';
+import {grade5EnglishLessons} from './grade5English';
 import {grade7MathLessons} from './grade7Math';
 import {grade7GeometryLessons} from './grade7Geometry';
 import {grade7ProportionLessons} from './grade7Proportion';
@@ -13,6 +14,7 @@ import {grade7ScienceLessons} from './grade7Science';
 import {grade7ScienceChemistryLessons} from './grade7ScienceChemistry';
 import {grade7SciencePressureLessons} from './grade7SciencePressure';
 import {grade7ArabicLessons} from './grade7Arabic';
+import {grade7EnglishLessons} from './grade7English';
 
 export type Student={slug:string;name:string;grade:number;semester:number;emoji:string};
 export type Question={id:string;text:string;options:string[];correct:number;explanation:string};
@@ -31,6 +33,7 @@ export const lessons:Lesson[]=[
   ...grade5DataLessons,
   ...grade5ScienceLessons,
   ...grade5ArabicLessons,
+  ...grade5EnglishLessons,
   ...grade7MathLessons,
   ...grade7GeometryLessons,
   ...grade7ProportionLessons,
@@ -38,7 +41,8 @@ export const lessons:Lesson[]=[
   ...grade7ScienceLessons,
   ...grade7ScienceChemistryLessons,
   ...grade7SciencePressureLessons,
-  ...grade7ArabicLessons
+  ...grade7ArabicLessons,
+  ...grade7EnglishLessons
 ];
 
 export function getStudent(slug:string){return students.find(s=>s.slug===slug)}
@@ -47,6 +51,21 @@ export function getStudentLessons(slug:string){return lessons.filter(l=>l.studen
 
 export function getLessonUnit(lesson:Lesson){
   const id=lesson.id;
+
+  if(lesson.subject==='English'){
+    if(lesson.student==='salma'){
+      if(['g5-en-new-friends-present-simple','g5-en-country-present-continuous'].includes(id)) return 'Unit 1 · Present tenses';
+      if(['g5-en-mini-olympics-ordinals','g5-en-holidays-palestine'].includes(id)) return 'Unit 2 · Reading and vocabulary';
+      if(['g5-en-which-or','g5-en-basketball-punctuation'].includes(id)) return 'Unit 3 · Questions and punctuation';
+      if(id==='g5-en-comparatives') return 'Unit 4 · Comparisons';
+      return 'English review';
+    }
+    if(['g7-en-adverbs-frequency','g7-en-stative-verbs','g7-en-question-order','g7-en-present-continuous'].includes(id)) return 'Unit 1 · Core grammar';
+    if(['g7-en-animal-magic-linking','g7-en-keep-in-touch'].includes(id)) return 'Unit 2 · Reading and linking';
+    if(['g7-en-present-perfect','g7-en-present-perfect-questions','g7-en-just-already-yet'].includes(id)) return 'Unit 3 · Present perfect';
+    if(['g7-en-sport-report','g7-en-directions','g7-en-reflexive-pronouns','g7-en-message-friend'].includes(id)) return 'Unit 4 · Communication and writing';
+    return 'English review';
+  }
 
   if(lesson.subject==='اللغة العربية'){
     if(lesson.student==='salma'){

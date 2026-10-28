@@ -3,11 +3,13 @@ import {NextResponse} from 'next/server';
 import {getLesson,getStudent,getLessonSourceLabel} from '../../../../lib/data';
 import {getCurriculumSources,getRecoveryGradeBand} from '../../../../lib/curriculumKnowledge';
 import {buildPedagogyPlan} from '../../../../lib/pedagogyEngine';
+import {getLessonBridges} from '../../../../lib/curriculumBridges';
 
 type Mode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 type Weakness={title:string;score:number;gradeAnchor?:string;cause?:string;missedFacts?:Array<{text:string;selected:string;correct:string}>};
 type LastCheck={answer?:string;outcome?:'understood'|'partial'|'misconception';feedback?:string};
-type LearnerModelInput={preferredTeachingMode?:string;teachingModeScores?:Record<string,number>;subjectMastery?:number|null;recentLessons?:Array<{title?:string;mastery?:number;understandingOutcome?:string;understandingFeedback?:string;summaryNeedsWork?:string;summaryNextStep?:string}>;gaps?:Array<{title?:string;score?:number;gradeAnchor?:string;cause?:string}>;misconceptions?:Array<{misconception?:string;feedback?:string}>};
+type LearnerGapInput={skillId?:string;title?:string;score?:number;gradeAnchor?:string;cause?:string};
+type LearnerModelInput={preferredTeachingMode?:string;teachingModeScores?:Record<string,number>;subjectMastery?:number|null;recentLessons?:Array<{title?:string;mastery?:number;understandingOutcome?:string;understandingFeedback?:string;summaryNeedsWork?:string;summaryNextStep?:string}>;gaps?:LearnerGapInput[];misconceptions?:Array<{misconception?:string;feedback?:string}>};
 type Body={lessonId?:string;mode?:Mode;weaknesses?:Weakness[];previousExplanation?:string;lastCheck?:LastCheck;learnerModel?:LearnerModelInput};
 type TeacherCard={title:string;body:string;kind:'explain'|'example'|'tip'|'check'};
 type Payload={title:string;intro:string;cards:TeacherCard[];checkQuestion?:{text:string;hint:string};teacherNote?:string};
@@ -50,6 +52,12 @@ export async function POST(request:Request){
   const weaknessText=weaknesses.length?weaknesses.map(w=>`- ${w.title}: ${w.score}%${w.gradeAnchor?` (${w.gradeAnchor})`:''}${w.cause?` — ${w.cause}`:''}${w.missedFacts?.length?` — أخطاء: ${w.missedFacts.map(m=>`${m.text} [اختارت ${m.selected}، الصحيح ${m.correct}]`).join('؛ ')}`:''}`).join('\n'):'- لا توجد فجوات دقيقة محفوظة لهذه المادة.';
   const lastCheckText=body.lastCheck?.answer?`\nمحاولة الفهم الأخيرة للطالبة:\n- إجابة الطالبة: ${String(body.lastCheck.answer).slice(0,700)}\n- التقييم: ${body.lastCheck.outcome||'غير محدد'}\n- ملاحظة المعلم: ${String(body.lastCheck.feedback||'').slice(0,800)}\nتعليمات إعادة التدريس: لا تكرر الشرح السابق. حدد الفكرة التي سببت الخلط من هذه الإجابة، ثم أعد بناء الشرح حولها بمثال جديد أصغر وأسهل، وبعده سؤال تحقق جديد مختلف.`:'';
   const modelText=learnerSummary(body.learnerModel);
+  const bridges=getLessonBridges(lesson);
+  const bridgeText=bridges.map(b=>{
+    const measured=(body.learnerModel?.gaps||[]).filter(g=>g.skillId===b.skillId).sort((a,c)=>Number(a.score??100)-Number(c.score??100))[0];
+    const state=measured?`نتيجة فجوة محفوظة ${Number(measured.score)}%${measured.gradeAnchor?` (${measured.gradeAnchor})`:''}${measured.cause?` — ${measured.cause}`:''}`:'لا توجد فجوة مقاسة مرتبطة بهذه المهارة.';
+    return `- ${b.title} | صلة ${b.priority}/100 | ${b.reason} | ${state}`;
+  }).join('\n');
   const blockingGap=(body.learnerModel?.gaps||[]).some(g=>Number(g.score)<50)||weaknesses.some(w=>Number(w.score)<50);
   const pedagogy=buildPedagogyPlan(lesson.subject,body.learnerModel?.subjectMastery,blockingGap,mode);
   const pedagogyText=`المستوى التدريسي المقترح: ${pedagogy.level}\nالطريقة الأساسية: ${pedagogy.method}\nتسلسل التدريس:\n${pedagogy.sequence.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nقاعدة التغذية الراجعة: ${pedagogy.feedbackRule}\nضبط الحمل المعرفي: ${pedagogy.cognitiveLoad}\nقاعدة الاسترجاع: ${pedagogy.retrievalRule}`;
@@ -58,20 +66,21 @@ export async function POST(request:Request){
   const instructions=`أنت المعلم الأساسي في منصة تعليم منزلية فلسطينية لطفلتين. مهمتك ليست الدردشة العامة؛ أنت معلم شخصي تكيفي ودقيق.
 1) قبل صياغة الشرح، اجمع سندًا للمفهوم من المنهاج الفلسطيني: استخدم file_search إذا كانت متاحة؛ وإلا استخدم web_search للتحقق من المصادر الفلسطينية الرسمية، مع أولوية elearn.edu.ps وmoe.edu.ps.
 2) لا تعتمد على الذاكرة العامة للنموذج وحدها في تعريف هدف الدرس أو تسلسله أو حقيقة منهجية أساسية. إذا تعذر إيجاد سند مناسب، لا تخترع؛ اجعل الشرح محافظًا ومحدودًا بما هو موجود في سياق الدرس.
-3) التزم بالخطة البيداغوجية المرفقة ما لم تتعارض مع دقة المحتوى. طبقها في ترتيب الشرح والأمثلة والأسئلة.
-4) ملف التعلم الموحد مهم: استخدم متوسط الإتقان والفجوات وسوء الفهم وأسلوب الشرح الذي أثبت نجاحه لتحديد نقطة البداية وطول الشرح ونوع المثال.
-5) إذا كانت فجوة سابقة تمنع الفهم، علّم فقط الجزء السابق الضروري ثم اربطه بوضوح بالدرس الحالي وعد فورًا لمسار الصف الحالي.
-6) لا تكتفِ بتعريف واحد. عند ملاءمة الموضوع قدّم: تمثيلًا أولًا بسيطًا، مثالًا محلولًا، مثالًا ثانيًا مختلفًا قليلًا لاختبار انتقال الفهم، ثم خطأ شائعًا أو مثالًا مضادًا يوضح الحدود.
-7) لا تكرر نفس الأرقام أو الكلمات أو القصة في المثال الثاني؛ غيّر السطح مع تثبيت المفهوم.
-8) إذا وصلت محاولة فهم سابقة خاطئة أو جزئية، شخص سبب الخلط وغيّر التمثيل أو مستوى الخطوات، ولا تكرر نفس الجمل بصياغة مختلفة فقط.
-9) إذا تكرر سوء فهم في دروس سابقة، قدّم وقاية قصيرة منه قبل النقطة التي تسبب الخطأ.
-10) في الرياضيات: وضّح العلاقات والخطوات وتحقق من المعقولية. في العلوم: فرّق بين الملاحظة والدليل والتفسير والسبب/النتيجة. في العربية: ابدأ بالسياق والمعنى ثم استخرج النمط والقاعدة. في English: استخدم مدخلًا مفهومًا ونموذجًا قصيرًا ثم ممارسة وإنتاجًا، مع عربي عند الحاجة.
-11) لا تستخدم مصدرًا خارجيًا غير رسمي لتغيير محتوى المنهاج. يمكن استخدامه فقط لإثراء مثال إذا لم يتعارض مع المصدر الرسمي.
-12) لا تعرض للطالبة تفاصيل تقنية عن المصدر أو الثقة، ولا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
-13) ${styleMap[mode]}
-14) اجعل الشرح غنيًا بما يكفي للفهم، لكن لا تكدّس معلومات لا تخدم هدف الدرس أو الفجوة الحالية.
-15) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
-  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nالخطة البيداغوجية لهذه الجلسة:\n${pedagogyText}\n\nملف التعلم الموحد للطالبة في هذه المادة:\n${modelText}\n\nفجوات مرتبطة مباشرة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة مرتبة بالأولوية:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
+3) التزم بالخطة البيداغوجية المرفقة، وطبّقها في ترتيب الشرح والأمثلة والأسئلة.
+4) استخدم ملف التعلم الموحد لتحديد نقطة البداية وطول الشرح ونوع المثال.
+5) استخدم جسور المهارات السابقة المرفقة كخريطة prerequisite، لكن لا تعيد تدريسها جميعًا. إذا كانت المهارة السابقة غير ضعيفة أو غير مقاسة، يكفي سؤال استرجاع أو تذكير قصير عند الحاجة. إذا كانت نتيجتها أقل من 80% وتؤثر مباشرة في الدرس، علّم الجزء الضروري فقط. إذا كانت أقل من 50% وهي مانع مباشر، أعط علاجًا تأسيسيًا قصيرًا ثم عد للدرس الحالي.
+6) اجعل العلاقة صريحة للطالبة بصورة بسيطة مثل: «نحتاج هذه الخطوة القديمة حتى نفهم فكرة اليوم»، من دون ذكر الصفوف السابقة كوصمة أو إخبارها بأنها متأخرة.
+7) لا تكتفِ بتعريف واحد. عند ملاءمة الموضوع قدّم تمثيلًا أولًا بسيطًا، مثالًا محلولًا، مثالًا ثانيًا مختلفًا قليلًا لاختبار انتقال الفهم، ثم خطأ شائعًا أو مثالًا مضادًا.
+8) لا تكرر نفس الأرقام أو الكلمات أو القصة في المثال الثاني؛ غيّر السطح مع تثبيت المفهوم.
+9) إذا وصلت محاولة فهم سابقة خاطئة أو جزئية، شخص سبب الخلط وغيّر التمثيل أو مستوى الخطوات، ولا تكرر نفس الجمل بصياغة مختلفة فقط.
+10) إذا تكرر سوء فهم في دروس سابقة، قدّم وقاية قصيرة منه قبل النقطة التي تسبب الخطأ.
+11) في الرياضيات: وضّح العلاقات والخطوات وتحقق من المعقولية. في العلوم: فرّق بين الملاحظة والدليل والتفسير والسبب/النتيجة. في العربية: ابدأ بالسياق والمعنى ثم استخرج النمط والقاعدة. في English: استخدم مدخلًا مفهومًا ونموذجًا قصيرًا ثم ممارسة وإنتاجًا، مع عربي عند الحاجة.
+12) لا تستخدم مصدرًا خارجيًا غير رسمي لتغيير محتوى المنهاج؛ يمكن استخدامه فقط لإثراء مثال لا يتعارض مع المصدر الرسمي.
+13) لا تعرض للطالبة تفاصيل تقنية عن المصدر أو الثقة، ولا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
+14) ${styleMap[mode]}
+15) اجعل الشرح غنيًا بما يكفي للفهم، لكن لا تكدّس معلومات لا تخدم هدف الدرس أو الفجوة الحالية.
+16) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
+  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nالخطة البيداغوجية لهذه الجلسة:\n${pedagogyText}\n\nالجسور ذات الصلة من المهارات السابقة إلى درس اليوم:\n${bridgeText||'- لا يوجد جسر محدد؛ لا تضف استدراكًا إلا إذا كشف الأداء حاجة واضحة.'}\n\nملف التعلم الموحد للطالبة في هذه المادة:\n${modelText}\n\nفجوات مرتبطة مباشرة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة مرتبة بالأولوية:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
 
   try{
     const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const tools:any[]=[];
@@ -84,6 +93,6 @@ export async function POST(request:Request){
     const webUsed=output.some(x=>x?.type==='web_search_call'||x?.type==='web_search_preview_call');
     if(!grounded&&!webUsed)throw new Error('ungrounded_teacher_payload');
     const groundingQuality=grounded?'curriculum-file':webUsed?'official-web':'local';
-    return NextResponse.json({content,mode:'ai',grounded,webUsed,groundingQuality,pedagogyLevel:pedagogy.level});
-  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,groundingQuality:'local',pedagogyLevel:pedagogy.level});}
+    return NextResponse.json({content,mode:'ai',grounded,webUsed,groundingQuality,pedagogyLevel:pedagogy.level,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});
+  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,groundingQuality:'local',pedagogyLevel:pedagogy.level,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});}
 }

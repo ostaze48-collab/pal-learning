@@ -16,7 +16,7 @@ export type TeacherEvidenceDecision={
  focus?:string;
  reason:string;
  confidence:number;
- evidence:{quiz:number|null;understanding:number|null;concept:number|null;mastery:number|null};
+ evidence:{quiz:number|null;understanding:number|null;concept:number|null;objective:number|null;transfer:number|null;mastery:number|null};
  generatedAt:string;
  source:'combined_lesson_evidence';
 };
@@ -26,7 +26,7 @@ const gapToRecovery:Record<string,string>={
 };
 
 function broadPrerequisites(lesson:Lesson){
- const id=lesson.id;const text=[lesson.title,lesson.summary,...lesson.learningPoints].join(' ').toLowerCase();const out:string[]=[];
+ const text=[lesson.title,lesson.summary,...lesson.learningPoints].join(' ').toLowerCase();const out:string[]=[];
  if(lesson.subject==='الرياضيات'){
    if(/fraction|كسر|proportion|تناسب|scale|مقياس/.test(text))out.push('math-fractions','math-mult-div');
    else if(/factor|prime|gcf|lcm|عامل|أولي|مضاعف/.test(text))out.push('math-mult-div');
@@ -54,8 +54,6 @@ function allPrerequisites(lesson:Lesson){
  return [...new Set([...explicit,...broadPrerequisites(lesson)])];
 }
 
-function recoveryTitle(id:string){return recoverySkills.find(x=>x.id===id)?.title||gapSkills[id]?.title||id}
-
 function readJson(key:string){if(typeof window==='undefined')return null;const raw=localStorage.getItem(key);if(!raw)return null;try{return JSON.parse(raw)}catch{return null}}
 function finite(v:unknown){if(v===null||v===undefined||v==='')return null;return Number.isFinite(Number(v))?Number(v):null}
 function clampScore(v:number|null){return v===null?null:Math.max(0,Math.min(100,Math.round(v)))}
@@ -65,33 +63,37 @@ function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidence
  const quiz=clampScore(finite(report?.quizMastery));
  const understanding=clampScore(finite(report?.understandingScore));
  const concept=clampScore(finite(report?.conceptScore));
+ const objective=clampScore(finite(report?.objectiveEvidenceScore));
+ const transfer=clampScore(finite(report?.transferScore));
  const mastery=clampScore(finite(report?.mastery));
- const available=[quiz,understanding,concept].filter(x=>x!==null).length;
- const confidence=available>=3?92:available===2?80:64;
+ const available=[quiz,understanding,concept,objective,transfer].filter(x=>x!==null).length;
+ const reportConfidence=clampScore(finite(report?.masteryConfidence));
+ const confidence=reportConfidence??(available>=4?94:available===3?88:available===2?78:64);
  const generatedAt=new Date().toISOString();
- const base={confidence,evidence:{quiz,understanding,concept,mastery},generatedAt,source:'combined_lesson_evidence' as const};
+ const base={confidence,evidence:{quiz,understanding,concept,objective,transfer,mastery},generatedAt,source:'combined_lesson_evidence' as const};
  const misconception=understanding!==null&&understanding<=40;
  const weakConcept=concept!==null&&concept<70;
- const evidenceConflict=quiz!==null&&quiz>=80&&((understanding!==null&&understanding<65)||(concept!==null&&concept<65));
- if(misconception||weakConcept||evidenceConflict){
-   const focus=misconception?`تفسير الفكرة في ${lesson.title}`:weakConcept?`فهم الفكرة عمليًا في ${lesson.title}`:`ربط الحل بالفهم في ${lesson.title}`;
-   const reason=misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.';
+ const weakObjective=objective!==null&&objective<65;
+ const weakTransfer=transfer!==null&&transfer<65;
+ const evidenceConflict=quiz!==null&&quiz>=80&&([understanding,concept,objective,transfer].some(x=>x!==null&&Number(x)<65));
+ if(misconception||weakConcept||weakObjective||weakTransfer||evidenceConflict){
+   const focus=weakTransfer?`نقل فكرة ${lesson.title} إلى موقف جديد`:weakObjective?`مهارة محددة داخل ${lesson.title}`:misconception?`تفسير الفكرة في ${lesson.title}`:weakConcept?`فهم الفكرة عمليًا في ${lesson.title}`:`ربط الحل بالفهم في ${lesson.title}`;
+   const reason=weakTransfer?'الفهم الأساسي أفضل من أداء النقل؛ المطلوب مثال جديد يغيّر السياق ثم إعادة قياس قصيرة.':weakObjective?'أدلة المهارات المباشرة كشفت نقطة لم تثبت بعد؛ المطلوب تدخل قصير موجه لها فقط.':misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.';
    return {decision:'targeted_reteach',focus,reason,...base};
  }
- const partialUnderstanding=understanding!==null&&understanding<80;
- const fragileConcept=concept!==null&&concept<80;
- if(mastery!==null&&mastery>=80&&!partialUnderstanding&&!fragileConcept){
-   return {decision:'advance',reason:'الأدلة المتاحة متوافقة: الحل والتفسير/التفاعل يدعمان الانتقال إلى الخطوة التالية.',...base};
+ const partial= [understanding,concept,objective,transfer].some(x=>x!==null&&Number(x)<80);
+ if(mastery!==null&&mastery>=80&&!partial){
+   return {decision:'advance',reason:'الأدلة المتنوعة متوافقة: الاختبار والمهارات/التفاعل والنقل تدعم الانتقال إلى الخطوة التالية.',...base};
  }
  const reviewAt=String(report?.reviewDue||new Date(Date.now()+24*60*60*1000).toISOString());
- const reason=mastery!==null&&mastery>=80?'الإتقان جيد لكن أحد أدلة الفهم ما زال هشًا؛ نحتاج مراجعة قصيرة لاحقة للتأكد من الثبات.':'الإتقان الكلي لم يصل بعد إلى حد التقدم بثقة؛ نراجع نقطة قصيرة ثم نعيد القياس.';
+ const reason=mastery!==null&&mastery>=80?'الإتقان جيد لكن إحدى قنوات الدليل ما زالت هشّة؛ نحتاج مراجعة قصيرة لاحقة للتأكد من الثبات.':'الإتقان الكلي لم يصل بعد إلى حد التقدم بثقة؛ نراجع نقطة قصيرة ثم نعيد القياس.';
  return {decision:'review',reviewAt,reason,...base};
 }
 
 function persistTeacherDecision(lesson:Lesson,report:any){
  if(typeof window==='undefined'||!report)return null;
  const existing=readJson(`lesson:${lesson.id}:teacherDecision`)||readJson(`teacherDecision:${lesson.id}`);
- if(existing?.manual===true)return existing;
+ if(existing?.manual===true||existing?.source==='objective_coverage'||existing?.source==='transfer_evidence')return existing;
  const decision=deriveTeacherEvidenceDecision(lesson,report);if(!decision)return existing;
  const packed=JSON.stringify(decision);localStorage.setItem(`lesson:${lesson.id}:teacherDecision`,packed);localStorage.setItem(`teacherDecision:${lesson.id}`,packed);return decision;
 }

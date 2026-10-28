@@ -6,9 +6,21 @@ import {lessons,students} from '../../lib/data';
 type Report={mastery:number;status:'mastered'|'review_needed';wrongQuestionIds?:string[]};
 type Snapshot={completed:string[];scores:Record<string,number>;reports:Record<string,Report>};
 
+async function hashPin(pin:string){
+  const bytes=new TextEncoder().encode(pin);
+  const digest=await crypto.subtle.digest('SHA-256',bytes);
+  return Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
 export default function Parent(){
   const [snapshot,setSnapshot]=useState<Snapshot>({completed:[],scores:{},reports:{}});
+  const [pinHash,setPinHash]=useState<string|null|undefined>(undefined);
+  const [unlocked,setUnlocked]=useState(false);
+  const [pin,setPin]=useState('');
+  const [pinError,setPinError]=useState('');
+
   useEffect(()=>{
+    setPinHash(localStorage.getItem('parent:pinHash'));
     const completed=lessons.filter(l=>localStorage.getItem(`lesson:${l.id}`)==='done').map(l=>l.id);
     const scores:Record<string,number>={};
     const reports:Record<string,Report>={};
@@ -21,10 +33,25 @@ export default function Parent(){
     setSnapshot({completed,scores,reports});
   },[]);
 
+  async function submitPin(){
+    setPinError('');
+    if(!/^\d{4}$/.test(pin)){setPinError('أدخل 4 أرقام فقط.');return}
+    const hashed=await hashPin(pin);
+    if(pinHash===null){
+      localStorage.setItem('parent:pinHash',hashed);
+      setPinHash(hashed);setUnlocked(true);setPin('');return;
+    }
+    if(hashed===pinHash){setUnlocked(true);setPin('')}else setPinError('الرمز غير صحيح.');
+  }
+
+  if(pinHash===undefined)return <main className="shell"><div className="wrap"><div className="card">جاري تحميل لوحة الأب…</div></div></main>;
+
+  if(!unlocked)return <main className="shell"><div className="wrap"><div className="top"><Link className="btn secondary" href="/">← الرئيسية</Link><div className="brand">لوحة الأب 🔒</div></div><div className="pinCard"><div className="pinIcon">🔐</div><h1>{pinHash===null?'إنشاء رمز لوحة الأب':'أدخل رمز لوحة الأب'}</h1><p className="muted">{pinHash===null?'اختر PIN من 4 أرقام. سيُحفظ على هذا الجهاز فقط.':'نتائج سلمى وسما محمية برمز PIN على هذا الجهاز.'}</p><input className="pinInput" inputMode="numeric" pattern="[0-9]*" maxLength={4} value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,'').slice(0,4))} onKeyDown={e=>{if(e.key==='Enter')submitPin()}} placeholder="••••" aria-label="PIN"/>{pinError&&<div className="pinError">{pinError}</div>}<button className="btn" onClick={submitPin}>{pinHash===null?'حفظ وفتح اللوحة':'فتح اللوحة'}</button></div></div></main>;
+
   const lessonMastery=(id:string,total:number)=>snapshot.reports[id]?.mastery ?? (snapshot.scores[id]!==undefined?Math.round(snapshot.scores[id]/total*100):0);
 
   return <main className="shell"><div className="wrap">
-    <div className="top"><Link className="btn secondary" href="/">← الرئيسية</Link><div className="brand">لوحة الأب</div></div>
+    <div className="top"><Link className="btn secondary" href="/">← الرئيسية</Link><div style={{display:'flex',gap:8,alignItems:'center'}}><button className="btn secondary" onClick={()=>setUnlocked(false)}>🔒 قفل</button><div className="brand">لوحة الأب</div></div></div>
     <h1>متابعة التعلم</h1>
     <p className="muted">تعرض اللوحة الإنجاز، الإتقان النهائي بعد العلاج، والدروس التي ما زالت تحتاج مراجعة.</p>
 
@@ -44,9 +71,7 @@ export default function Parent(){
         </div>
         <div style={{marginTop:14}} className="progress"><span style={{width:`${percent}%`}}/></div>
         <div className="muted" style={{marginTop:8}}>{percent}% من المحتوى المتاح · {own.length} درسًا واختبارًا</div>
-
         {review.length>0&&<div className="reviewBox"><strong>📌 مراجعات مقترحة</strong>{review.slice(0,4).map(l=><div key={l.id} className="reviewItem"><span>{l.title}</span><strong>{lessonMastery(l.id,l.questions.length)}%</strong></div>)}</div>}
-
         <div style={{display:'grid',gap:10,marginTop:18}}>{subjects.map(subject=>{
           const subjectLessons=own.filter(l=>l.subject===subject);
           const subjectDone=subjectLessons.filter(l=>snapshot.completed.includes(l.id));
@@ -62,5 +87,5 @@ export default function Parent(){
         })}</div>
       </div>
     })}</div>
-  </div></main>
+  </div></main>;
 }

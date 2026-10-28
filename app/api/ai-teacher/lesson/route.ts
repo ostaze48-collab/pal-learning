@@ -2,11 +2,12 @@ import OpenAI from 'openai';
 import {NextResponse} from 'next/server';
 import {getLesson,getStudent,getLessonSourceLabel} from '../../../../lib/data';
 import {getCurriculumSources,getRecoveryGradeBand} from '../../../../lib/curriculumKnowledge';
+import {buildPedagogyPlan} from '../../../../lib/pedagogyEngine';
 
 type Mode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 type Weakness={title:string;score:number;gradeAnchor?:string;cause?:string;missedFacts?:Array<{text:string;selected:string;correct:string}>};
 type LastCheck={answer?:string;outcome?:'understood'|'partial'|'misconception';feedback?:string};
-type LearnerModelInput={preferredTeachingMode?:string;teachingModeScores?:Record<string,number>;subjectMastery?:number|null;recentLessons?:Array<{title?:string;mastery?:number;understandingOutcome?:string;understandingFeedback?:string}>;gaps?:Array<{title?:string;score?:number;gradeAnchor?:string;cause?:string}>;misconceptions?:Array<{misconception?:string;feedback?:string}>};
+type LearnerModelInput={preferredTeachingMode?:string;teachingModeScores?:Record<string,number>;subjectMastery?:number|null;recentLessons?:Array<{title?:string;mastery?:number;understandingOutcome?:string;understandingFeedback?:string;summaryNeedsWork?:string;summaryNextStep?:string}>;gaps?:Array<{title?:string;score?:number;gradeAnchor?:string;cause?:string}>;misconceptions?:Array<{misconception?:string;feedback?:string}>};
 type Body={lessonId?:string;mode?:Mode;weaknesses?:Weakness[];previousExplanation?:string;lastCheck?:LastCheck;learnerModel?:LearnerModelInput};
 type TeacherCard={title:string;body:string;kind:'explain'|'example'|'tip'|'check'};
 type Payload={title:string;intro:string;cards:TeacherCard[];checkQuestion?:{text:string;hint:string};teacherNote?:string};
@@ -30,7 +31,7 @@ function learnerSummary(model:LearnerModelInput|undefined){
   if(Number.isFinite(Number(model.subjectMastery)))lines.push(`- متوسط إتقان المادة: ${Number(model.subjectMastery)}%`);
   if(model.preferredTeachingMode)lines.push(`- أسلوب الشرح الأكثر نجاحًا سابقًا: ${model.preferredTeachingMode}`);
   if(model.teachingModeScores){const top=Object.entries(model.teachingModeScores).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,4);if(top.length)lines.push(`- فعالية أساليب الشرح: ${top.map(([m,s])=>`${m}=${s}`).join('، ')}`)}
-  const recent=(model.recentLessons||[]).slice(0,5);if(recent.length){lines.push('- آخر إشارات التعلم:');for(const x of recent)lines.push(`  • ${String(x.title||'درس')}: إتقان ${Number(x.mastery)||0}%${x.understandingOutcome?`، فهم=${x.understandingOutcome}`:''}${x.understandingFeedback?`، ملاحظة=${String(x.understandingFeedback).slice(0,220)}`:''}`)}
+  const recent=(model.recentLessons||[]).slice(0,5);if(recent.length){lines.push('- آخر إشارات التعلم:');for(const x of recent)lines.push(`  • ${String(x.title||'درس')}: إتقان ${Number(x.mastery)||0}%${x.understandingOutcome?`، فهم=${x.understandingOutcome}`:''}${x.understandingFeedback?`، ملاحظة=${String(x.understandingFeedback).slice(0,220)}`:''}${x.summaryNeedsWork?`، يحتاج تثبيت=${String(x.summaryNeedsWork).slice(0,220)}`:''}${x.summaryNextStep?`، الخطوة التالية=${String(x.summaryNextStep).slice(0,220)}`:''}`)}
   const gaps=(model.gaps||[]).slice(0,6);if(gaps.length){lines.push('- فجوات ذات أولوية:');for(const g of gaps)lines.push(`  • ${String(g.title||'مهارة')}: ${Number(g.score)||0}%${g.gradeAnchor?` (${g.gradeAnchor})`:''}${g.cause?` — ${String(g.cause).slice(0,220)}`:''}`)}
   const misconceptions=(model.misconceptions||[]).slice(0,6);if(misconceptions.length){lines.push('- سوء فهم رُصد في تدريبات سابقة:');for(const m of misconceptions)lines.push(`  • ${String(m.misconception||'').slice(0,260)}${m.feedback?` — ${String(m.feedback).slice(0,260)}`:''}`)}
   return lines.join('\n')||'- لا توجد إشارات محفوظة بعد.';
@@ -49,14 +50,17 @@ export async function POST(request:Request){
   const weaknessText=weaknesses.length?weaknesses.map(w=>`- ${w.title}: ${w.score}%${w.gradeAnchor?` (${w.gradeAnchor})`:''}${w.cause?` — ${w.cause}`:''}${w.missedFacts?.length?` — أخطاء: ${w.missedFacts.map(m=>`${m.text} [اختارت ${m.selected}، الصحيح ${m.correct}]`).join('؛ ')}`:''}`).join('\n'):'- لا توجد فجوات دقيقة محفوظة لهذه المادة.';
   const lastCheckText=body.lastCheck?.answer?`\nمحاولة الفهم الأخيرة للطالبة:\n- إجابة الطالبة: ${String(body.lastCheck.answer).slice(0,700)}\n- التقييم: ${body.lastCheck.outcome||'غير محدد'}\n- ملاحظة المعلم: ${String(body.lastCheck.feedback||'').slice(0,800)}\nتعليمات إعادة التدريس: لا تكرر الشرح السابق. حدد الفكرة التي سببت الخلط من هذه الإجابة، ثم أعد بناء الشرح حولها بمثال جديد أصغر وأسهل، وبعده سؤال تحقق جديد مختلف.`:'';
   const modelText=learnerSummary(body.learnerModel);
+  const blockingGap=(body.learnerModel?.gaps||[]).some(g=>Number(g.score)<50)||weaknesses.some(w=>Number(w.score)<50);
+  const pedagogy=buildPedagogyPlan(lesson.subject,body.learnerModel?.subjectMastery,blockingGap,mode);
+  const pedagogyText=`المستوى التدريسي المقترح: ${pedagogy.level}\nالطريقة الأساسية: ${pedagogy.method}\nتسلسل التدريس:\n${pedagogy.sequence.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nقاعدة التغذية الراجعة: ${pedagogy.feedbackRule}\nضبط الحمل المعرفي: ${pedagogy.cognitiveLoad}\nقاعدة الاسترجاع: ${pedagogy.retrievalRule}`;
   const styleMap:Record<Mode,string>={overview:'اشرح الدرس شرحًا متدرجًا واضحًا من الفكرة إلى المثال ثم تحقق قصير.',simplify:'أعد الشرح بأبسط لغة ممكنة، جمل قصيرة، وفكرة واحدة في كل خطوة. لا تفترض فهم المصطلحات.',step_by_step:'حوّل الفكرة إلى خطوات مرقمة صغيرة جدًا مع مثال محلول خطوة بخطوة.',analogy:'استخدم تشبيهًا أو قصة أو تصورًا بصريًا مناسبًا لعمر الطالبة، ثم اربطه بالمفهوم الحقيقي حتى لا يبقى التشبيه مضللًا.',real_world:'اربط المفهوم بموقف من الحياة اليومية أو البيئة المحيطة ثم أعد ربطه مباشرة بهدف المنهاج.',deep:'وسّع الشرح بمعلومات إضافية صحيحة ومناسبة للعمر، مع الحفاظ على هدف الدرس الحالي وعدم إغراق الطالبة.',check:'ركز على سؤال أو سؤالين يكشفان هل فهمت الطالبة الفكرة فعلًا، مع تلميح بدل الحل المباشر.'};
   const hasCurriculumStore=Boolean(process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID);
   const instructions=`أنت المعلم الأساسي في منصة تعليم منزلية فلسطينية لطفلتين. مهمتك ليست الدردشة العامة؛ أنت معلم شخصي تكيفي.
 1) المرجع الأول هو المنهاج الفلسطيني. إذا كانت file_search متاحة فاستخدمها أولًا. وإذا لم تكن متاحة فاستعمل web_search للتحقق من المصادر الفلسطينية الرسمية، مع أولوية elearn.edu.ps وmoe.edu.ps وأي نطاق رسمي تابع لوزارة التربية والتعليم الفلسطينية.
-2) ملف التعلم الموحد مهم جدًا: استخدم متوسط الإتقان، الفجوات، سوء الفهم المتكرر، وأسلوب الشرح الذي أثبت نجاحه لتحديد نقطة البداية وطول الشرح ونوع المثال.
-3) لا تستبدل هدف الدرس الحالي بمعلومة خارجية. استخدم الويب للتحقق والتوسيع فقط.
-4) إذا كانت فجوة سابقة تمنع الفهم، اشرحها باختصار ثم عد للدرس الحالي.
-5) استخدم التدرج من المعلوم للمجهول، أمثلة محلولة، تمثيلًا بصريًا/لفظيًا، استرجاعًا نشطًا، وسؤال تحقق.
+2) التزم بالخطة البيداغوجية المرفقة ما لم تتعارض مع دقة المحتوى. لا تحولها إلى نص تنظيري؛ طبقها في ترتيب الشرح والأمثلة والأسئلة.
+3) ملف التعلم الموحد مهم جدًا: استخدم متوسط الإتقان، الفجوات، سوء الفهم المتكرر، وأسلوب الشرح الذي أثبت نجاحه لتحديد نقطة البداية وطول الشرح ونوع المثال.
+4) لا تستبدل هدف الدرس الحالي بمعلومة خارجية. استخدم الويب للتحقق والتوسيع فقط.
+5) إذا كانت فجوة سابقة تمنع الفهم، اشرحها باختصار ثم عد للدرس الحالي.
 6) لا تكتفِ بالتعريف: فسّر لماذا وكيف، ثم مثالًا، ومثالًا مضادًا عند فائدته.
 7) إذا وصلت لك محاولة فهم سابقة خاطئة أو جزئية، اعتبرها أهم إشارة تربوية: شخص سبب الخلط، غيّر التمثيل أو المثال أو مستوى الخطوات، ولا تكرر نفس الجمل بصياغة مختلفة فقط.
 8) إذا تكرر سوء فهم بعينه في دروس سابقة، قدّم وقاية قصيرة منه قبل الوصول للنقطة التي تسبب الخطأ.
@@ -66,7 +70,7 @@ export async function POST(request:Request){
 12) لا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
 13) ${styleMap[mode]}
 14) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
-  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nملف التعلم الموحد للطالبة في هذه المادة:\n${modelText}\n\nفجوات مرتبطة مباشرة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
+  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود: ${lesson.example}\nمرجع الدرس: ${getLessonSourceLabel(lesson)}\n\nالخطة البيداغوجية لهذه الجلسة:\n${pedagogyText}\n\nملف التعلم الموحد للطالبة في هذه المادة:\n${modelText}\n\nفجوات مرتبطة مباشرة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
 
   try{
     const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const tools:any[]=[];
@@ -77,6 +81,6 @@ export async function POST(request:Request){
     const output:any[]=Array.isArray((response as any).output)?(response as any).output:[];
     const grounded=output.some(x=>x?.type==='file_search_call');
     const webUsed=output.some(x=>x?.type==='web_search_call'||x?.type==='web_search_preview_call');
-    return NextResponse.json({content,mode:'ai',grounded,webUsed});
-  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false});}
+    return NextResponse.json({content,mode:'ai',grounded,webUsed,pedagogyLevel:pedagogy.level});
+  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,pedagogyLevel:pedagogy.level});}
 }

@@ -11,6 +11,7 @@ import './teacher-companion.css';
 import './teacher-dock.css';
 import './creative-learning.css';
 import './concept-studio.css';
+import './advanced-concept-studio.css';
 import './dashboard-progress.css';
 import './live-rail.css';
 import PwaClient from './PwaClient';

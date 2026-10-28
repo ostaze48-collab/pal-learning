@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
+import {getTeachingScenes} from '../../../lib/teachingBlueprints';
 import LessonRunner from './LessonRunner';
 import ObjectiveCoverageBridge from './ObjectiveCoverageBridge';
 import LearningCanvas from './LearningCanvas';
@@ -29,8 +30,10 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
  const isAssessment=lesson.kind==='assessment';
  const subjectClass=subjectClasses[lesson.subject]??'subjectMath';
  const tip=sideTip(lesson.subject);
+ const hasFullBlueprint=!isAssessment&&lesson.learningPoints.length>0&&lesson.learningPoints.every((_,index)=>Boolean(getTeachingScenes(lesson,index)?.length));
 
- return <main className={`lessonJourney ${isSalma?'themeSalma':'themeSama'} ${subjectClass}`}><div className="wrap lessonJourneyWrap">
+ return <main className={`lessonJourney ${isSalma?'themeSalma':'themeSama'} ${subjectClass} ${hasFullBlueprint?'hasTeachingBlueprint':''}`}><div className="wrap lessonJourneyWrap">
+  {hasFullBlueprint&&<style>{`.hasTeachingBlueprint .creativeLessonLab{display:none}`}</style>}
   {!isAssessment&&<ObjectiveCoverageBridge lesson={lesson}/>} 
   {!isAssessment&&<EvidenceStudio lesson={lesson}/>} 
   <header className="kidTopbar lessonTopbar"><Link className="backBubble" href={`/student/${student.slug}`}>→ دروسي</Link><div className="lessonTopTitle"><span>{subjectIcons[lesson.subject]??'📘'}</span><strong>{lesson.subject}</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>

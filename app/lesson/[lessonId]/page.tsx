@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
-import LessonPlayer from './LessonPlayer';
+import LessonPlayerV2 from './LessonPlayerV2';
 import LessonProgressRail from './LessonProgressRail';
 
 const subjectIcons:Record<string,string>={'الرياضيات':'➗','العلوم والحياة':'🔬','اللغة العربية':'📚','English':'🌍'};
@@ -22,16 +22,16 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
   <header className="kidTopbar lessonTopbar"><Link className="backBubble" href={`/student/${student.slug}`}>→ دروسي</Link><div className="lessonTopTitle"><span>{subjectIcons[lesson.subject]??'📘'}</span><strong>{lesson.subject}</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
 
   <section className="lessonMissionHead">
-    <div className="missionCopy"><span className="questEyebrow">{lesson.kind==='assessment'?'🏆 تحدي قصير':'✨ مهمة جديدة'}</span><h1>{lesson.title}</h1><p>{lesson.summary}</p></div>
+    <div className="missionCopy"><span className="questEyebrow">{lesson.kind==='assessment'?'🏆 تحدي قصير':'✨ رحلة تعلم'}</span><h1>{lesson.title}</h1><p>{lesson.summary}</p></div>
     <div className="missionFacts"><div><span>⏱</span><strong>{lesson.minutes}</strong><small>دقيقة</small></div><div><span>🎯</span><strong>{lesson.learningPoints.length}</strong><small>أهداف</small></div></div>
   </section>
 
   <LessonProgressRail/>
 
   <div className="kidLessonLayout">
-    <section className="lessonMainPane"><LessonPlayer lesson={lesson}/></section>
+    <section className="lessonMainPane"><LessonPlayerV2 lesson={lesson}/></section>
     <aside className="goalCard">
-      <div className="goalCardIcon">🎯</div><span>هدفي في هذا الدرس</span><h2>سأستطيع أن…</h2><ul>{lesson.learningPoints.slice(0,4).map(point=><li key={point}>{point}</li>)}</ul>
+      <div className="goalCardIcon">🎯</div><span>بنهاية الرحلة</span><h2>سأستطيع أن…</h2><ul>{lesson.learningPoints.slice(0,4).map(point=><li key={point}>{point}</li>)}</ul>
     </aside>
   </div>
 

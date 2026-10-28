@@ -4,12 +4,13 @@ export type TeachingProfile={student:string;subject:string;updatedAt:string;mode
 
 const defaultStats=():ModeStats=>({uses:0,understood:0,partial:0,misconception:0,score:0});
 
-export function profileKey(student:string,subject:string){return `aiTeachingProfile:${student}:${subject}`}
+export function profileKey(student:string,subject:string){return `lesson:teacherProfile:${student}:${subject}`}
+function legacyProfileKey(student:string,subject:string){return `aiTeachingProfile:${student}:${subject}`}
 
 export function readTeachingProfile(student:string,subject:string):TeachingProfile{
   if(typeof window==='undefined')return {student,subject,updatedAt:new Date(0).toISOString(),modes:{}};
-  const raw=localStorage.getItem(profileKey(student,subject));
-  if(raw){try{const parsed=JSON.parse(raw);if(parsed&&parsed.student===student&&parsed.subject===subject)return parsed}catch{}}
+  const raw=localStorage.getItem(profileKey(student,subject))||localStorage.getItem(legacyProfileKey(student,subject));
+  if(raw){try{const parsed=JSON.parse(raw);if(parsed&&parsed.student===student&&parsed.subject===subject){if(!localStorage.getItem(profileKey(student,subject)))localStorage.setItem(profileKey(student,subject),raw);return parsed}}catch{}}
   return {student,subject,updatedAt:new Date().toISOString(),modes:{}};
 }
 

@@ -3,6 +3,7 @@ import {getStudent,getStudentLessons,getLessonUnit} from '../../../lib/data';
 import StudentProgress from './StudentProgress';
 import DailyPlan from './DailyPlan';
 import LessonStatus from './LessonStatus';
+import RecoveryStatus from './RecoveryStatus';
 
 export default async function StudentPage({params}:{params:Promise<{slug:string}>}){
   const {slug}=await params;
@@ -15,7 +16,8 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
 
   return <main className="shell"><div className="wrap">
     <div className="top"><Link href="/" className="btn secondary">← الرئيسية</Link><div className="brand">{student.name}</div></div>
-    <section className="card" style={{marginBottom:18}}><span className="tag">الصف {student.grade===5?'الخامس':'السابع'} · الفصل الأول</span><h1 style={{marginBottom:6}}>مرحبًا {student.name} {student.emoji}</h1><p className="muted">ابدئي من خطة اليوم أو اختاري المادة والوحدة مباشرة. تم تحسين هذا العرض للاستخدام من اللابتوب، مع بقاء الهاتف مدعومًا.</p><StudentProgress lessonIds={items.map(i=>i.id)}/></section>
+    <section className="card" style={{marginBottom:18}}><span className="tag">الصف {student.grade===5?'الخامس':'السابع'} · الفصل الأول</span><h1 style={{marginBottom:6}}>مرحبًا {student.name} {student.emoji}</h1><p className="muted">المسار الرئيس هو دروس صفك الحالي. وبالتوازي نغلق أي فجوة سابقة قصيرة قد تمنعك من فهم الدرس — دون إعادة سنوات كاملة.</p><StudentProgress lessonIds={items.map(i=>i.id)}/></section>
+    <RecoveryStatus slug={slug}/>
     <DailyPlan lessons={items}/>
 
     <div className="studentDesktopLayout">
@@ -25,7 +27,8 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
           const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
           return <a className="subjectNavLink" href={`#subject-${index}`} key={subject}><span>{icon}</span><span style={{flex:1}}>{subject}</span><small>{subjectLessons.filter(x=>x.kind!=='assessment').length}</small></a>
         })}
-        <div className="subjectNavHint">انتقلي بسرعة بين المواد من هذه القائمة أثناء الدراسة على اللابتوب.</div>
+        <Link className="subjectNavLink" href={`/student/${slug}/recovery`}><span>🧩</span><span style={{flex:1}}>فجوات سابقة</span><small>AI</small></Link>
+        <div className="subjectNavHint">انتقلي بسرعة بين المواد، أو افتحي مسار الاستدراك إذا ظهرت مهارة سابقة تحتاج تثبيتًا.</div>
       </aside>
 
       <div className="learningMain">

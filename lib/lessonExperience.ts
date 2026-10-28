@@ -1,5 +1,6 @@
 import type {Lesson} from './data';
 import {chooseVisualStrategy} from './visualTeaching';
+import {buildTeacherSessionPlan} from './teacherBrain';
 
 export type ExperienceKind='slides'|'puzzle'|'game'|'experiment'|'story'|'challenge'|'sort';
 export type CognitiveTask='build_model'|'discover_pattern'|'classify'|'sequence'|'cause_effect'|'apply_rule'|'retrieve';
@@ -30,23 +31,25 @@ export function chooseLessonExperience(lesson:Lesson,diagnosticCorrect:boolean,s
   const visual=chooseVisualStrategy(lesson);
   const task=chooseCognitiveTask(lesson);
   const text=lessonText(lesson);
-  const mastery=Number.isFinite(Number(subjectMastery))?Number(subjectMastery):null;
-  const creative=Number.isFinite(Number(recentCreativeSuccess))?Number(recentCreativeSuccess):null;
-  const needsSupport=!diagnosticCorrect||(mastery!==null&&mastery<65)||(creative!==null&&creative<50);
-  const strong=diagnosticCorrect&&(mastery===null||mastery>=80)&&(creative===null||creative>=75);
+  const brain=buildTeacherSessionPlan(lesson,{diagnosticCorrect,subjectMastery,conceptSuccess:recentCreativeSuccess});
+  const needsSupport=brain.level==='rebuild'||brain.level==='guided';
+  const strong=brain.level==='independent'||brain.level==='stretch';
   let primary:ExperienceKind='slides';let secondary:ExperienceKind='challenge';
 
-  if(needsSupport){
+  if(brain.level==='rebuild'){
     primary=task==='cause_effect'?'experiment':task==='classify'||task==='sequence'?'sort':'slides';
     secondary=task==='apply_rule'?'sort':'game';
+  }else if(needsSupport){
+    primary=task==='build_model'?'game':task==='cause_effect'?'experiment':task==='classify'||task==='sequence'||task==='apply_rule'?'sort':'game';
+    secondary='slides';
   }else if(task==='build_model'){
-    primary=strong?'puzzle':'game';secondary='challenge';
+    primary=brain.level==='stretch'?'puzzle':'game';secondary='challenge';
   }else if(task==='cause_effect'){
-    primary='experiment';secondary=strong?'challenge':'puzzle';
+    primary='experiment';secondary=brain.level==='stretch'?'challenge':'puzzle';
   }else if(task==='classify'||task==='sequence'){
-    primary='sort';secondary=strong?'challenge':'game';
+    primary='sort';secondary=brain.level==='stretch'?'challenge':'game';
   }else if(task==='apply_rule'){
-    primary=(lesson.subject==='English'||lesson.subject==='اللغة العربية')?'sort':'game';secondary=strong?'challenge':'story';
+    primary=(lesson.subject==='English'||lesson.subject==='اللغة العربية')?'sort':'game';secondary=brain.level==='stretch'?'challenge':'story';
   }else if(task==='discover_pattern'){
     primary='puzzle';secondary='challenge';
   }else if(lesson.subject==='English'||lesson.subject==='اللغة العربية'){
@@ -58,6 +61,6 @@ export function chooseLessonExperience(lesson:Lesson,diagnosticCorrect:boolean,s
   const labels:Record<ExperienceKind,[string,string]>={slides:['عرض مصور قصير','🖼️'],puzzle:['لغز الفكرة','🧩'],game:['لعبة تعلم','🎮'],experiment:['تجربة وتوقع','🧪'],story:['قصة أو موقف','📚'],challenge:['تحدي ذكي','🏁'],sort:['رتّبي وصنّفي','🧲']};
   const [label,icon]=labels[primary];
   const taskReason:Record<CognitiveTask,string>={build_model:'هذا المفهوم يحتاج بناء نموذج وتحريكه، لا حفظ تعريف فقط.',discover_pattern:'أفضل طريق هنا هو اكتشاف النمط قبل إعطاء القاعدة.',classify:'المهمة الأساسية هي التمييز والتصنيف بين حالات متشابهة.',sequence:'الفهم يعتمد على ترتيب الخطوات وبناء التسلسل.',cause_effect:'الفكرة علمية سببية؛ نبدأ بتوقع ثم دليل ثم تفسير.',apply_rule:'المطلوب استخدام القاعدة في مثال، لا ترديدها فقط.',retrieve:'نثبت الفكرة باسترجاع نشط وتطبيق قصير.'};
-  const levelReason=needsSupport?' سنبدأ بطريقة موجهة تخفف الحمل وتبني الفكرة خطوة خطوة.':strong?' أداؤك الأخير قوي، لذلك نرفع مستوى الاكتشاف والتحدي.':' سنمزج شرحًا قصيرًا مع نشاط يثبت الفكرة.';
-  return {primary,secondary,label,icon,reason:taskReason[task]+levelReason,intensity:needsSupport?'guided':strong?'challenge':'balanced',visualLabel:visual.label,task};
+  const levelReason=` ${brain.reason}`;
+  return {primary,secondary,label,icon,reason:taskReason[task]+levelReason,intensity:brain.activityIntensity,visualLabel:visual.label,task};
 }

@@ -4,6 +4,7 @@ import {getLesson,getStudent,getLessonSourceLabel} from '../../../../lib/data';
 import {getCurriculumSources,getRecoveryGradeBand} from '../../../../lib/curriculumKnowledge';
 import {buildPedagogyPlan} from '../../../../lib/pedagogyEngine';
 import {getLessonBridges} from '../../../../lib/curriculumBridges';
+import {evaluateTeacherQuality} from '../../../../lib/teacherQuality';
 
 type Mode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 type Weakness={title:string;score:number;gradeAnchor?:string;cause?:string;missedFacts?:Array<{text:string;selected:string;correct:string}>};
@@ -44,7 +45,7 @@ export async function POST(request:Request){
   const lessonId=typeof body.lessonId==='string'?body.lessonId:'';const mode:Mode=body.mode||'overview';
   const lesson=getLesson(lessonId);if(!lesson)return NextResponse.json({error:'lesson_not_found'},{status:404});
   const student=getStudent(lesson.student);if(!student)return NextResponse.json({error:'student_not_found'},{status:404});
-  const backup=fallback(lesson.id,mode);if(!process.env.OPENAI_API_KEY)return NextResponse.json({content:backup,mode:'local',grounded:false,webUsed:false,groundingQuality:'local'});
+  const backup=fallback(lesson.id,mode);if(!process.env.OPENAI_API_KEY)return NextResponse.json({content:backup,mode:'local',grounded:false,webUsed:false,groundingQuality:'local',qualityScore:0});
 
   const weaknesses=(body.weaknesses||[]).slice(0,8);const priorGrades=getRecoveryGradeBand(student.grade);
   const officialSources=[...priorGrades,student.grade].flatMap(g=>getCurriculumSources(g,lesson.subject));
@@ -68,9 +69,9 @@ export async function POST(request:Request){
 2) لا تعتمد على الذاكرة العامة للنموذج وحدها في تعريف هدف الدرس أو تسلسله أو حقيقة منهجية أساسية. إذا تعذر إيجاد سند مناسب، لا تخترع؛ اجعل الشرح محافظًا ومحدودًا بما هو موجود في سياق الدرس.
 3) التزم بالخطة البيداغوجية المرفقة، وطبّقها في ترتيب الشرح والأمثلة والأسئلة.
 4) استخدم ملف التعلم الموحد لتحديد نقطة البداية وطول الشرح ونوع المثال.
-5) استخدم جسور المهارات السابقة المرفقة كخريطة prerequisite، لكن لا تعيد تدريسها جميعًا. إذا كانت المهارة السابقة غير ضعيفة أو غير مقاسة، يكفي سؤال استرجاع أو تذكير قصير عند الحاجة. إذا كانت نتيجتها أقل من 80% وتؤثر مباشرة في الدرس، علّم الجزء الضروري فقط. إذا كانت أقل من 50% وهي مانع مباشر، أعط علاجًا تأسيسيًا قصيرًا ثم عد للدرس الحالي.
-6) اجعل العلاقة صريحة للطالبة بصورة بسيطة مثل: «نحتاج هذه الخطوة القديمة حتى نفهم فكرة اليوم»، من دون ذكر الصفوف السابقة كوصمة أو إخبارها بأنها متأخرة.
-7) لا تكتفِ بتعريف واحد. عند ملاءمة الموضوع قدّم تمثيلًا أولًا بسيطًا، مثالًا محلولًا، مثالًا ثانيًا مختلفًا قليلًا لاختبار انتقال الفهم، ثم خطأ شائعًا أو مثالًا مضادًا.
+5) استخدم جسور المهارات السابقة كخريطة prerequisite، لكن لا تعيد تدريسها جميعًا. إذا كانت المهارة السابقة غير ضعيفة أو غير مقاسة، يكفي استرجاع قصير عند الحاجة. إذا كانت نتيجتها أقل من 80% وتؤثر مباشرة في الدرس، علّم الجزء الضروري فقط. إذا كانت أقل من 50% وهي مانع مباشر، أعط علاجًا تأسيسيًا قصيرًا ثم عد للدرس الحالي.
+6) اجعل العلاقة بسيطة مثل: «نحتاج هذه الخطوة حتى نفهم فكرة اليوم»، من دون وصم الطالبة بالتأخر.
+7) لا تكتفِ بتعريف واحد. عند ملاءمة الموضوع قدّم تمثيلًا بسيطًا، مثالًا محلولًا، مثالًا ثانيًا مختلفًا قليلًا لاختبار انتقال الفهم، ثم خطأ شائعًا أو مثالًا مضادًا.
 8) لا تكرر نفس الأرقام أو الكلمات أو القصة في المثال الثاني؛ غيّر السطح مع تثبيت المفهوم.
 9) إذا وصلت محاولة فهم سابقة خاطئة أو جزئية، شخص سبب الخلط وغيّر التمثيل أو مستوى الخطوات، ولا تكرر نفس الجمل بصياغة مختلفة فقط.
 10) إذا تكرر سوء فهم في دروس سابقة، قدّم وقاية قصيرة منه قبل النقطة التي تسبب الخطأ.
@@ -92,7 +93,9 @@ export async function POST(request:Request){
     const grounded=output.some(x=>x?.type==='file_search_call');
     const webUsed=output.some(x=>x?.type==='web_search_call'||x?.type==='web_search_preview_call');
     if(!grounded&&!webUsed)throw new Error('ungrounded_teacher_payload');
+    const quality=evaluateTeacherQuality(content,mode);
+    if(!quality.pass)throw new Error(`low_teacher_quality:${quality.score}:${quality.issues.join('|')}`);
     const groundingQuality=grounded?'curriculum-file':webUsed?'official-web':'local';
-    return NextResponse.json({content,mode:'ai',grounded,webUsed,groundingQuality,pedagogyLevel:pedagogy.level,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});
-  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,groundingQuality:'local',pedagogyLevel:pedagogy.level,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});}
+    return NextResponse.json({content,mode:'ai',grounded,webUsed,groundingQuality,pedagogyLevel:pedagogy.level,qualityScore:quality.score,qualityIssues:quality.issues,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});
+  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,groundingQuality:'local',pedagogyLevel:pedagogy.level,qualityScore:0,qualityIssues:['fallback'],bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});}
 }

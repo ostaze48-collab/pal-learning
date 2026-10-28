@@ -11,7 +11,7 @@ export type ExperiencePlan={
   reason:string;
   intensity:'guided'|'balanced'|'challenge';
   visualLabel:string;
-  task:CognitiveTask;
+  task?:CognitiveTask;
 };
 
 function lessonText(lesson:Lesson){return [lesson.title,lesson.summary,...lesson.learningPoints,lesson.example].join(' ').toLowerCase()}

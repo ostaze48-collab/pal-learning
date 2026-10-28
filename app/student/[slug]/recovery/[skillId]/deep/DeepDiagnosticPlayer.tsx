@@ -51,7 +51,7 @@ export default function DeepDiagnosticPlayer({slug,skillId,currentGrade,subskill
     localStorage.setItem(`recovery:${slug}:${skillId}`,String(average));
     const weak=subskills.map(s=>{
       const r=nextResults[s.id];
-      return {id:s.id,title:s.title,gradeAnchor:s.gradeAnchor,score:r?.score??0,status:r?.status??'needs_verification',diagnosis:r?.label??'تحتاج تحقق',cause:r?.cause??'',nextAction:r?.nextAction??'',treatmentSteps:s.treatmentSteps};
+      return {id:s.id,title:s.title,gradeAnchor:s.gradeAnchor,score:r?.score??0,status:r?.status??'needs_verification',diagnosis:r?.label??'تحتاج تحقق',cause:r?.cause??'',nextAction:r?.nextAction??'',missedFacts:r?.missedFacts??[],treatmentSteps:s.treatmentSteps};
     }).filter(x=>x.score<80).sort((a,b)=>a.score-b.score);
     const plan={skillId,updatedAt:new Date().toISOString(),average,adaptive:true,weak};
     localStorage.setItem(`recoveryPlan:${slug}:${skillId}`,JSON.stringify(plan));
@@ -61,21 +61,17 @@ export default function DeepDiagnosticPlayer({slug,skillId,currentGrade,subskill
   function next(){
     if(!sub||!q||selected===null)return;
     const correct=selected===q.correct;
-    const ev:AdaptiveEvidence={questionId:q.id,correct,mode,responseMs:Math.max(300,Date.now()-startedAt)};
+    const ev:AdaptiveEvidence={questionId:q.id,correct,mode,responseMs:Math.max(300,Date.now()-startedAt),selectedIndex:selected};
     const nextEvidence=[...evidence,ev];
     setEvidence(nextEvidence);
 
-    // طالب/ة لديه إتقان سابق مرتفع: نبدأ بسؤال تحقق أصعب. إذا نجح ننهي بسرعة، وإذا أخفق نعود لسؤال الأساس.
     if(mode==='verify'&&evidence.length===0&&priorScores[sub.id]>=90){
       if(correct){finalizeSubskill(nextEvidence);return}
       setMode('entry');setQuestionIndex(0);setSelected(null);setStartedAt(Date.now());return;
     }
-
-    // في المحاولة الأولى العادية: النجاح يقود للتحقق، والخطأ يقود لسؤال مدعوم مع تلميح تأسيسي.
     if(mode==='entry'&&sub.questions.length>1&&questionIndex===0){
       setMode(correct?'verify':'supported');setQuestionIndex(1);setSelected(null);setStartedAt(Date.now());return;
     }
-
     finalizeSubskill(nextEvidence);
   }
 
@@ -87,12 +83,13 @@ export default function DeepDiagnosticPlayer({slug,skillId,currentGrade,subskill
     return <section className="card" style={{marginTop:18}}>
       <span className="tag">خريطة تكيفية للمهارات</span>
       <h2>الآن نعرف مستوى الفجوة وسببها الأقرب</h2>
-      <p className="muted">النظام لم يكتفِ بنسبة النجاح؛ قارن إجابة الأساس بسؤال التحقق وحدد هل المشكلة تأسيسية أم في التطبيق أو في ثبات الاستدعاء.</p>
+      <p className="muted">النظام يقارن إجابة الأساس بسؤال التحقق، زمن الاستدعاء، والحقائق التي أُخطئ فيها لتحديد العلاج الأقصر.</p>
       <div className="recoverySkillGrid" style={{marginTop:16}}>{ranked.map(({sub:s,result})=>{const score=result?.score??0;return <div className={`recoverySkill ${score>=80?'good':score>=50?'mid':'weak'}`} key={s.id}>
         <div className="subjectStatTop"><strong>{s.title}</strong><span>{score}%</span></div>
         <div className="progress"><span style={{width:`${score}%`}}/></div>
         <p><b>{result?.label}</b> · {s.gradeAnchor}</p>
         <div className="deepDiagnosis"><strong>السبب الأقرب:</strong><p>{result?.cause}</p></div>
+        {(result?.missedFacts?.length??0)>0&&<div className="missedFacts"><strong>أخطاء محددة:</strong>{result!.missedFacts.map(m=><div key={m.questionId}><span>{m.text}</span><small>اختارت: {m.selected} · الصحيح: {m.correct}</small></div>)}</div>}
         {score<80?<>
           <div className="deepTreatmentSteps"><strong>الخطوة التالية:</strong><p>{result?.nextAction}</p><ol>{s.treatmentSteps.map(x=><li key={x}>{x}</li>)}</ol></div>
           <Link className="btn" href={`/student/${slug}/recovery/${skillId}?focus=${encodeURIComponent(s.id)}`}>ابدأ علاج {s.title}</Link>

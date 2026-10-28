@@ -87,15 +87,27 @@ export async function POST(request:Request){
     const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const tools:any[]=[];
     if(hasCurriculumStore)tools.push({type:'file_search',vector_store_ids:[process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID],max_num_results:8});
     if(!hasCurriculumStore||mode==='deep'||mode==='real_world')tools.push({type:'web_search'});
-    const response=await client.responses.create({model:process.env.OPENAI_TUTOR_MODEL||'gpt-5',instructions,input:prompt,...(tools.length?{tools}:{}),max_output_tokens:2200});
-    const content=validate(cleanJson(response.output_text||''));if(!content)throw new Error('invalid_teacher_payload');
-    const output:any[]=Array.isArray((response as any).output)?(response as any).output:[];
-    const grounded=output.some(x=>x?.type==='file_search_call');
-    const webUsed=output.some(x=>x?.type==='web_search_call'||x?.type==='web_search_preview_call');
-    if(!grounded&&!webUsed)throw new Error('ungrounded_teacher_payload');
-    const quality=evaluateTeacherQuality(content,mode);
-    if(!quality.pass)throw new Error(`low_teacher_quality:${quality.score}:${quality.issues.join('|')}`);
-    const groundingQuality=grounded?'curriculum-file':webUsed?'official-web':'local';
-    return NextResponse.json({content,mode:'ai',grounded,webUsed,groundingQuality,pedagogyLevel:pedagogy.level,qualityScore:quality.score,qualityIssues:quality.issues,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});
+
+    async function generate(extra=''){
+      const response=await client.responses.create({model:process.env.OPENAI_TUTOR_MODEL||'gpt-5',instructions,input:`${prompt}${extra}`,...(tools.length?{tools}:{}),max_output_tokens:2200});
+      const content=validate(cleanJson(response.output_text||''));if(!content)throw new Error('invalid_teacher_payload');
+      const output:any[]=Array.isArray((response as any).output)?(response as any).output:[];
+      const grounded=output.some(x=>x?.type==='file_search_call');
+      const webUsed=output.some(x=>x?.type==='web_search_call'||x?.type==='web_search_preview_call');
+      const quality=evaluateTeacherQuality(content,mode);
+      return {content,grounded,webUsed,quality};
+    }
+
+    let result=await generate();
+    if((!result.grounded&&!result.webUsed)||!result.quality.pass){
+      const problems=[...(!result.grounded&&!result.webUsed?['لم تستخدم أداة مصدر فعلية.']:[]),...result.quality.issues];
+      const draft=JSON.stringify(result.content).slice(0,5000);
+      result=await generate(`\n\nهذه محاولة ثانية لتحسين الجودة. المسودة الأولى لم تُعتمد للأسباب التالية:\n- ${problems.join('\n- ')}\n\nالمسودة الأولى:\n${draft}\n\nأعد بناء الشرح من الصفر مع استخدام أداة المصدر فعليًا، ومعالجة كل الملاحظات، وعدم نسخ المسودة كما هي.`);
+    }
+    if(!result.grounded&&!result.webUsed)throw new Error('ungrounded_teacher_payload_after_retry');
+    if(!result.quality.pass)throw new Error(`low_teacher_quality_after_retry:${result.quality.score}:${result.quality.issues.join('|')}`);
+
+    const groundingQuality=result.grounded?'curriculum-file':result.webUsed?'official-web':'local';
+    return NextResponse.json({content:result.content,mode:'ai',grounded:result.grounded,webUsed:result.webUsed,groundingQuality,pedagogyLevel:pedagogy.level,qualityScore:result.quality.score,qualityIssues:result.quality.issues,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});
   }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,groundingQuality:'local',pedagogyLevel:pedagogy.level,qualityScore:0,qualityIssues:['fallback'],bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});}
 }

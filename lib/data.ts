@@ -5,6 +5,7 @@ import {grade5GeometryLessons} from './grade5Geometry';
 import {grade5DataLessons} from './grade5Data';
 import {grade5ScienceLessons} from './grade5Science';
 import {grade5ArabicLessons} from './grade5Arabic';
+import {grade5ArabicExtraLessons} from './grade5ArabicExtra';
 import {grade5EnglishLessons} from './grade5English';
 import {grade7MathLessons} from './grade7Math';
 import {grade7GeometryLessons} from './grade7Geometry';
@@ -14,6 +15,7 @@ import {grade7ScienceLessons} from './grade7Science';
 import {grade7ScienceChemistryLessons} from './grade7ScienceChemistry';
 import {grade7SciencePressureLessons} from './grade7SciencePressure';
 import {grade7ArabicLessons} from './grade7Arabic';
+import {grade7ArabicExtraLessons} from './grade7ArabicExtra';
 import {grade7EnglishLessons} from './grade7English';
 
 export type Student={slug:string;name:string;grade:number;semester:number;emoji:string};
@@ -33,6 +35,7 @@ export const lessons:Lesson[]=[
   ...grade5DataLessons,
   ...grade5ScienceLessons,
   ...grade5ArabicLessons,
+  ...grade5ArabicExtraLessons,
   ...grade5EnglishLessons,
   ...grade7MathLessons,
   ...grade7GeometryLessons,
@@ -42,6 +45,7 @@ export const lessons:Lesson[]=[
   ...grade7ScienceChemistryLessons,
   ...grade7SciencePressureLessons,
   ...grade7ArabicLessons,
+  ...grade7ArabicExtraLessons,
   ...grade7EnglishLessons
 ];
 
@@ -69,14 +73,14 @@ export function getLessonUnit(lesson:Lesson){
 
   if(lesson.subject==='اللغة العربية'){
     if(lesson.student==='salma'){
-      if(id==='g5-ar-reading-blessings' || id==='g5-ar-poem-call-you') return 'الوحدة 1 · قراءة ونصوص';
-      if(id==='g5-ar-noun-types' || id==='g5-ar-pronouns') return 'الوحدة 2 · القواعد اللغوية';
-      if(id==='g5-ar-solar-lunar-l' || id==='g5-ar-ta-spelling') return 'الوحدة 3 · الإملاء';
+      if(['g5-ar-reading-blessings','g5-ar-poem-call-you','g5-ar-reading-horse-regret','g5-ar-poem-nurse','g5-ar-reading-memory','g5-ar-poem-refugee-cry'].includes(id)) return 'الوحدة 1 · قراءة ونصوص';
+      if(['g5-ar-noun-types','g5-ar-pronouns','g5-ar-verb-tenses'].includes(id)) return 'الوحدة 2 · القواعد اللغوية';
+      if(['g5-ar-solar-lunar-l','g5-ar-ta-spelling','g5-ar-ta-marbuta-haa'].includes(id)) return 'الوحدة 3 · الإملاء';
       return 'مراجعة العربية';
     }
-    if(id==='g7-ar-reading-mercy' || id==='g7-ar-reading-palestine-heart' || id==='g7-ar-reading-student-mother') return 'الوحدة 1 · القراءة والفهم';
-    if(id==='g7-ar-middle-hamza') return 'الوحدة 2 · الإملاء';
-    if(id==='g7-ar-definite-indefinite' || id==='g7-ar-sound-verbs' || id==='g7-ar-weak-verbs') return 'الوحدة 3 · القواعد اللغوية';
+    if(['g7-ar-reading-mercy','g7-ar-reading-palestine-heart','g7-ar-reading-student-mother','g7-ar-reading-prisoners','g7-ar-reading-men-in-sun','g7-ar-poem-we-return','g7-ar-reading-caliph-governor','g7-ar-reading-watchman','g7-ar-teacher-merit'].includes(id)) return 'الوحدة 1 · القراءة والنصوص';
+    if(['g7-ar-middle-hamza','g7-ar-final-hamza'].includes(id)) return 'الوحدة 2 · الإملاء';
+    if(['g7-ar-definite-indefinite','g7-ar-sound-verbs','g7-ar-weak-verbs','g7-ar-built-nouns','g7-ar-inflected-built-nouns','g7-ar-sub-inflection-signs','g7-ar-building-signs'].includes(id)) return 'الوحدة 3 · القواعد اللغوية';
     return 'مراجعة العربية';
   }
 

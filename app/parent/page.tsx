@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {lessons,students} from '../../lib/data';
 import {recoverySkills} from '../../lib/recoverySkills';
+import TutorStatus from './TutorStatus';
 
 type Report={mastery:number;status:'mastered'|'review_needed';wrongQuestionIds?:string[]};
 type Snapshot={completed:string[];scores:Record<string,number>;reports:Record<string,Report>;times:Record<string,number>;recovery:Record<string,number>};
@@ -36,6 +37,7 @@ export default function Parent(){
   return <main className="shell"><div className="wrap">
     <div className="top"><Link className="btn secondary" href="/">← الرئيسية</Link><div style={{display:'flex',gap:8,alignItems:'center'}}><button className="btn secondary" onClick={()=>setUnlocked(false)}>🔒 قفل</button><div className="brand">لوحة الأب</div></div></div>
     <h1>متابعة التعلم</h1><p className="muted">تعرض اللوحة إنجاز الصف الحالي، الإتقان، الوقت، والمراجعات، إضافة إلى فجوات الصفوف السابقة في جميع المواد.</p>
+    <TutorStatus/>
     <section className="backupBar"><div><strong>💾 النسخة الاحتياطية</strong><div className="muted" style={{fontSize:13}}>احفظ تقدم الدروس وخريطة الفجوات، أو استعدها على جهاز آخر.</div></div><div className="backupActions"><button className="btn secondary" onClick={exportProgress}>تنزيل نسخة</button><label className="btn secondary">استعادة نسخة<input type="file" accept="application/json,.json" hidden onChange={e=>{const f=e.target.files?.[0];if(f)importProgress(f);e.currentTarget.value=''}}/></label></div>{backupMessage&&<div className="backupMessage">{backupMessage}</div>}</section>
 
     <div className="grid">{students.map(s=>{

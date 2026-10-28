@@ -10,8 +10,29 @@ export type CurriculumSource={
   note:string;
 };
 
+const subjectBookMeta=[
+  {subject:'الرياضيات',code:'ma',label:'كتاب الرياضيات'},
+  {subject:'اللغة العربية',code:'ar',label:'كتاب اللغة العربية'},
+  {subject:'English',code:'en',label:'English for Palestine'},
+  {subject:'العلوم والحياة',code:'sc',label:'كتاب العلوم والحياة'}
+] as const;
+
+const verifiedPriorTextbooks:CurriculumSource[]=[2,3,4,6].flatMap(grade=>subjectBookMeta
+  .filter(x=>!(grade===2&&x.subject==='العلوم والحياة'))
+  .map(x=>({
+    id:`book-g${grade}-${x.code}-p1`,
+    title:`${x.label} — الصف ${grade} — الفصل الأول`,
+    authority:'official' as const,
+    kind:'textbook' as const,
+    url:`https://elearn.azureedge.net/Books/c${grade}/${x.code}${grade}-p1.pdf`,
+    grades:[grade],
+    subjects:[x.subject],
+    priority:118,
+    note:`كتاب الوزارة الرسمي للصف ${grade}. يستخدم عند علاج فجوة نشأت في هذا الصف، مع أخذ الجزء الضروري فقط ثم العودة للصف الحالي.`
+  })));
+
 export const curriculumSources:CurriculumSource[]=[
-  // PRIMARY TEACHING CORE — official Ministry textbooks.
+  // PRIMARY TEACHING CORE — official Ministry textbooks for the current grades.
   {id:'book-g5-math-p1',title:'كتاب الرياضيات للصف الخامس — الفصل الأول',authority:'official',kind:'textbook',url:'https://elearn.azureedge.net/Books/c5/ma5-p1.pdf',grades:[5],subjects:['الرياضيات'],priority:120,note:'المصدر الأول لشرح الرياضيات للصف الخامس: المفاهيم، التسلسل، الأمثلة والمصطلحات.'},
   {id:'book-g5-arabic-p1',title:'كتاب اللغة العربية للصف الخامس — الفصل الأول',authority:'official',kind:'textbook',url:'https://elearn.azureedge.net/Books/c5/ar5-p1.pdf',grades:[5],subjects:['اللغة العربية'],priority:120,note:'المصدر الأول لشرح اللغة العربية للصف الخامس، مع تجنب نسخ النصوص الأدبية الطويلة حرفيًا.'},
   {id:'book-g5-english-p1',title:'English for Palestine — Grade 5 — Semester 1',authority:'official',kind:'textbook',url:'https://elearn.azureedge.net/Books/c5/en5-p1.pdf',grades:[5],subjects:['English'],priority:120,note:'المصدر الأول لمحتوى وشرح English للصف الخامس.'},
@@ -20,8 +41,9 @@ export const curriculumSources:CurriculumSource[]=[
   {id:'book-g7-arabic-p1',title:'كتاب اللغة العربية للصف السابع — الفصل الأول',authority:'official',kind:'textbook',url:'https://elearn.azureedge.net/Books/c7/ar7-p1.pdf',grades:[7],subjects:['اللغة العربية'],priority:120,note:'المصدر الأول لشرح اللغة العربية للصف السابع، مع تجنب نسخ النصوص الأدبية الطويلة حرفيًا.'},
   {id:'book-g7-english-p1',title:'English for Palestine — Grade 7 — Semester 1',authority:'official',kind:'textbook',url:'https://elearn.azureedge.net/Books/c7/en7-p1.pdf',grades:[7],subjects:['English'],priority:120,note:'المصدر الأول لمحتوى وشرح English للصف السابع.'},
   {id:'book-g7-science-p1',title:'كتاب العلوم والحياة للصف السابع — الفصل الأول',authority:'official',kind:'textbook',url:'https://elearn.azureedge.net/Books/c7/sc7-p01.pdf',grades:[7],subjects:['العلوم والحياة'],priority:120,note:'المصدر الأول لشرح العلوم والحياة للصف السابع.'},
+  ...verifiedPriorTextbooks,
 
-  // Teacher guides help choose pedagogy, but do not replace the student's textbook content.
+  // Teacher guides improve pedagogy after textbook content is established.
   {id:'teacher-guide-5',title:'أدلة المعلم للصف الخامس',authority:'official-support',kind:'teacher-guide',url:'https://elearn.edu.ps/c5_guides/',grades:[5],priority:105,note:'مرجع لطرق التدريس والأهداف والتقويم بعد تثبيت محتوى الدرس من الكتاب الوزاري.'},
   {id:'teacher-guide-6',title:'أدلة المعلم للصف السادس',authority:'official-support',kind:'teacher-guide',url:'https://elearn.edu.ps/c6_guides/',grades:[6],priority:105,note:'مرجع تربوي لدعم علاج فجوات ما قبل الصف السابع.'},
   {id:'teacher-guide-7',title:'أدلة المعلم للصف السابع',authority:'official-support',kind:'teacher-guide',url:'https://elearn.edu.ps/c7_guides/',grades:[7],priority:105,note:'مرجع لطرق التدريس والأهداف والتقويم بعد تثبيت المحتوى من الكتاب الوزاري.'},

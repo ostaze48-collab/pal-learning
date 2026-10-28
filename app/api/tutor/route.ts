@@ -5,12 +5,14 @@ import {gapSkills,lessonPrerequisites} from '../../../lib/skillGraph';
 import {getCurriculumSources,getRecoveryGradeBand} from '../../../lib/curriculumKnowledge';
 import {recoverySkills} from '../../../lib/recoverySkills';
 
+type DeepGap={title:string;score:number;gradeAnchor:string;parentSkillId:string};
 type LearnerState={
   diagnosticCorrect?:boolean;
   mastery?:number;
   wrongQuestionIds?:string[];
   likelyGapId?:string|null;
   recoveryProfile?:Record<string,number>;
+  deepRecoveryProfile?:Record<string,DeepGap>;
 };
 
 type RequestBody={lessonId?:string;question?:string;learnerState?:LearnerState};
@@ -41,22 +43,26 @@ export async function POST(request:Request){
   const prereqs=prereqIds.map(id=>gapSkills[id]).filter(Boolean);
   const likelyGap=learnerState.likelyGapId?gapSkills[learnerState.likelyGapId]:undefined;
   const recoveryProfile=learnerState.recoveryProfile||{};
+  const deepRecoveryProfile=learnerState.deepRecoveryProfile||{};
   const weakRecovery=Object.entries(recoveryProfile).filter(([,score])=>score<80).sort((a,b)=>a[1]-b[1])[0];
   const weakRecoverySkill=weakRecovery?recoverySkills.find(s=>s.id===weakRecovery[0]):undefined;
+  const weakDeep=Object.values(deepRecoveryProfile).filter(x=>x.score<80).sort((a,b)=>a.score-b.score)[0];
   const sourceLabel=getLessonSourceLabel(lesson);
   const previousGrades=getRecoveryGradeBand(student.grade);
   const sourceGrades=[...previousGrades,student.grade];
   const officialSources=sourceGrades.flatMap(g=>getCurriculumSources(g,lesson.subject));
   const uniqueSources=[...new Map(officialSources.map(s=>[s.id,s])).values()].slice(0,12);
+  const activeGapTitle=weakDeep?.title||weakRecoverySkill?.title||likelyGap?.title;
 
   if(!process.env.OPENAI_API_KEY){
-    return NextResponse.json({answer:localFallback(lesson.id,question,weakRecoverySkill?.title||likelyGap?.title),mode:'local',gap:weakRecoverySkill?.title||likelyGap?.title||null});
+    return NextResponse.json({answer:localFallback(lesson.id,question,activeGapTitle),mode:'local',gap:activeGapTitle||null});
   }
 
   const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
   const grade=student.grade;
   const sourceList=uniqueSources.map((s,i)=>`${i+1}. ${s.title} — ${s.kind} — ثقة ${s.priority}/100 — ${s.url}`).join('\n');
   const recoveryList=Object.entries(recoveryProfile).map(([id,score])=>{const skill=recoverySkills.find(s=>s.id===id);return skill?`- ${skill.title}: ${score}% (${skill.strand})`:null}).filter(Boolean).join('\n');
+  const deepList=Object.values(deepRecoveryProfile).sort((a,b)=>a.score-b.score).map(x=>`- ${x.title}: ${x.score}% — مرجع متوقع ${x.gradeAnchor}`).join('\n');
 
   const curriculumContext=`
 الطالبة: ${student.name}
@@ -75,9 +81,13 @@ ${lesson.example}
 المهارات السابقة المرتبطة مباشرة بهذا الدرس:
 ${prereqs.length?prereqs.map(x=>`- ${x.title}: ${x.explanation}`).join('\n'):'- لا توجد مهارة مباشرة مسجلة.'}
 
-نتائج فحص الفجوات في مادة ${lesson.subject}:
+نتائج فحص الفجوات العامة في مادة ${lesson.subject}:
 ${recoveryList||'- لم يكتمل فحص الفجوات لهذه المادة بعد.'}
-أضعف مهارة موثقة حاليًا: ${weakRecoverySkill?`${weakRecoverySkill.title} (${weakRecovery?.[1]}%) — ${weakRecoverySkill.whyItMatters}`:'لا توجد فجوة موثقة أقل من 80%.'}
+
+نتائج التشخيص العميق للمهارات الفرعية:
+${deepList||'- لا يوجد تشخيص عميق محفوظ حتى الآن.'}
+أضعف فجوة دقيقة موثقة: ${weakDeep?`${weakDeep.title} (${weakDeep.score}%) — مرجعها المتوقع ${weakDeep.gradeAnchor}`:'لا توجد فجوة فرعية موثقة أقل من 80%.'}
+أضعف مهارة عامة: ${weakRecoverySkill?`${weakRecoverySkill.title} (${weakRecovery?.[1]}%) — ${weakRecoverySkill.whyItMatters}`:'لا توجد فجوة عامة موثقة أقل من 80%.'}
 فجوة محتملة من أخطاء الدرس: ${likelyGap?`${likelyGap.title} — ${likelyGap.why}`:'لم تحدد.'}
 
 حالة الدرس:
@@ -91,17 +101,18 @@ ${sourceList}
 
   const instructions=`أنت معلم ذكي لمنصة تعليم منزلية فلسطينية تعالج آثار الانقطاع التعليمي الطويل، مع إبقاء الطالبة في صفها الحالي. التزم بهذه القواعد:
 1) الهدف المزدوج: مساعدة الطالبة على إتقان الصف ${grade} الحالي، وفي الوقت نفسه سد الفجوات الدقيقة فقط من الصفوف السابقة دون إعادتها لصف سابق كامل.
-2) اشرح على مستوى الصف ${grade} وبالعربية المبسطة، إلا في English فاستخدم الإنجليزية البسيطة مع شرح عربي عند الحاجة.
-3) استخدم تسلسل الثقة التالي: الكتاب/الرزمة الرسمية، فهرس المنهاج الرسمي، دليل المعلم، الإطار الوطني للمبحث، أوراق العمل الرسمية، الاختبارات ونماذج الحل المنشورة، ثم الشرح المساعد الذي تولده أنت.
-4) إذا كانت أداة file_search متاحة، استخدمها عندما يحتاج السؤال معلومة منهجية دقيقة أو مثالًا/تمرينًا من المواد المرجعية. لا تخترع نصًا أو حلًا رسميًا إذا لم تجده.
-5) إذا أظهرت النتائج فجوة سابقة موثقة أقل من 80% وتؤثر في السؤال الحالي، عالجها أولًا في 2-5 دقائق تعليميًا ثم اربطها مباشرة بالدرس الحالي.
-6) لا تجعل الاستدراك يطغى على الصف الحالي: اقترح أقصر علاج كافٍ ثم ارجع إلى هدف الدرس.
-7) لا تعطِ الحل النهائي فورًا إذا كان الأفضل توجيه الطفلة بسؤال صغير أو مثال مشابه.
-8) إذا كانت معلومة غير موجودة في المصادر المتاحة، قل: "لم أجد هذه النقطة في المصادر المنهجية المتاحة لي الآن" ولا تنسبها للوزارة.
-9) فرّق بين: "وفق المصدر الرسمي" و"شرح مساعد" و"تمرين مشابه مولد".
-10) استخدم إجابة قصيرة عادة 4-10 جمل، ويمكن إضافة مثال بصري لفظي أو سؤال تحقق واحد.
-11) لا تطلب بيانات شخصية ولا تفتح محادثة عامة بعيدة عن التعلم.
-12) عندما يكون سؤال الطفلة أوسع من الدرس الحالي لكن داخل منهاجها أو صفوفها السابقة، يمكنك الاستفادة من قاعدة المنهاج الكاملة بدل رفضه لمجرد أنه خارج عنوان الدرس.`;
+2) إذا وُجدت فجوة فرعية موثقة من التشخيص العميق، فهي أعلى أولوية من اسم المجال العام. عالج الجزء المحدد فقط مثل جدول 7 و8 أو past simple، ولا تعيد كل الوحدة.
+3) اشرح على مستوى الصف ${grade} وبالعربية المبسطة، إلا في English فاستخدم الإنجليزية البسيطة مع شرح عربي عند الحاجة.
+4) استخدم تسلسل الثقة التالي: الكتاب/الرزمة الرسمية، فهرس المنهاج الرسمي، دليل المعلم، الإطار الوطني للمبحث، أوراق العمل الرسمية، الاختبارات ونماذج الحل المنشورة، ثم الشرح المساعد الذي تولده أنت.
+5) إذا كانت أداة file_search متاحة، استخدمها عندما يحتاج السؤال معلومة منهجية دقيقة أو مثالًا/تمرينًا من المواد المرجعية. لا تخترع نصًا أو حلًا رسميًا إذا لم تجده.
+6) إذا أظهرت النتائج فجوة سابقة موثقة أقل من 80% وتؤثر في السؤال الحالي، عالجها أولًا في 2-5 دقائق تعليميًا ثم اربطها مباشرة بالدرس الحالي.
+7) لا تجعل الاستدراك يطغى على الصف الحالي: اقترح أقصر علاج كافٍ ثم ارجع إلى هدف الدرس.
+8) لا تعطِ الحل النهائي فورًا إذا كان الأفضل توجيه الطفلة بسؤال صغير أو مثال مشابه.
+9) إذا كانت معلومة غير موجودة في المصادر المتاحة، قل: "لم أجد هذه النقطة في المصادر المنهجية المتاحة لي الآن" ولا تنسبها للوزارة.
+10) فرّق بين: "وفق المصدر الرسمي" و"شرح مساعد" و"تمرين مشابه مولد".
+11) استخدم إجابة قصيرة عادة 4-10 جمل، ويمكن إضافة مثال بصري لفظي أو سؤال تحقق واحد.
+12) لا تطلب بيانات شخصية ولا تفتح محادثة عامة بعيدة عن التعلم.
+13) عندما يكون سؤال الطفلة أوسع من الدرس الحالي لكن داخل منهاجها أو صفوفها السابقة، يمكنك الاستفادة من قاعدة المنهاج الكاملة بدل رفضه لمجرد أنه خارج عنوان الدرس.`;
 
   try{
     const tools:any[]=[];
@@ -109,7 +120,7 @@ ${sourceList}
       tools.push({type:'file_search',vector_store_ids:[process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID],max_num_results:6});
     }
     const response=await client.responses.create({
-      model:process.env.OPENAI_TUTOR_MODEL||'gpt-6-luna',
+      model:process.env.OPENAI_TUTOR_MODEL||'gpt-5',
       instructions,
       input:`${curriculumContext}\n\nسؤال الطفلة: ${question}`,
       ...(tools.length?{tools}:{}),
@@ -117,9 +128,9 @@ ${sourceList}
     });
     const answer=(response.output_text||'').trim();
     if(!answer)throw new Error('empty_response');
-    return NextResponse.json({answer,mode:'ai',gap:weakRecoverySkill?.title||likelyGap?.title||null,grounded:tools.length>0});
+    return NextResponse.json({answer,mode:'ai',gap:activeGapTitle||null,grounded:tools.length>0});
   }catch(error){
     console.error('Tutor API error',error);
-    return NextResponse.json({answer:localFallback(lesson.id,question,weakRecoverySkill?.title||likelyGap?.title),mode:'local_fallback',gap:weakRecoverySkill?.title||likelyGap?.title||null});
+    return NextResponse.json({answer:localFallback(lesson.id,question,activeGapTitle),mode:'local_fallback',gap:activeGapTitle||null});
   }
 }

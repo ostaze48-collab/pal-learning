@@ -12,6 +12,7 @@ import './teacher-dock.css';
 import './creative-learning.css';
 import './concept-studio.css';
 import './advanced-concept-studio.css';
+import './science-simulation.css';
 import './dashboard-progress.css';
 import './learning-path.css';
 import './live-rail.css';

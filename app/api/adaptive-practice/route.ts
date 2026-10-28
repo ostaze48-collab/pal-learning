@@ -37,6 +37,20 @@ function validQuestions(value:any,count:number):GeneratedQuestion[]{
   return out;
 }
 
+async function verifyGenerated(client:OpenAI,questions:GeneratedQuestion[],context:string){
+  const verifierModel=process.env.OPENAI_PRACTICE_VERIFY_MODEL||'gpt-6-luna';
+  const payload=questions.map((q,i)=>({i,text:q.text,options:q.options,claimedCorrect:q.correct,claimedAnswer:q.options[q.correct],explanation:q.explanation}));
+  const response=await client.responses.create({
+    model:verifierModel,
+    instructions:'أنت مدقق جودة لأسئلة أطفال. افحص كل سؤال مستقلًا. اقبل السؤال فقط إذا كان واضحًا، له إجابة واحدة صحيحة، الإجابة المعلنة صحيحة فعلًا، والشرح يطابقها، ولا يتجاوز المهارة أو المستوى المحدد. أعد JSON فقط: {"accepted":[true,false,...]}. لا تصلح السؤال ولا تغيّر الإجابة.',
+    input:`السياق التعليمي:\n${context}\n\nالأسئلة المراد تدقيقها:\n${JSON.stringify(payload)}`,
+    max_output_tokens:300
+  });
+  const parsed=cleanJson(response.output_text||'');
+  const accepted=Array.isArray(parsed?.accepted)?parsed.accepted:[];
+  return questions.filter((_,i)=>accepted[i]===true);
+}
+
 export async function POST(request:Request){
   let body:Body;
   try{body=await request.json()}catch{return NextResponse.json({error:'invalid_json'},{status:400})}
@@ -50,7 +64,7 @@ export async function POST(request:Request){
   if(!student||!skill||!sub)return NextResponse.json({error:'invalid_skill_context'},{status:400});
 
   const fallback=fallbackQuestions(skillId,subskillId,count);
-  if(!process.env.OPENAI_API_KEY)return NextResponse.json({questions:fallback,mode:'local',grounded:false});
+  if(!process.env.OPENAI_API_KEY)return NextResponse.json({questions:fallback,mode:'local',grounded:false,verified:true});
 
   const previousGrades=getRecoveryGradeBand(student.grade);
   const sourceGrades=[...previousGrades,student.grade];
@@ -59,7 +73,8 @@ export async function POST(request:Request){
   const mistakes=(body.mistakes||[]).slice(0,6).map((m,i)=>`${i+1}) ${m.text||'سؤال سابق'} | اختارت: ${m.selected||'غير معروف'} | الصحيح: ${m.correct||'غير معروف'}`).join('\n');
 
   const instructions=`أنت مولد تمارين تعليمية قصير لمنصة أطفال فلسطينية. أنشئ أسئلة تدريب جديدة فقط، ولا تنسخ سؤال الخطأ نفسه حرفيًا. التزم بالمهارة المحددة وبمستوى الصف الحالي والصفوف السابقة المرتبطة.\n- لا تنسب أي سؤال مولد إلى وزارة التربية.\n- يجب أن يكون لكل سؤال جواب واحد صحيح بوضوح.\n- اجعل المشتتات من أخطاء شائعة منطقية، لا إجابات عبثية.\n- لا ترفع الصعوبة خارج مستوى الطالبة.\n- إذا وجدت File Search فاستفد منه للتحقق من المصطلحات والمنهج، لكن صغ أسئلة جديدة.\n- أعد JSON فقط بهذا الشكل: {"questions":[{"text":"...","options":["..."],"correct":0,"explanation":"..."}]}.`;
-  const prompt=`الطالبة: ${student.name}\nالصف الحالي: ${student.grade}\nالمادة: ${skill.subject}\nالمجال: ${skill.title}\nالمهارة الدقيقة: ${sub.title}\nمرجعها المتوقع: ${sub.gradeAnchor}\nسبب أهميتها: ${sub.why}\nشرحها المصغر: ${sub.miniLesson}\nالصعوبة المطلوبة: ${difficulty}\nعدد الأسئلة: ${count}\n\nأخطاء سابقة محددة:\n${mistakes||'- لا توجد أخطاء محفوظة.'}\n\nالمصادر المنهجية المتاحة للنظام:\n${sourceList||'- لا توجد قائمة مصادر.'}`;
+  const context=`الطالبة: ${student.name}\nالصف الحالي: ${student.grade}\nالمادة: ${skill.subject}\nالمجال: ${skill.title}\nالمهارة الدقيقة: ${sub.title}\nمرجعها المتوقع: ${sub.gradeAnchor}\nسبب أهميتها: ${sub.why}\nشرحها المصغر: ${sub.miniLesson}\nالصعوبة المطلوبة: ${difficulty}`;
+  const prompt=`${context}\nعدد الأسئلة: ${count}\n\nأخطاء سابقة محددة:\n${mistakes||'- لا توجد أخطاء محفوظة.'}\n\nالمصادر المنهجية المتاحة للنظام:\n${sourceList||'- لا توجد قائمة مصادر.'}`;
 
   try{
     const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
@@ -73,11 +88,13 @@ export async function POST(request:Request){
       max_output_tokens:1100
     });
     const parsed=cleanJson(response.output_text||'');
-    const questions=validQuestions(parsed,count);
-    if(questions.length<3)throw new Error('invalid_generated_questions');
-    return NextResponse.json({questions,mode:'ai',grounded:tools.length>0});
+    const generated=validQuestions(parsed,count);
+    if(generated.length<3)throw new Error('invalid_generated_questions');
+    const verified=await verifyGenerated(client,generated,context);
+    if(verified.length<3)throw new Error('verification_rejected_questions');
+    return NextResponse.json({questions:verified.slice(0,count),mode:'ai',grounded:tools.length>0,verified:true});
   }catch(error){
     console.error('Adaptive practice generation failed',error);
-    return NextResponse.json({questions:fallback,mode:'local_fallback',grounded:false});
+    return NextResponse.json({questions:fallback,mode:'local_fallback',grounded:false,verified:true});
   }
 }

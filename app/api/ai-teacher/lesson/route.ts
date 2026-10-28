@@ -5,6 +5,7 @@ import {getCurriculumSources,getRecoveryGradeBand} from '../../../../lib/curricu
 import {buildPedagogyPlan} from '../../../../lib/pedagogyEngine';
 import {getLessonBridges} from '../../../../lib/curriculumBridges';
 import {evaluateTeacherQuality} from '../../../../lib/teacherQuality';
+import {blueprintForPrompt} from '../../../../lib/creativeLessonBlueprint';
 
 type Mode='overview'|'simplify'|'step_by_step'|'analogy'|'real_world'|'deep'|'check';
 type Weakness={title:string;score:number;gradeAnchor?:string;cause?:string;missedFacts?:Array<{text:string;selected:string;correct:string}>};
@@ -31,8 +32,7 @@ function validate(value:any):Payload|null{
   if(typeof value.teacherNote==='string')out.teacherNote=value.teacherNote.slice(0,500);return out;
 }
 function learnerSummary(model:LearnerModelInput|undefined){
-  if(!model)return '- لا يوجد ملف تعلم موحد بعد.';
-  const lines:string[]=[];
+  if(!model)return '- لا يوجد ملف تعلم موحد بعد.';const lines:string[]=[];
   if(Number.isFinite(Number(model.subjectMastery)))lines.push(`- متوسط إتقان المادة: ${Number(model.subjectMastery)}%`);
   if(model.preferredTeachingMode)lines.push(`- أسلوب الشرح الأكثر نجاحًا سابقًا: ${model.preferredTeachingMode}`);
   if(model.teachingModeScores){const top=Object.entries(model.teachingModeScores).sort((a,b)=>Number(b[1])-Number(a[1])).slice(0,4);if(top.length)lines.push(`- فعالية أساليب الشرح: ${top.map(([m,s])=>`${m}=${s}`).join('، ')}`)}
@@ -45,88 +45,39 @@ function learnerSummary(model:LearnerModelInput|undefined){
 
 export async function POST(request:Request){
   let body:Body;try{body=await request.json()}catch{return NextResponse.json({error:'invalid_json'},{status:400})}
-  const lessonId=typeof body.lessonId==='string'?body.lessonId:'';const mode:Mode=body.mode||'overview';
-  const lesson=getLesson(lessonId);if(!lesson)return NextResponse.json({error:'lesson_not_found'},{status:404});
-  const student=getStudent(lesson.student);if(!student)return NextResponse.json({error:'student_not_found'},{status:404});
+  const lessonId=typeof body.lessonId==='string'?body.lessonId:'';const mode:Mode=body.mode||'overview';const lesson=getLesson(lessonId);if(!lesson)return NextResponse.json({error:'lesson_not_found'},{status:404});const student=getStudent(lesson.student);if(!student)return NextResponse.json({error:'student_not_found'},{status:404});
   const strategy={id:String(body.teachingStrategy?.id||'adaptive').slice(0,80),label:String(body.teachingStrategy?.label||'طريقة تكيفية').slice(0,120),purpose:String(body.teachingStrategy?.purpose||'اختيار أقصر طريق للفهم').slice(0,500),instruction:String(body.teachingStrategy?.instruction||'غيّر التمثيل وطريقة التفكير حسب استجابة الطالبة.').slice(0,1500)};
   const backup=fallback(lesson.id,mode);if(!process.env.OPENAI_API_KEY)return NextResponse.json({content:backup,mode:'local',grounded:false,webUsed:false,groundingQuality:'local',qualityScore:0,sourcePolicy:'textbook_primary',teachingStrategy:strategy.id});
 
-  const weaknesses=(body.weaknesses||[]).slice(0,8);const priorGrades=getRecoveryGradeBand(student.grade);
-  const officialSources=[...priorGrades,student.grade].flatMap(g=>getCurriculumSources(g,lesson.subject));
-  const uniqueSources=[...new Map(officialSources.map(x=>[x.id,x])).values()].slice(0,18);
-  const textbookSources=uniqueSources.filter(x=>x.kind==='textbook');
-  const packageSources=uniqueSources.filter(x=>x.kind==='package');
-  const sourceList=uniqueSources.map(x=>`- ${x.title} | ${x.kind} | أولوية ${x.priority}/120 | ${x.url}`).join('\n');
-  const textbookList=textbookSources.length?textbookSources.map(x=>`- ${x.title} | ${x.url}`).join('\n'):'- لا يوجد كتاب مباشر مسجل لهذه المادة/الصف.';
-  const packageList=packageSources.length?packageSources.map(x=>`- ${x.title} | ملخص طوارئ فقط`).join('\n'):'- لا توجد رزمة طوارئ مسجلة.';
+  const weaknesses=(body.weaknesses||[]).slice(0,8);const priorGrades=getRecoveryGradeBand(student.grade);const officialSources=[...priorGrades,student.grade].flatMap(g=>getCurriculumSources(g,lesson.subject));const uniqueSources=[...new Map(officialSources.map(x=>[x.id,x])).values()].slice(0,18);const textbookSources=uniqueSources.filter(x=>x.kind==='textbook');const packageSources=uniqueSources.filter(x=>x.kind==='package');const sourceList=uniqueSources.map(x=>`- ${x.title} | ${x.kind} | أولوية ${x.priority}/120 | ${x.url}`).join('\n');const textbookList=textbookSources.length?textbookSources.map(x=>`- ${x.title} | ${x.url}`).join('\n'):'- لا يوجد كتاب مباشر مسجل لهذه المادة/الصف.';const packageList=packageSources.length?packageSources.map(x=>`- ${x.title} | ملخص طوارئ فقط`).join('\n'):'- لا توجد رزمة طوارئ مسجلة.';
   const weaknessText=weaknesses.length?weaknesses.map(w=>`- ${w.title}: ${w.score}%${w.gradeAnchor?` (${w.gradeAnchor})`:''}${w.cause?` — ${w.cause}`:''}${w.missedFacts?.length?` — أخطاء: ${w.missedFacts.map(m=>`${m.text} [اختارت ${m.selected}، الصحيح ${m.correct}]`).join('؛ ')}`:''}`).join('\n'):'- لا توجد فجوات دقيقة محفوظة لهذه المادة.';
   const lastCheckText=body.lastCheck?.answer?`\nمحاولة الفهم الأخيرة للطالبة:\n- إجابة الطالبة: ${String(body.lastCheck.answer).slice(0,700)}\n- التقييم: ${body.lastCheck.outcome||'غير محدد'}\n- ملاحظة المعلم: ${String(body.lastCheck.feedback||'').slice(0,800)}\nتعليمات إعادة التدريس: لا تكرر الشرح السابق. حدد الفكرة التي سببت الخلط من هذه الإجابة، ثم أعد بناء الشرح حولها بمثال جديد أصغر وأسهل، وبعده سؤال تحقق جديد مختلف.`:'';
-  const modelText=learnerSummary(body.learnerModel);
-  const bridges=getLessonBridges(lesson);
-  const bridgeText=bridges.map(b=>{
-    const measured=(body.learnerModel?.gaps||[]).filter(g=>g.skillId===b.skillId).sort((a,c)=>Number(a.score??100)-Number(c.score??100))[0];
-    const state=measured?`نتيجة فجوة محفوظة ${Number(measured.score)}%${measured.gradeAnchor?` (${measured.gradeAnchor})`:''}${measured.cause?` — ${String(measured.cause).slice(0,220)}`:''}`:'لا توجد فجوة مقاسة مرتبطة بهذه المهارة.';
-    return `- ${b.title} | صلة ${b.priority}/100 | ${b.reason} | ${state}`;
-  }).join('\n');
-  const knowledgeBlocked=(body.learnerModel?.knowledgeSignals||[]).some(k=>k.readinessStatus==='blocked');
-  const blockingGap=knowledgeBlocked||(body.learnerModel?.gaps||[]).some(g=>Number(g.score)<50)||weaknesses.some(w=>Number(w.score)<50);
-  const pedagogy=buildPedagogyPlan(lesson.subject,body.learnerModel?.subjectMastery,blockingGap,mode);
-  const pedagogyText=`المستوى التدريسي المقترح: ${pedagogy.level}\nالطريقة الأساسية: ${pedagogy.method}\nتسلسل التدريس:\n${pedagogy.sequence.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nقاعدة التغذية الراجعة: ${pedagogy.feedbackRule}\nضبط الحمل المعرفي: ${pedagogy.cognitiveLoad}\nقاعدة الاسترجاع: ${pedagogy.retrievalRule}`;
-  const strategyText=`الاستراتيجية التعليمية الحالية: ${strategy.label}\nالهدف منها: ${strategy.purpose}\nطريقة تنفيذها: ${strategy.instruction}`;
-  const styleMap:Record<Mode,string>={overview:'اشرح الدرس شرحًا متدرجًا واضحًا من الفكرة إلى المثال ثم تحقق قصير.',simplify:'أعد الشرح بأبسط لغة ممكنة، جمل قصيرة، وفكرة واحدة في كل خطوة. لا تفترض فهم المصطلحات.',step_by_step:'حوّل الفكرة إلى خطوات مرقمة صغيرة جدًا مع مثال محلول خطوة بخطوة.',analogy:'استخدم تشبيهًا أو قصة أو تصورًا بصريًا مناسبًا لعمر الطالبة، ثم اربطه بالمفهوم الحقيقي حتى لا يبقى التشبيه مضللًا.',real_world:'اربط المفهوم بموقف من الحياة اليومية أو البيئة المحيطة ثم أعد ربطه مباشرة بهدف المنهاج.',deep:'وسّع الشرح بمعلومات إضافية صحيحة ومناسبة للعمر، مع الحفاظ على هدف الدرس الحالي وعدم إغراق الطالبة.',check:'ركز على سؤال أو سؤالين يكشفان هل فهمت الطالبة الفكرة فعلًا، مع تلميح بدل الحل المباشر.'};
-  const hasCurriculumStore=Boolean(process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID);
+  const modelText=learnerSummary(body.learnerModel);const bridges=getLessonBridges(lesson);const bridgeText=bridges.map(b=>{const measured=(body.learnerModel?.gaps||[]).filter(g=>g.skillId===b.skillId).sort((a,c)=>Number(a.score??100)-Number(c.score??100))[0];const state=measured?`نتيجة محفوظة ${Number(measured.score)}%${measured.gradeAnchor?` (${measured.gradeAnchor})`:''}${measured.cause?` — ${String(measured.cause).slice(0,220)}`:''}`:'لا توجد نتيجة مقاسة مرتبطة بهذه المهارة.';return `- ${b.title} | صلة ${b.priority}/100 | ${b.reason} | ${state}`}).join('\n');
+  const knowledgeBlocked=(body.learnerModel?.knowledgeSignals||[]).some(k=>k.readinessStatus==='blocked');const blockingGap=knowledgeBlocked||(body.learnerModel?.gaps||[]).some(g=>Number(g.score)<50)||weaknesses.some(w=>Number(w.score)<50);const pedagogy=buildPedagogyPlan(lesson.subject,body.learnerModel?.subjectMastery,blockingGap,mode);const pedagogyText=`المستوى التدريسي المقترح: ${pedagogy.level}\nالطريقة الأساسية: ${pedagogy.method}\nتسلسل التدريس:\n${pedagogy.sequence.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nقاعدة التغذية الراجعة: ${pedagogy.feedbackRule}\nضبط الحمل المعرفي: ${pedagogy.cognitiveLoad}\nقاعدة الاسترجاع: ${pedagogy.retrievalRule}`;const strategyText=`الاستراتيجية التعليمية الحالية: ${strategy.label}\nالهدف منها: ${strategy.purpose}\nطريقة تنفيذها: ${strategy.instruction}`;const creativeBlueprint=blueprintForPrompt(lesson);
+  const styleMap:Record<Mode,string>={overview:'اشرح الدرس شرحًا متدرجًا واضحًا من الفكرة إلى المثال ثم تحقق قصير.',simplify:'أعد الشرح بأبسط لغة ممكنة، جمل قصيرة، وفكرة واحدة في كل خطوة. لا تفترض فهم المصطلحات.',step_by_step:'حوّل الفكرة إلى خطوات مرقمة صغيرة جدًا مع مثال محلول خطوة بخطوة.',analogy:'استخدم تشبيهًا أو قصة أو تصورًا بصريًا مناسبًا لعمر الطالبة، ثم اربطه بالمفهوم الحقيقي حتى لا يبقى التشبيه مضللًا.',real_world:'اربط المفهوم بموقف من الحياة اليومية أو البيئة المحيطة ثم أعد ربطه مباشرة بهدف المنهاج.',deep:'وسّع الشرح بمعلومات إضافية صحيحة ومناسبة للعمر، مع الحفاظ على هدف الدرس الحالي وعدم إغراق الطالبة.',check:'ركز على سؤال أو سؤالين يكشفان هل فهمت الطالبة الفكرة فعلًا، مع تلميح بدل الحل المباشر.'};const hasCurriculumStore=Boolean(process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID);
   const instructions=`أنت المعلم الأساسي في منصة تعليم منزلية فلسطينية لطفلتين. مهمتك ليست الدردشة العامة؛ أنت معلم شخصي تكيفي ودقيق.
-1) كتاب الوزارة الرسمي للصف والمادة والفصل هو المرجع الأول والملزم للشرح. خذ منه المفهوم، المصطلحات، التسلسل، مستوى العمق والأمثلة المنهجية قبل صياغة الشرح.
-2) إذا كانت file_search متاحة، يجب استخدامها للبحث في قاعدة كتب الوزارة قبل اعتماد الشرح. لا يكفي الاعتماد على الذاكرة العامة للنموذج أو على الرزمة التعليمية.
-3) إذا لم تتوفر file_search، استخدم web_search للوصول إلى الكتاب الرسمي أو صفحة المبحث الرسمية، مع أولوية elearn.azureedge.net وelearn.edu.ps وmoe.edu.ps.
-4) الرزم التعليمية للطوارئ هي حد أدنى وملخص للمراجعة فقط. لا تستخدمها لتحديد عمق الدرس، ولا تجعلها أساس الشرح الموسع، ولا تختصر معرفة الطالبة إلى ما تحتويه الرزمة.
-5) دليل المعلم يساعدك في طريقة التدريس والتقويم بعد تثبيت المحتوى من كتاب الطالب. أوراق العمل والاختبارات للتدريب والتشخيص بعد الشرح.
-6) لا تعتمد على الذاكرة العامة للنموذج وحدها في تعريف هدف الدرس أو تسلسله أو حقيقة منهجية أساسية. إذا تعذر إيجاد سند من الكتاب أو مصدر رسمي مناسب، لا تخترع.
-7) التزم بالخطة البيداغوجية المرفقة، لكن اجعلها طريقة لتبسيط محتوى الكتاب لا لاستبداله بمحتوى جديد.
-8) استخدم ملف التعلم الموحد ومسار المعرفة لتحديد نقطة البداية وطول الشرح ونوع المثال.
-9) إذا كانت جاهزية درس ما blocked، لا تتجاهل السبب: عالج المتطلب الضعيف المرتبط مباشرة فقط، ثم عد إلى درس الصف. إذا كانت check، استخدم تحققًا قصيرًا بدل إعادة التدريس تلقائيًا. إذا كانت ready، لا تعيد الأساس بلا سبب.
-10) استخدم جسور المهارات السابقة كخريطة prerequisite، ولا تعيد تدريسها جميعًا. إذا احتجت فجوة سابقة، ارجع إلى كتاب الصف الذي نشأت فيه المهارة وخذ الجزء الضروري فقط ثم عد للدرس الحالي.
-11) الاستراتيجية التعليمية الحالية إلزامية لهذه المحاولة. ابنِ تسلسل الشرح والأمثلة والسؤال النهائي حولها فعلًا، لا تذكر اسمها فقط. إذا كانت شجرة عوامل مثلًا فيجب أن يكون التفكير متفرعًا حتى عوامل أولية؛ إذا كانت بناءً عكسيًا فابدأ من المكونات وأعد تكوين الفكرة.
-12) لا تكرر استراتيجية تعليم فشلت سابقًا بصياغة لغوية مختلفة. عند وصول محاولة فهم خاطئة أو جزئية، غيّر النموذج الذهني أو النشاط أو اتجاه الحل وفق الاستراتيجية الجديدة المرفقة.
-13) اجعل العلاقة بسيطة مثل: «نحتاج هذه الخطوة حتى نفهم فكرة اليوم»، من دون وصم الطالبة بالتأخر.
-14) لا تكتفِ بتعريف واحد. عند ملاءمة الموضوع قدّم تمثيلًا بسيطًا، مثالًا محلولًا، مثالًا ثانيًا مختلفًا قليلًا لاختبار انتقال الفهم، ثم خطأ شائعًا أو مثالًا مضادًا.
-15) لا تكرر نفس الأرقام أو الكلمات أو القصة في المثال الثاني؛ غيّر السطح مع تثبيت المفهوم.
-16) في الرياضيات: وضّح العلاقات والخطوات وتحقق من المعقولية. في العلوم: فرّق بين الملاحظة والدليل والتفسير والسبب/النتيجة. في العربية: ابدأ بالسياق والمعنى ثم استخرج النمط والقاعدة. في English: استخدم مدخلًا مفهومًا ونموذجًا قصيرًا ثم ممارسة وإنتاجًا، مع عربي عند الحاجة.
-17) يمكنك إضافة تشبيه أو مثال من الحياة أو تمثيل بصري، لكن يجب أن يكون امتدادًا لمحتوى الكتاب وألا يغير المفهوم المنهجي أو مستوى الصف.
-18) لا تستخدم مصدرًا خارجيًا غير رسمي لتغيير محتوى المنهاج؛ يمكن استخدامه فقط لإثراء مثال لا يتعارض مع الكتاب.
-19) لا تعرض للطالبة تفاصيل تقنية عن المصدر أو الثقة، ولا تنسب معلومة للوزارة إن لم تجدها في مصدر رسمي.
-20) ${styleMap[mode]}
-21) اجعل الشرح غنيًا بما يكفي للفهم، لكن لا تكدّس معلومات لا تخدم هدف الدرس أو الفجوة الحالية.
-22) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
-  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود في المنصة: ${lesson.example}\nمرجع الدرس المسجل: ${getLessonSourceLabel(lesson)}\n\nسياسة المصدر لهذه الجلسة:\n- المصدر الأساسي للشرح: كتاب الوزارة.\n- دليل المعلم: طريقة التدريس والتقويم.\n- أوراق العمل والاختبارات: تدريب وتشخيص.\n- الرزمة التعليمية: ملخص طوارئ فقط.\n\nكتب الوزارة ذات الأولوية:\n${textbookList}\n\nرزم الطوارئ (لا تستخدم كأساس للشرح):\n${packageList}\n\nالخطة البيداغوجية لهذه الجلسة:\n${pedagogyText}\n\nالاستراتيجية التعليمية المحددة لهذه المحاولة:\n${strategyText}\n\nالجسور ذات الصلة من المهارات السابقة إلى درس اليوم:\n${bridgeText||'- لا يوجد جسر محدد؛ لا تضف استدراكًا إلا إذا كشف الأداء حاجة واضحة.'}\n\nملف التعلم الموحد ومسار المعرفة للطالبة في هذه المادة:\n${modelText}\n\nفجوات مرتبطة مباشرة محفوظة:\n${weaknessText}\n\nمصادر منهجية مسجلة مرتبة بالأولوية:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
+1) كتاب الوزارة الرسمي للصف والمادة والفصل هو المرجع الأول والملزم للمعلومات والمفاهيم والمصطلحات والتسلسل والعمق. كتاب الوزارة يحدد ماذا نعلم؛ أنت مسؤول عن تحويل هذه المعلومات إلى أفضل تجربة شرح ممكنة.
+2) لا تقلد أسلوب الكتاب إذا كان مباشرًا أو جامدًا. أعد بناء الشرح تربويًا وإبداعيًا مع الحفاظ على الحقيقة المنهجية كاملة: تمثيل بصري، قصة، محاكاة، تشبيه منضبط، لعبة، لغز، مقارنة، بناء، أو تجربة بحسب بصمة الدرس المرفقة.
+3) الطفل يجب أن يحصل أولًا على شرح كافٍ للدرس الحالي. يجوز إدخال أسئلة وتمارين قصيرة أثناء الشرح، لكن لا تجعل التشخيص أو علاج المهارات السابقة يسبق شرح الدرس نفسه.
+4) إذا كانت file_search متاحة، يجب استخدامها للبحث في قاعدة كتب الوزارة قبل اعتماد الشرح. إذا لم تتوفر، استخدم web_search للوصول إلى الكتاب الرسمي أو صفحة المبحث الرسمية، مع أولوية elearn.azureedge.net وelearn.edu.ps وmoe.edu.ps.
+5) الرزم التعليمية للطوارئ حد أدنى وملخص للمراجعة فقط، وليست أساسًا لعمق الشرح.
+6) دليل المعلم يساعد في طريقة التدريس والتقويم بعد تثبيت المحتوى من كتاب الطالب. أوراق العمل والاختبارات للتدريب والتشخيص بعد الشرح.
+7) بصمة الدرس الإبداعية المرفقة إلزامية كمرشد تربوي: استخدم مدخلها ونموذجها الذهني وتفاعلاتها أثناء الشرح وأدلة الإتقان، لكن لا تضف حقائق منهجية غير موجودة في المصدر الرسمي.
+8) الاستراتيجية التعليمية الحالية إلزامية لهذه المحاولة. ابنِ الشرح حولها فعلًا، ولا تكتفِ بذكر اسمها.
+9) إذا لم تصل الفكرة، غيّر طريقة التعليم بنيويًا: نموذج، نشاط، اتجاه الحل، مقارنة أو تشبيه؛ لا تكرر نفس النص بصياغة مختلفة.
+10) استخدم ملف التعلم ومسار المعرفة لضبط السرعة والدعم. إشارات المهارات السابقة معلومات داخلية للمعلم والأب؛ لا تستخدم أمام الطفلة كلمات مثل فجوة، متأخرة، صف سابق. قل فقط: نثبت خطوة تساعدنا في درس اليوم.
+11) بعد الشرح، نحتاج أدلة إتقان: تفسير بكلمات الطفلة، تطبيق على مثال جديد، أو تبرير الاختيار. الاختيار الصحيح وحده لا يكفي دائمًا.
+12) لا تكدّس الشرح: فكرة واحدة واضحة في كل بطاقة، ثم تفاعل أو سؤال عند الحاجة.
+13) ${styleMap[mode]}
+14) أعد JSON فقط: {"title":"...","intro":"...","cards":[{"title":"...","body":"...","kind":"explain|example|tip|check"}],"checkQuestion":{"text":"...","hint":"..."},"teacherNote":"..."}.`;
+  const prompt=`الطالبة: ${student.name}\nالصف: ${student.grade}\nالفصل: الأول\nالمادة: ${lesson.subject}\nالدرس: ${lesson.title}\nملخص المنصة: ${lesson.summary}\nأهداف التعلم:\n${lesson.learningPoints.map((x,i)=>`${i+1}. ${x}`).join('\n')}\nمثال موجود في المنصة: ${lesson.example}\nمرجع الدرس المسجل: ${getLessonSourceLabel(lesson)}\n\nسياسة المصدر:\n- كتاب الوزارة: المصدر الأساسي للمعلومات والعمق.\n- دليل المعلم: طريقة التدريس.\n- أوراق العمل والاختبارات: تدريب وتشخيص.\n- الرزمة التعليمية: ملخص فقط.\n\nكتب الوزارة ذات الأولوية:\n${textbookList}\n\nرزم الطوارئ — لا تستخدم كأساس للشرح:\n${packageList}\n\nبصمة الشرح الإبداعي الخاصة بهذا الدرس:\n${creativeBlueprint}\n\nالخطة البيداغوجية:\n${pedagogyText}\n\nالاستراتيجية المحددة لهذه المحاولة:\n${strategyText}\n\nمهارات مساعدة مرتبطة بالدرس — استخدمها داخليًا فقط عند الحاجة بعد أن تشرح الدرس:\n${bridgeText||'- لا يوجد جسر محدد.'}\n\nملف التعلم ومسار المعرفة:\n${modelText}\n\nإشارات تحتاج انتباهًا داخليًا:\n${weaknessText}\n\nمصادر منهجية مسجلة:\n${sourceList}\n${body.previousExplanation?`\nشرح سابق لم ينجح بما يكفي:\n${body.previousExplanation.slice(0,1800)}`:''}${lastCheckText}`;
 
   try{
-    const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const tools:any[]=[];
-    if(hasCurriculumStore)tools.push({type:'file_search',vector_store_ids:[process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID],max_num_results:8});
-    if(!hasCurriculumStore||mode==='deep'||mode==='real_world')tools.push({type:'web_search'});
-
-    async function generate(extra=''){
-      const response=await client.responses.create({model:process.env.OPENAI_TUTOR_MODEL||'gpt-5',instructions,input:`${prompt}${extra}`,...(tools.length?{tools}:{}),max_output_tokens:2200});
-      const content=validate(cleanJson(response.output_text||''));if(!content)throw new Error('invalid_teacher_payload');
-      const output:any[]=Array.isArray((response as any).output)?(response as any).output:[];
-      const grounded=output.some(x=>x?.type==='file_search_call');
-      const webUsed=output.some(x=>x?.type==='web_search_call'||x?.type==='web_search_preview_call');
-      const quality=evaluateTeacherQuality(content,mode);
-      return {content,grounded,webUsed,quality};
-    }
-
-    let result=await generate();
-    const sourceSatisfied=hasCurriculumStore?result.grounded:result.webUsed;
-    if(!sourceSatisfied||!result.quality.pass){
-      const problems=[...(!sourceSatisfied?[hasCurriculumStore?'لم تستخدم File Search في قاعدة كتب الوزارة.':'لم تستخدم بحثًا فعليًا للوصول إلى كتاب أو مصدر وزاري.']:[]),...result.quality.issues];
-      const draft=JSON.stringify(result.content).slice(0,5000);
-      result=await generate(`\n\nهذه محاولة ثانية لتحسين الجودة. المسودة الأولى لم تُعتمد للأسباب التالية:\n- ${problems.join('\n- ')}\n\nالمسودة الأولى:\n${draft}\n\nأعد بناء الشرح من الصفر. استخدم كتاب الوزارة كمصدر أساسي، واستخدم أداة المصدر المطلوبة فعليًا، وعالج كل الملاحظات، والتزم بالاستراتيجية التعليمية الحالية: ${strategy.label}. لا تستخدم الرزمة التعليمية كأساس للشرح.`);
-    }
-    const finalSourceSatisfied=hasCurriculumStore?result.grounded:result.webUsed;
-    if(!finalSourceSatisfied)throw new Error('textbook_grounding_required_after_retry');
-    if(!result.quality.pass)throw new Error(`low_teacher_quality_after_retry:${result.quality.score}:${result.quality.issues.join('|')}`);
-
-    const groundingQuality=result.grounded?'ministry-textbook-file':result.webUsed?'official-web':'local';
+    const client=new OpenAI({apiKey:process.env.OPENAI_API_KEY});const tools:any[]=[];if(hasCurriculumStore)tools.push({type:'file_search',vector_store_ids:[process.env.OPENAI_CURRICULUM_VECTOR_STORE_ID],max_num_results:8});if(!hasCurriculumStore||mode==='deep'||mode==='real_world')tools.push({type:'web_search'});
+    async function generate(extra=''){const response=await client.responses.create({model:process.env.OPENAI_TUTOR_MODEL||'gpt-5',instructions,input:`${prompt}${extra}`,...(tools.length?{tools}:{}),max_output_tokens:2400});const content=validate(cleanJson(response.output_text||''));if(!content)throw new Error('invalid_teacher_payload');const output:any[]=Array.isArray((response as any).output)?(response as any).output:[];const grounded=output.some(x=>x?.type==='file_search_call');const webUsed=output.some(x=>x?.type==='web_search_call'||x?.type==='web_search_preview_call');const quality=evaluateTeacherQuality(content,mode);return {content,grounded,webUsed,quality}}
+    let result=await generate();const sourceSatisfied=hasCurriculumStore?result.grounded:result.webUsed;
+    if(!sourceSatisfied||!result.quality.pass){const problems=[...(!sourceSatisfied?[hasCurriculumStore?'لم تستخدم File Search في قاعدة كتب الوزارة.':'لم تستخدم بحثًا فعليًا للوصول إلى كتاب أو مصدر وزاري.']:[]),...result.quality.issues];const draft=JSON.stringify(result.content).slice(0,5000);result=await generate(`\n\nالمسودة الأولى لم تعتمد:\n- ${problems.join('\n- ')}\n\nالمسودة:\n${draft}\n\nأعد بناء الشرح من الصفر. التزم بكتاب الوزارة كمصدر للمعلومات، وببصمة الدرس الإبداعية والاستراتيجية الحالية كطريقة للتدريس. لا تستخدم الرزمة كأساس.`)}
+    const finalSourceSatisfied=hasCurriculumStore?result.grounded:result.webUsed;if(!finalSourceSatisfied)throw new Error('textbook_grounding_required_after_retry');if(!result.quality.pass)throw new Error(`low_teacher_quality_after_retry:${result.quality.score}:${result.quality.issues.join('|')}`);const groundingQuality=result.grounded?'ministry-textbook-file':result.webUsed?'official-web':'local';
     return NextResponse.json({content:result.content,mode:'ai',grounded:result.grounded,webUsed:result.webUsed,groundingQuality,sourcePolicy:'textbook_primary',teachingStrategy:strategy.id,teachingStrategyLabel:strategy.label,pedagogyLevel:pedagogy.level,qualityScore:result.quality.score,qualityIssues:result.quality.issues,bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});
-  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,groundingQuality:'local',sourcePolicy:'textbook_primary',teachingStrategy:strategy.id,pedagogyLevel:pedagogy.level,qualityScore:0,qualityIssues:['fallback'],bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))});}
+  }catch(error){console.error('AI lesson teacher failed',error);return NextResponse.json({content:backup,mode:'local_fallback',grounded:false,webUsed:false,groundingQuality:'local',sourcePolicy:'textbook_primary',teachingStrategy:strategy.id,pedagogyLevel:pedagogy.level,qualityScore:0,qualityIssues:['fallback'],bridges:bridges.map(b=>({skillId:b.skillId,title:b.title,priority:b.priority}))})}
 }

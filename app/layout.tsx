@@ -15,6 +15,7 @@ import './advanced-concept-studio.css';
 import './science-simulation.css';
 import './data-concept-studio.css';
 import './chemistry-simulation.css';
+import './language-concept-studio.css';
 import './dashboard-progress.css';
 import './learning-path.css';
 import './live-rail.css';

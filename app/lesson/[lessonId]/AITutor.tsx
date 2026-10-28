@@ -34,10 +34,10 @@ export default function AITutor({lesson}:{lesson:Lesson}){
  },[lesson.id,lesson.student,lesson.subject]);
 
  const likelyGap=useMemo(()=>detectLikelyGap(lesson.id,report?.wrongQuestionIds||[],report?.diagnosticCorrect??true),[lesson.id,report]);
- const weakestRecovery=useMemo(()=>Object.entries(recoveryProfile).sort((a,b)=>a[1]-b[1])[0], [recoveryProfile]);
+ const weakestRecovery=useMemo(()=>Object.entries(recoveryProfile).sort((a,b)=>a[1]-b[1])[0],[recoveryProfile]);
  const weakestSkill=weakestRecovery?recoverySkills.find(s=>s.id===weakestRecovery[0]):undefined;
- const weakestDeep=useMemo(()=>Object.entries(deepRecoveryProfile).sort((a,b)=>a[1].score-b[1].score)[0], [deepRecoveryProfile]);
- const quick=['اشرح أبسط','أعطني مثالًا جديدًا','اسألني سؤال تحقق','لماذا أخطأت؟','اربطه بما تعلمته سابقًا'];
+ const weakestDeep=useMemo(()=>Object.entries(deepRecoveryProfile).sort((a,b)=>a[1].score-b[1].score)[0],[deepRecoveryProfile]);
+ const quick=['اشرحها بطريقة أسهل','أعطني مثالًا آخر','اسألني سؤالًا','اربطها بشيء أعرفه'];
 
  async function ask(text:string){
    const q=text.trim();if(!q||loading)return;
@@ -46,22 +46,19 @@ export default function AITutor({lesson}:{lesson:Lesson}){
      const res=await fetch('/api/tutor',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lessonId:lesson.id,question:q,learnerState:{diagnosticCorrect:report?.diagnosticCorrect,mastery:report?.mastery,wrongQuestionIds:report?.wrongQuestionIds||[],likelyGapId:likelyGap?.id||null,recoveryProfile,deepRecoveryProfile}})});
      const data=await res.json();
      setMessages(v=>[...v,{role:'tutor',text:data.answer||'لم أتمكن من شرح هذه النقطة الآن.',mode:data.mode,grounded:Boolean(data.grounded)}]);
-   }catch{setMessages(v=>[...v,{role:'tutor',text:'تعذر الاتصال بالمعلم الذكي الآن. يمكنك متابعة الشرح الموجود في الدرس.'}])}
+   }catch{setMessages(v=>[...v,{role:'tutor',text:'تعذر الاتصال الآن. تابعي الشرح الموجود وسأبقى هنا عندما يعود الاتصال.'}])}
    finally{setLoading(false)}
  }
 
  const deepGap=weakestDeep?.[1];
  const missedSummary=deepGap?.missedFacts?.map(x=>`${x.text} (اختارت ${x.selected} بدل ${x.correct})`).join('؛ ');
- return <section className="aiTutor">
-   <button className="aiTutorToggle" onClick={()=>setOpen(v=>!v)}><span className="aiOrb">AI</span><span><strong>المعلم الذكي</strong><small>{deepGap?`الفجوة الدقيقة: ${deepGap.title} (${deepGap.score}%)`:weakestSkill&&weakestRecovery![1]<80?`ملف الاستدراك يشير إلى: ${weakestSkill.title}`:likelyGap?`لاحظ فجوة محتملة: ${likelyGap.title}`:'منهج الصف الحالي + مهارات الصفوف السابقة'}</small></span><span>{open?'−':'+'}</span></button>
-   {open&&<div className="aiTutorBody">
-     <div className="aiGuard"><strong>🎯 معلم منهجي</strong><span>يستخدم سياق الدرس، ملف الفجوات، والأخطاء الدقيقة المسجلة، مع أولوية للمصادر المنهجية الفلسطينية الموثوقة.</span></div>
-     {deepGap&&<div className="gapAlert"><strong>فجوة دقيقة موثقة</strong><p><b>{deepGap.title}</b> — النتيجة {deepGap.score}% · المرجع المتوقع {deepGap.gradeAnchor}.{deepGap.cause?` ${deepGap.cause}`:''}</p>{missedSummary&&<p><b>أمثلة من الأخطاء:</b> {missedSummary}</p>}<button className="btn secondary" onClick={()=>ask(`التشخيص العميق أظهر أن نتيجتي في ${deepGap.title} هي ${deepGap.score}%، والمهارة ترجع إلى ${deepGap.gradeAnchor}.${missedSummary?` أخطائي المسجلة: ${missedSummary}.`:''} عالج هذه النقطة باختصار، أعطني مثالًا مشابهًا، ثم اختبرني واربطها بدرس ${lesson.title}.`)}>عالج النقطة الدقيقة</button></div>}
-     {!deepGap&&weakestSkill&&weakestRecovery![1]<80&&<div className="gapAlert"><strong>فجوة موثقة من فحص المادة</strong><p><b>{weakestSkill.title}</b> — النتيجة الحالية {weakestRecovery![1]}%. يمكن للمعلم شرحها وربطها بالدرس الحالي بدل تجاهل سبب التعثر.</p><button className="btn secondary" onClick={()=>ask(`فحص الفجوات أظهر أن نتيجتي في ${weakestSkill.title} هي ${weakestRecovery![1]}%. عالج هذه المهارة أولًا ثم اربطها بدرس ${lesson.title}.`)}>عالج الفجوة واربطها بالدرس</button></div>}
-     {!deepGap&&!weakestSkill&&likelyGap&&<div className="gapAlert"><strong>قد تكون المشكلة أقدم من هذا الدرس</strong><p>الفجوة المحتملة: <b>{likelyGap.title}</b>. إذا كانت هذه المهارة ضعيفة فالأفضل علاجها أولًا ثم العودة للدرس.</p><button className="btn secondary" onClick={()=>ask(`أعتقد أن لدي ضعفًا في ${likelyGap.title}. اشرح لي هذه المهارة من البداية بطريقة قصيرة ثم اربطها بدرس ${lesson.title}.`)}>عالج الفجوة معي</button></div>}
-     <div className="quickPrompts">{quick.map(q=><button key={q} onClick={()=>ask(q)}>{q}</button>)}</div>
-     <div className="chatWindow">{messages.length===0?<div className="chatEmpty">اكتبي ما لم تفهميه. يستطيع المعلم الرجوع للمهارات السابقة الدقيقة والأخطاء المسجلة ثم إعادتك إلى هدف الدرس الحالي.</div>:messages.map((m,i)=><div key={`${m.role}-${i}`} className={`chatBubble ${m.role}`}><div className="chatBubbleHead"><strong>{m.role==='student'?'أنتِ':'المعلم'}</strong>{m.role==='tutor'&&m.grounded&&<span className="groundedBadge">📚 بحث في قاعدة المنهاج</span>}</div><p>{m.text}</p>{m.role==='tutor'&&m.mode&&m.mode!=='ai'&&<small>شرح محلي احتياطي — لم يُستخدم نموذج AI في هذه الإجابة.</small>}{m.role==='tutor'&&m.mode==='ai'&&!m.grounded&&<small>شرح AI مساعد مبني على سياق الدرس وملف التعلم، دون File Search في هذه الإجابة.</small>}</div>)}{loading&&<div className="chatBubble tutor"><strong>المعلم</strong><p>أراجع الدرس والفجوة والأخطاء الدقيقة المناسبة…</p></div>}</div>
-     <div className="chatComposer"><textarea value={input} onChange={e=>setInput(e.target.value.slice(0,700))} placeholder="مثال: لا أفهم هذه الخطوة، هل هناك مهارة سابقة يجب أن أعرفها؟" rows={2} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask(input)}}}/><button className="btn" onClick={()=>ask(input)} disabled={loading||!input.trim()}>إرسال</button></div>
+ return <section className={`aiTutor teacherAskDock ${open?'open':''}`}>
+   <button className="teacherAskToggle" onClick={()=>setOpen(v=>!v)} aria-expanded={open}><span className="teacherAskAvatar">🧑‍🏫</span><span><strong>اسألي معلمتك</strong><small>{open?'أنا معك — اكتبي ما لم يتضح':'شيء لم تفهميه؟ افتحي هنا'}</small></span><b>{open?'×':'+'}</b></button>
+   {open&&<div className="aiTutorBody teacherAskBody">
+     {(deepGap||weakestSkill&&weakestRecovery![1]<80||likelyGap)&&<div className="teacherNoticed"><span>🌱</span><div><strong>لاحظت مهارة يمكن أن نثبتها معًا</strong><p>إذا كانت هي سبب التعثر، سأشرحها بسرعة ثم نعود مباشرة إلى هذا الدرس.</p></div><button onClick={()=>deepGap?ask(`عالج لي ${deepGap.title} باختصار، ثم اربطها بدرس ${lesson.title}.${missedSummary?` هذه بعض أخطائي: ${missedSummary}.`:''}`):weakestSkill?ask(`عالج لي ${weakestSkill.title} باختصار ثم اربطها بدرس ${lesson.title}.`):likelyGap&&ask(`اشرح لي ${likelyGap.title} من البداية باختصار ثم اربطها بدرس ${lesson.title}.`)}>ساعديني</button></div>}
+     <div className="teacherAskPrompts">{quick.map(q=><button key={q} onClick={()=>ask(q)}>{q}</button>)}</div>
+     <div className="chatWindow teacherChatWindow">{messages.length===0?<div className="teacherChatEmpty"><span>💬</span><strong>اكتبي بطريقتك</strong><p>مثال: «لم أفهم لماذا فعلنا هذه الخطوة» أو «أعطيني مثالًا أسهل».</p></div>:messages.map((m,i)=><div key={`${m.role}-${i}`} className={`chatBubble ${m.role} teacherBubble`}><strong>{m.role==='student'?'أنتِ':'🧑‍🏫 المعلمة'}</strong><p>{m.text}</p></div>)}{loading&&<div className="chatBubble tutor teacherBubble"><strong>🧑‍🏫 المعلمة</strong><p>أفكر في أقصر طريقة توضحها لكِ…</p></div>}</div>
+     <div className="chatComposer teacherComposer"><textarea value={input} onChange={e=>setInput(e.target.value.slice(0,700))} placeholder="اكتبي سؤالك هنا…" rows={2} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ask(input)}}}/><button className="btn" onClick={()=>ask(input)} disabled={loading||!input.trim()}>إرسال</button></div>
    </div>}
  </section>;
 }

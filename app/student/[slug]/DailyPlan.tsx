@@ -5,13 +5,15 @@ import type {Lesson} from '../../../lib/data';
 import {recoverySkills} from '../../../lib/recoverySkills';
 import {getDeepDiagnostic} from '../../../lib/deepDiagnostics';
 
-type Task={id:string;href:string;title:string;subject:string;minutes:number;type:'review'|'new'|'assessment'|'recovery'};
+type Task={id:string;href:string;title:string;subject:string;minutes:number;type:'review'|'reteach'|'new'|'assessment'|'recovery'};
 type SavedPlan={skillId:string;average:number;weak:Array<{id:string;title:string;gradeAnchor:string;score:number}>};
+type TeacherDecision={decision:'advance'|'review'|'targeted_reteach';reviewAt?:string;focus?:string};
 
 export default function DailyPlan({lessons}:{lessons:Lesson[]}){
  const [tasks,setTasks]=useState<Task[]>([]);
  const [ready,setReady]=useState(false);
  const [recoveryFirst,setRecoveryFirst]=useState(false);
+ const [teacherFirst,setTeacherFirst]=useState(false);
 
  useEffect(()=>{
    const now=Date.now();
@@ -21,6 +23,10 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
    lessons.forEach(l=>{
      const done=localStorage.getItem(`lesson:${l.id}`)==='done';
      if(!done){incomplete.push(l);return}
+     let teacherHandled=false;
+     const rawDecision=localStorage.getItem(`teacherDecision:${l.id}`);
+     if(rawDecision){try{const decision=JSON.parse(rawDecision) as TeacherDecision;if(decision.decision==='targeted_reteach'){reviews.push({id:l.id,href:`/lesson/${l.id}`,title:decision.focus?`ثبتي: ${decision.focus}`:`ثبتي نقطة من ${l.title}`,subject:l.subject,minutes:8,type:'reteach'});teacherHandled=true}else if(decision.decision==='review'){const due=decision.reviewAt?new Date(decision.reviewAt).getTime()<=now:false;if(due){reviews.push({id:l.id,href:`/lesson/${l.id}`,title:l.title,subject:l.subject,minutes:5,type:'review'});teacherHandled=true}}}catch{}}
+     if(teacherHandled)return;
      let due=false;
      const rawReview=localStorage.getItem(`lesson:${l.id}:review`);
      if(rawReview){try{const meta=JSON.parse(rawReview);due=new Date(meta.dueAt).getTime()<=now}catch{}}
@@ -29,6 +35,7 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
      if(due)reviews.push({id:l.id,href:`/lesson/${l.id}`,title:l.title,subject:l.subject,minutes:5,type:'review'});
    });
 
+   reviews.sort((a,b)=>a.type===b.type?0:a.type==='reteach'?-1:b.type==='reteach'?1:0);
    const newTasks:Task[]=[];
    const subjects=[...new Set(incomplete.map(l=>l.subject))];
    subjects.forEach(subject=>{
@@ -58,16 +65,18 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
      else {const scored=recoverySkills.map(skill=>({skill,score:Number(localStorage.getItem(`recovery:${slug}:${skill.id}`))})).filter(x=>Number.isFinite(x.score)&&localStorage.getItem(`recovery:${slug}:${x.skill.id}`)!==null&&x.score<80).sort((a,b)=>a.score-b.score);if(scored.length){const {skill,score}=scored[0];severeGap=score<50;recoveryTask={id:skill.id,href:`/student/${slug}/recovery/${skill.id}/deep`,title:skill.title,subject:skill.subject,minutes:10,type:'recovery'}}}
    }
 
-   const candidates=[...reviews.slice(0,1),...newTasks];
+   const urgentTeacher=reviews.find(t=>t.type==='reteach');
+   const otherReviews=reviews.filter(t=>t!==urgentTeacher).slice(0,1);
+   const candidates=[...(urgentTeacher?[urgentTeacher]:[]),...otherReviews,...newTasks];
    const currentGradeTasks:Task[]=[];let currentMinutes=0;
    for(const task of candidates){if(currentGradeTasks.length>=3)break;if(currentGradeTasks.length>=2&&currentMinutes+task.minutes>45)continue;currentGradeTasks.push(task);currentMinutes+=task.minutes}
    const merged=recoveryTask?(severeGap?[recoveryTask,...currentGradeTasks]:[...currentGradeTasks,recoveryTask]):currentGradeTasks;
-   setRecoveryFirst(Boolean(recoveryTask&&severeGap));setTasks(merged.slice(0,4));setReady(true);
+   setRecoveryFirst(Boolean(recoveryTask&&severeGap));setTeacherFirst(Boolean(urgentTeacher&&!severeGap));setTasks(merged.slice(0,4));setReady(true);
  },[lessons]);
 
  if(!ready)return <section className="dailyPlan"><div className="muted">✨ أرتب لكِ مهمة اليوم…</div></section>;
  if(tasks.length===0)return <section className="dailyPlan celebrationPlan"><div><span className="tag">مهمة اليوم</span><h2>رائع! لا توجد مهام مستحقة 🎉</h2><p className="muted">يمكنك اختيار درس تحبين مراجعته أو أخذ استراحة مستحقة.</p></div></section>;
 
  const icon=(subject:string)=>subject==='الرياضيات'?'➗':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📚':'🌍';
- return <section className="dailyPlan"><div className="dailyPlanHead"><div><span className="tag">⭐ مهمتك الآن</span><h2>{recoveryFirst?'نبدأ بخطوة صغيرة تقوّيك':'ماذا سننجز اليوم؟'}</h2><p>{recoveryFirst?'تمرين قصير أولًا، ثم نعود مباشرة إلى درس صفك.':'اختاري أول بطاقة وابدئي. لا تحتاجين التفكير في بقية الخطة الآن.'}</p></div><div className="todayTime"><strong>{tasks.reduce((s,t)=>s+t.minutes,0)}</strong><span>دقيقة تقريبًا</span></div></div><div className="dailyTasks">{tasks.map((task,index)=><div className={`dailyTask ${task.type==='recovery'?'recoveryTask':''}`} key={`${task.type}-${task.id}`}><div className="taskOrder">{index+1}</div><div className="dailyTaskIcon">{task.type==='review'?'🔄':task.type==='assessment'?'🏆':task.type==='recovery'?'💪':icon(task.subject)}</div><div className="dailyTaskCopy"><small>{task.type==='review'?'مراجعة سريعة':task.type==='assessment'?'تحدي قصير':task.type==='recovery'?'قوّي مهارتك':task.subject} · {task.minutes} دقائق</small><strong>{task.title}</strong></div><Link className="btn" href={task.href} onClick={()=>{if(task.type==='review')localStorage.setItem(`lesson:${task.id}:reviewMode`,'1')}}>{task.type==='review'?'راجعي':task.type==='recovery'?'ابدئي التقوية':'ابدئي'} ←</Link></div>)}</div></section>;
+ return <section className="dailyPlan"><div className="dailyPlanHead"><div><span className="tag">⭐ مهمتك الآن</span><h2>{recoveryFirst?'نبدأ بخطوة صغيرة تقوّيك':teacherFirst?'المعلم اختار نقطة نثبتها أولًا':'ماذا سننجز اليوم؟'}</h2><p>{recoveryFirst?'تمرين قصير أولًا، ثم نعود مباشرة إلى درس صفك.':teacherFirst?'لن نعيد الدرس كاملًا؛ نتحقق من نقطة واحدة ثم نكمل المسار.':'اختاري أول بطاقة وابدئي. لا تحتاجين التفكير في بقية الخطة الآن.'}</p></div><div className="todayTime"><strong>{tasks.reduce((s,t)=>s+t.minutes,0)}</strong><span>دقيقة تقريبًا</span></div></div><div className="dailyTasks">{tasks.map((task,index)=><div className={`dailyTask ${task.type==='recovery'?'recoveryTask':task.type==='reteach'?'reteachTask':''}`} key={`${task.type}-${task.id}`}><div className="taskOrder">{index+1}</div><div className="dailyTaskIcon">{task.type==='review'?'🔄':task.type==='reteach'?'🎯':task.type==='assessment'?'🏆':task.type==='recovery'?'💪':icon(task.subject)}</div><div className="dailyTaskCopy"><small>{task.type==='review'?'مراجعة سريعة':task.type==='reteach'?'تثبيت اختاره المعلم':task.type==='assessment'?'تحدي قصير':task.type==='recovery'?'قوّي مهارتك':task.subject} · {task.minutes} دقائق</small><strong>{task.title}</strong></div><Link className="btn" href={task.href} onClick={()=>{if(task.type==='review'||task.type==='reteach')localStorage.setItem(`lesson:${task.id}:reviewMode`,'1')}}>{task.type==='review'?'راجعي':task.type==='reteach'?'ثبتيها':task.type==='recovery'?'ابدئي التقوية':'ابدئي'} ←</Link></div>)}</div></section>;
 }

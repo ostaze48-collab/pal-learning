@@ -47,13 +47,23 @@ function guessSemester(label,url,defaultSemester){
   if(/(?:الفصل|semester|p)[-_ ]?2\b|فصل ثاني|فصل ثان/.test(s))return 2;
   return null;
 }
+function indexDecision(item){
+  if(item.authority==='external')return {indexable:false,rejectionReason:'external_source'};
+  if(!item.subject)return {indexable:false,rejectionReason:'unknown_subject'};
+  if(!cfg.targetSubjects.includes(item.subject))return {indexable:false,rejectionReason:'non_target_subject'};
+  if(item.semester&&cfg.targetSemesters?.length&&!cfg.targetSemesters.includes(item.semester))return {indexable:false,rejectionReason:'non_target_semester'};
+  if(!item.grade)return {indexable:false,rejectionReason:'unknown_grade'};
+  if(!cfg.targetGrades.includes(item.grade))return {indexable:false,rejectionReason:'non_target_grade'};
+  if(!['curriculum','package','teacher-guide','worksheet','assessment','solution','framework'].includes(item.kind))return {indexable:false,rejectionReason:'unsupported_kind'};
+  return {indexable:true,rejectionReason:null};
+}
 function safeName(item,index){
   const hash=crypto.createHash('sha1').update(item.url).digest('hex').slice(0,10);
   return `${String(index+1).padStart(4,'0')}_g${item.grade||'x'}_s${item.semester||'x'}_${item.subject?.replace(/\s+/g,'-')||'mixed'}_${item.kind}_${hash}.pdf`.replace(/[\\/:*?"<>|]/g,'-');
 }
 function sha256(buffer){return crypto.createHash('sha256').update(buffer).digest('hex')}
 function metadataMarkdown(item,fileName,hash,bytes){
-  return `# Palestinian Curriculum Source Metadata\n\n- File: ${fileName}\n- Label: ${item.label||''}\n- Grade: ${item.grade??'unknown'}\n- Semester: ${item.semester??'unknown'}\n- Subject: ${item.subject||'unknown'}\n- Resource type: ${item.kind}\n- Authority: ${item.authority}\n- Source page: ${item.sourcePage}\n- Original URL: ${item.url}\n- SHA-256: ${hash}\n- Bytes: ${bytes}\n\n## Grounding rule\nUse this document only as provenance metadata for its paired curriculum file. Official ministry/Palestinian e-learning sources outrank generated explanations and external educational sites.\n`;
+  return `# Palestinian Curriculum Source Metadata\n\n- File: ${fileName}\n- Label: ${item.label||''}\n- Grade: ${item.grade??'unknown'}\n- Semester: ${item.semester??'unknown'}\n- Subject: ${item.subject||'unknown'}\n- Resource type: ${item.kind}\n- Authority: ${item.authority}\n- Source priority: ${item.sourcePriority??'unknown'}\n- Source page: ${item.sourcePage}\n- Original URL: ${item.url}\n- SHA-256: ${hash}\n- Bytes: ${bytes}\n\n## Grounding rule\nUse this document only as provenance metadata for its paired curriculum file. Official ministry/Palestinian e-learning sources outrank generated explanations and external educational sites.\n`;
 }
 
 async function discover(){
@@ -61,7 +71,7 @@ async function discover(){
   for(const page of cfg.pages){
     console.log('crawl',page.url);
     try{
-      const res=await fetch(page.url,{headers:{'user-agent':'Salma-Sama-Curriculum-KB/2.0'}});
+      const res=await fetch(page.url,{headers:{'user-agent':'Salma-Sama-Curriculum-KB/2.1'}});
       if(!res.ok){console.warn('skip',res.status,page.url);continue}
       const html=await res.text();
       const re=/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
@@ -78,27 +88,31 @@ async function discover(){
         const semester=guessSemester(label,url,page.semester);
         if(semester&&cfg.targetSemesters?.length&&!cfg.targetSemesters.includes(semester))continue;
         const kind=guessKind(label,url,page.kind);
-        const sourcePriority=(page.subject&&page.semester)?100:page.subject?96:page.kind==='teacher-guide'?92:90;
-        found.push({url,label:label||path.basename(pathname),grade,semester,subject,kind,authority:page.authority,sourcePage:page.url,sourcePriority,enabled:true});
+        const sourcePriority=(page.subject&&page.semester)?100:page.subject?96:page.kind==='teacher-guide'?92:page.kind==='framework'?91:90;
+        const base={url,label:label||path.basename(pathname),grade,semester,subject,kind,authority:page.authority,sourcePage:page.url,sourcePriority,enabled:true};
+        found.push({...base,...indexDecision(base)});
       }
     }catch(err){console.warn('crawl failed',page.url,err.message)}
   }
   const unique=[...new Map(found.map(x=>[x.url,x])).values()];
-  unique.sort((a,b)=>(b.sourcePriority||0)-(a.sourcePriority||0)||(a.grade||99)-(b.grade||99)||String(a.subject).localeCompare(String(b.subject))||a.kind.localeCompare(b.kind));
-  await fsp.writeFile(catalogPath,JSON.stringify({generatedAt:new Date().toISOString(),count:unique.length,files:unique},null,2));
-  console.log(`discovered ${unique.length} candidate curriculum files -> ${catalogPath}`);
+  unique.sort((a,b)=>Number(b.indexable)-Number(a.indexable)||(b.sourcePriority||0)-(a.sourcePriority||0)||(a.grade||99)-(b.grade||99)||String(a.subject).localeCompare(String(b.subject))||a.kind.localeCompare(b.kind));
+  const indexableCount=unique.filter(x=>x.indexable).length;
+  await fsp.writeFile(catalogPath,JSON.stringify({generatedAt:new Date().toISOString(),count:unique.length,indexableCount,files:unique},null,2));
+  console.log(`discovered ${unique.length} candidate curriculum files; ${indexableCount} pass strict indexing rules -> ${catalogPath}`);
 }
 
 async function downloadEnabled(){
   const catalog=JSON.parse(await fsp.readFile(catalogPath,'utf8'));
   await fsp.mkdir(outDir,{recursive:true});
+  const selected=catalog.files.filter(x=>x.enabled&&x.indexable);
+  console.log(`selected ${selected.length} strictly classified files for download`);
   const downloaded=[];
-  for(const [index,item] of catalog.files.filter(x=>x.enabled).entries()){
+  for(const [index,item] of selected.entries()){
     try{
       const fileName=safeName(item,index);const filePath=path.join(outDir,fileName);let buffer;
       if(!fs.existsSync(filePath)){
         console.log('download',item.url);
-        const res=await fetch(item.url,{headers:{'user-agent':'Salma-Sama-Curriculum-KB/2.0'}});
+        const res=await fetch(item.url,{headers:{'user-agent':'Salma-Sama-Curriculum-KB/2.1'}});
         if(!res.ok)throw new Error(`HTTP ${res.status}`);
         buffer=Buffer.from(await res.arrayBuffer());
         const contentType=String(res.headers.get('content-type')||'').toLowerCase();
@@ -142,11 +156,20 @@ async function upload(){
 
 async function validateCatalog(){
   const catalog=JSON.parse(await fsp.readFile(catalogPath,'utf8'));
-  const stats={total:catalog.files.length,byGrade:{},bySubject:{},byKind:{},unknownSubject:0,unknownGrade:0};
+  const stats={total:catalog.files.length,indexable:0,rejected:0,byGrade:{},bySubject:{},byKind:{},indexableByGrade:{},indexableBySubject:{},indexableByKind:{},rejectionReasons:{},unknownSubject:0,unknownGrade:0};
   for(const x of catalog.files){
     if(x.grade)stats.byGrade[x.grade]=(stats.byGrade[x.grade]||0)+1;else stats.unknownGrade++;
     if(x.subject)stats.bySubject[x.subject]=(stats.bySubject[x.subject]||0)+1;else stats.unknownSubject++;
     stats.byKind[x.kind]=(stats.byKind[x.kind]||0)+1;
+    if(x.indexable){
+      stats.indexable++;
+      stats.indexableByGrade[x.grade]=(stats.indexableByGrade[x.grade]||0)+1;
+      stats.indexableBySubject[x.subject]=(stats.indexableBySubject[x.subject]||0)+1;
+      stats.indexableByKind[x.kind]=(stats.indexableByKind[x.kind]||0)+1;
+    }else{
+      stats.rejected++;
+      const reason=x.rejectionReason||'unknown';stats.rejectionReasons[reason]=(stats.rejectionReasons[reason]||0)+1;
+    }
   }
   console.log(JSON.stringify(stats,null,2));
 }

@@ -23,11 +23,12 @@ export default function MultiplicationFluencyLab({slug,subskillId,onReady}:{slug
  const fact=bank.facts[Math.min(step,bank.facts.length-1)];
  function startSprint(){setStage('sprint');setStep(0);setPick(null);setCorrect(0);setTimes([]);started.current=Date.now()}
  function choose(value:number){
-  if(pick!==null)return;const elapsed=Date.now()-started.current;setTimes(v=>[...v,elapsed]);setPick(value);if(value===fact.answer)setCorrect(v=>v+1)
+  if(pick!==null)return;const elapsed=Date.now()-started.current;setTimes(v=>[...v,elapsed]);setPick(value)
  }
  function next(){
-  if(step>=bank.facts.length-1){const finalCorrect=correct+(pick===fact.answer?1:0);const finalTimes=[...times];const avgMs=finalTimes.length?Math.round(finalTimes.reduce((a,b)=>a+b,0)/finalTimes.length):0;const accuracy=Math.round(finalCorrect/bank.facts.length*100);localStorage.setItem(`foundationFluency:${slug}:${subskillId}`,JSON.stringify({accuracy,avgMs,attempts:bank.facts.length,at:new Date().toISOString()}));setStage('done');return}
-  setStep(v=>v+1);setPick(null);started.current=Date.now()
+  const gained=correct+(pick===fact.answer?1:0);
+  if(step>=bank.facts.length-1){const avgMs=times.length?Math.round(times.reduce((a,b)=>a+b,0)/times.length):0;const accuracy=Math.round(gained/bank.facts.length*100);localStorage.setItem(`foundationFluency:${slug}:${subskillId}`,JSON.stringify({accuracy,avgMs,attempts:bank.facts.length,at:new Date().toISOString()}));setCorrect(gained);setStage('done');return}
+  setCorrect(gained);setStep(v=>v+1);setPick(null);started.current=Date.now()
  }
  if(stage==='pattern')return <section className="multiplicationLab"><div className="fluencyHead"><span>⚡</span><div><small>تحدي ذهني قصير</small><h2>{bank.title}</h2><p>{bank.pattern}</p></div></div><div className="fluencyPatternGrid">{bank.facts.slice(0,3).map(f=><div key={`${f.a}-${f.b}`}><strong>{f.a} × {f.b} = {f.answer}</strong><span>{f.hint}</span></div>)}</div><button className="btn" onClick={()=>setStage('guided')}>أريني كيف أبني الحقيقة ←</button></section>;
  if(stage==='guided')return <section className="multiplicationLab"><span className="tag">نبنيها بدل أن نحفظها وحدها</span><h2>{fact.a} × {fact.b}</h2><div className="factBuildCard"><strong>{fact.hint}</strong><p>قولي الخطوة بصوتك أو في ذهنك، ثم اكشفي النتيجة.</p><div className="factAnswer">{fact.answer}</div></div><button className="btn" onClick={startSprint}>جاهزة للاسترجاع السريع ⚡</button></section>;

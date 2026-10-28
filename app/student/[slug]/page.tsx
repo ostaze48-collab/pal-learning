@@ -22,13 +22,14 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
 
     <div className="studentDesktopLayout">
       <aside className="subjectNav card">
-        <div className="muted" style={{fontSize:12,fontWeight:900,marginBottom:10}}>المواد</div>
+        <div className="muted" style={{fontSize:12,fontWeight:900,marginBottom:10}}>المواد والمسارات</div>
         {subjectEntries.map(([subject,subjectLessons],index)=>{
           const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
           return <a className="subjectNavLink" href={`#subject-${index}`} key={subject}><span>{icon}</span><span style={{flex:1}}>{subject}</span><small>{subjectLessons.filter(x=>x.kind!=='assessment').length}</small></a>
         })}
         <Link className="subjectNavLink" href={`/student/${slug}/recovery`}><span>🧩</span><span style={{flex:1}}>فجوات سابقة</span><small>AI</small></Link>
-        <div className="subjectNavHint">انتقلي بسرعة بين المواد، أو افتحي مسار الاستدراك إذا ظهرت مهارة سابقة تحتاج تثبيتًا.</div>
+        <Link className="subjectNavLink" href={`/student/${slug}/resources`}><span>📚</span><span style={{flex:1}}>بنك الموارد</span><small>موثوق</small></Link>
+        <div className="subjectNavHint">يمكنك الانتقال بين المواد، فحص الفجوات، أو فتح الكتب وأوراق العمل وأدلة المعلم من بنك الموارد.</div>
       </aside>
 
       <div className="learningMain">

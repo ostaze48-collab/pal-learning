@@ -4,6 +4,7 @@ import {grade5DecimalLessons} from './grade5Decimals';
 import {grade5GeometryLessons} from './grade5Geometry';
 import {grade5DataLessons} from './grade5Data';
 import {grade5ScienceLessons} from './grade5Science';
+import {grade5ArabicLessons} from './grade5Arabic';
 import {grade7MathLessons} from './grade7Math';
 import {grade7GeometryLessons} from './grade7Geometry';
 import {grade7ProportionLessons} from './grade7Proportion';
@@ -11,6 +12,7 @@ import {grade7StatisticsLessons} from './grade7Statistics';
 import {grade7ScienceLessons} from './grade7Science';
 import {grade7ScienceChemistryLessons} from './grade7ScienceChemistry';
 import {grade7SciencePressureLessons} from './grade7SciencePressure';
+import {grade7ArabicLessons} from './grade7Arabic';
 
 export type Student={slug:string;name:string;grade:number;semester:number;emoji:string};
 export type Question={id:string;text:string;options:string[];correct:number;explanation:string};
@@ -28,13 +30,15 @@ export const lessons:Lesson[]=[
   ...grade5GeometryLessons,
   ...grade5DataLessons,
   ...grade5ScienceLessons,
+  ...grade5ArabicLessons,
   ...grade7MathLessons,
   ...grade7GeometryLessons,
   ...grade7ProportionLessons,
   ...grade7StatisticsLessons,
   ...grade7ScienceLessons,
   ...grade7ScienceChemistryLessons,
-  ...grade7SciencePressureLessons
+  ...grade7SciencePressureLessons,
+  ...grade7ArabicLessons
 ];
 
 export function getStudent(slug:string){return students.find(s=>s.slug===slug)}
@@ -43,6 +47,19 @@ export function getStudentLessons(slug:string){return lessons.filter(l=>l.studen
 
 export function getLessonUnit(lesson:Lesson){
   const id=lesson.id;
+
+  if(lesson.subject==='اللغة العربية'){
+    if(lesson.student==='salma'){
+      if(id==='g5-ar-reading-blessings' || id==='g5-ar-poem-call-you') return 'الوحدة 1 · قراءة ونصوص';
+      if(id==='g5-ar-noun-types' || id==='g5-ar-pronouns') return 'الوحدة 2 · القواعد اللغوية';
+      if(id==='g5-ar-solar-lunar-l' || id==='g5-ar-ta-spelling') return 'الوحدة 3 · الإملاء';
+      return 'مراجعة العربية';
+    }
+    if(id==='g7-ar-reading-mercy' || id==='g7-ar-reading-palestine-heart' || id==='g7-ar-reading-student-mother') return 'الوحدة 1 · القراءة والفهم';
+    if(id==='g7-ar-middle-hamza') return 'الوحدة 2 · الإملاء';
+    if(id==='g7-ar-definite-indefinite' || id==='g7-ar-sound-verbs' || id==='g7-ar-weak-verbs') return 'الوحدة 3 · القواعد اللغوية';
+    return 'مراجعة العربية';
+  }
 
   if(lesson.subject==='العلوم والحياة'){
     if(lesson.student==='salma'){

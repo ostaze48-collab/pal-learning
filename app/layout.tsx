@@ -10,6 +10,7 @@ import './lesson-play.css';
 import './teacher-companion.css';
 import './teacher-dock.css';
 import './creative-learning.css';
+import './live-rail.css';
 import PwaClient from './PwaClient';
 
 export const metadata:Metadata={title:'تعلم سلمى وسما',description:'منصة تعليم منزلية ذكية تعتمد كتب المنهاج الفلسطيني الرسمية — الفصل الأول',manifest:'/manifest.webmanifest',icons:{icon:'/icon-192.svg'}};

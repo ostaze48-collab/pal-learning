@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useMemo,useState} from 'react';
 import {recoverySkills} from '../../../../lib/recoverySkills';
+import {getDeepDiagnostic} from '../../../../lib/deepDiagnostics';
 
 type Subject='الرياضيات'|'اللغة العربية'|'English'|'العلوم والحياة';
 const subjects:Subject[]=['الرياضيات','اللغة العربية','English','العلوم والحياة'];
@@ -60,5 +61,5 @@ export default function RecoveryScreening({slug}:{slug:string}){
 
 function RecoveryResults({subject,slug,scores}:{subject:Subject;slug:string;scores:Record<string,number>}){
  const skills=recoverySkills.filter(s=>s.subject===subject);
- return <div><div className="recoveryResultHead"><div><strong>نتيجة الفحص الأولي</strong><p className="muted">نركز فقط على المهارات الأقل من 80%، ونبقي الصف الحالي هو المسار الرئيس.</p></div></div><div className="recoverySkillGrid">{skills.map(skill=>{const score=scores[skill.id]??0;return <div className={`recoverySkill ${score>=80?'good':score>=50?'mid':'weak'}`} key={skill.id}><div className="subjectStatTop"><strong>{skill.title}</strong><span>{score}%</span></div><div className="progress"><span style={{width:`${score}%`}}/></div><p>{skill.whyItMatters}</p>{score<80?<Link className="btn secondary" href={`/student/${slug}/recovery/${skill.id}`}>عالج هذه المهارة</Link>:<span className="tag">الأساس جيد</span>}</div>})}</div><button className="btn secondary" style={{marginTop:14}} onClick={()=>{for(const skill of skills){localStorage.removeItem(`recovery:${slug}:${skill.id}`)}localStorage.removeItem(`recovery:${slug}:screened:${subject}`);location.reload()}}>إعادة فحص المادة</button></div>
+ return <div><div className="recoveryResultHead"><div><strong>نتيجة الفحص الأولي</strong><p className="muted">المهارة الأقل من 80% تنتقل إلى تشخيص أعمق يحدد الجزء الضعيف فقط، ثم يبني علاجًا قصيرًا له.</p></div></div><div className="recoverySkillGrid">{skills.map(skill=>{const score=scores[skill.id]??0;const hasDeep=Boolean(getDeepDiagnostic(skill.id));return <div className={`recoverySkill ${score>=80?'good':score>=50?'mid':'weak'}`} key={skill.id}><div className="subjectStatTop"><strong>{skill.title}</strong><span>{score}%</span></div><div className="progress"><span style={{width:`${score}%`}}/></div><p>{skill.whyItMatters}</p>{score<80?<div style={{display:'flex',gap:8,flexWrap:'wrap'}}>{hasDeep&&<Link className="btn" href={`/student/${slug}/recovery/${skill.id}/deep`}>شخّص بدقة</Link>}<Link className="btn secondary" href={`/student/${slug}/recovery/${skill.id}`}>شرح علاجي سريع</Link></div>:<span className="tag">الأساس جيد</span>}</div>})}</div><button className="btn secondary" style={{marginTop:14}} onClick={()=>{for(const skill of skills){localStorage.removeItem(`recovery:${slug}:${skill.id}`);localStorage.removeItem(`recoveryPlan:${slug}:${skill.id}`)}localStorage.removeItem(`recovery:${slug}:screened:${subject}`);location.reload()}}>إعادة فحص المادة</button></div>
 }

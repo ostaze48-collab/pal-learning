@@ -21,8 +21,7 @@ const visuals:Record<string,TeachingVisualSpec>={
  'g5-ar-noun-types:2:1':{kind:'pronoun_swap'},
  'g5-ar-noun-types:2:2':{kind:'pronoun_swap'},
  'g7-en-question-order:1:1':{kind:'question_blocks'},
- 'g7-en-question-order:2:2':{kind:'do_does'},
- 'g7-en-question-order:3:1':{kind:'question_blocks',variant:'does-base'}
+ 'g7-en-question-order:2:2':{kind:'do_does'}
 };
 
 export function getTeachingVisual(lessonId:string,objectiveId:number,sceneNumber:number){return visuals[`${lessonId}:${objectiveId}:${sceneNumber}`]||null}

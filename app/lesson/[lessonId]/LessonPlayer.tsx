@@ -6,11 +6,11 @@ import InteractiveActivity,{hasInteractiveActivity} from './InteractiveActivity'
 import LessonVisual from './LessonVisual';
 import GapCoach from './GapCoach';
 import AITutor from './AITutor';
+import AITeacherLesson from './AITeacherLesson';
 
 type Phase='diagnostic'|'gap'|'learn'|'activity'|'quiz'|'remediate'|'retest';
 type Report={diagnosticCorrect:boolean;firstPassScore:number;finalScore:number;mastery:number;wrongQuestionIds:string[];status:'mastered'|'review_needed';completedAt:string;reviewDue?:string;timeSeconds?:number;gapId?:string|null};
 type ReviewMeta={level:number;dueAt:string};
-
 type GapReturn='learn'|'remediate';
 
 export default function LessonPlayer({lesson}:{lesson:Lesson}){
@@ -26,8 +26,6 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
  const [retestMissed,setRetestMissed]=useState<number[]>([]);
  const [done,setDone]=useState(false);
  const [report,setReport]=useState<Report|null>(null);
- const [helpOpen,setHelpOpen]=useState(false);
- const [speaking,setSpeaking]=useState(false);
  const [currentGap,setCurrentGap]=useState<GapSkill|null>(null);
  const [gapReturn,setGapReturn]=useState<GapReturn>('learn');
  const [startedAt]=useState(()=>Date.now());
@@ -38,24 +36,11 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
    const reviewMode=localStorage.getItem(`lesson:${lesson.id}:reviewMode`)==='1';
    if(reviewMode){localStorage.removeItem(`lesson:${lesson.id}:reviewMode`);setDone(false);setPhase('quiz');return}
    if(localStorage.getItem(`lesson:${lesson.id}`)==='done')setDone(true);
-   return()=>{if('speechSynthesis' in window)window.speechSynthesis.cancel()};
  },[lesson.id]);
 
- function speakLesson(){
-   if(!('speechSynthesis' in window))return;
-   if(speaking){window.speechSynthesis.cancel();setSpeaking(false);return}
-   const text=[lesson.title,...lesson.learningPoints,`مثال: ${lesson.example}`].join('. ');
-   const utterance=new SpeechSynthesisUtterance(text);
-   utterance.lang=lesson.subject==='English'?'en-US':'ar-SA';
-   utterance.rate=0.9;
-   utterance.onend=()=>setSpeaking(false);utterance.onerror=()=>setSpeaking(false);
-   setSpeaking(true);window.speechSynthesis.cancel();window.speechSynthesis.speak(utterance);
- }
-
  function reset(){
-   if('speechSynthesis' in window)window.speechSynthesis.cancel();
    localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);
-   setDone(false);setReport(null);setPhase('diagnostic');setStep(0);setSelected(null);setScore(0);setWrong([]);setDiagnosticSelected(null);setDiagnosticCorrect(false);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setHelpOpen(false);setSpeaking(false);setCurrentGap(null);setGapReturn('learn');
+   setDone(false);setReport(null);setPhase('diagnostic');setStep(0);setSelected(null);setScore(0);setWrong([]);setDiagnosticSelected(null);setDiagnosticCorrect(false);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setCurrentGap(null);setGapReturn('learn');
  }
 
  function complete(finalCorrect:number,wrongIds:string[]){
@@ -75,15 +60,15 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
  if(done)return <><div className="card result"><h2>{report?.status==='review_needed'?'📌 أُنجز الدرس ويحتاج مراجعة':'🌟 أحسنتِ!'}</h2><p>{report?`مستوى الإتقان: ${report.mastery}%`:'أكملتِ هذا الدرس على هذا الجهاز.'}</p>{report&&<div className="masteryGrid"><div><strong>{report.diagnosticCorrect?'✓':'○'}</strong><span>التشخيص</span></div><div><strong>{report.firstPassScore}/{lesson.questions.length}</strong><span>المحاولة الأولى</span></div><div><strong>{report.mastery}%</strong><span>الإتقان النهائي</span></div></div>}{report?.gapId&&<div className="gapAlert"><strong>فجوة سابقة تستحق مراجعة</strong><p>النظام رصد أن جزءًا من الصعوبة قد يرتبط بمهارة سابقة. افتحي المعلم الذكي أدناه لشرحها وربطها بهذا الدرس.</p></div>}{report?.timeSeconds&&<p className="muted">وقت هذه الجلسة: نحو {Math.max(1,Math.round(report.timeSeconds/60))} دقيقة.</p>}<p className="muted">{report?.reviewDue?`المراجعة القادمة: ${new Date(report.reviewDue).toLocaleDateString('ar')}`:report?.status==='review_needed'?'سيظهر هذا الدرس في لوحة الأب كدرس يحتاج مراجعة قصيرة.':'يمكنك الانتقال للدرس التالي أو إعادة التدريب لاحقًا.'}</p><button className="btn secondary" onClick={reset}>إعادة الدرس</button></div>{tutor}</>;
 
  const diagnostic=lesson.questions[0];
- if(phase==='diagnostic')return <><div className="card"><span className="tag">فحص سريع · لا يدخل في الدرجة</span><h2 style={{marginTop:12}}>قبل أن نبدأ</h2><p className="muted">السؤال الأول لاختبار نقطة البداية. إذا كشف ضعفًا في مهارة أقدم، سنعالجها قبل الدرس.</p><h3>{diagnostic.text}</h3><div className="choice">{diagnostic.options.map((o,i)=>{const cls=diagnosticSelected===null?'option':i===diagnostic.correct?'option ok':i===diagnosticSelected?'option bad':'option';return <button key={o} className={cls} onClick={()=>{if(diagnosticSelected!==null)return;setDiagnosticSelected(i);setDiagnosticCorrect(i===diagnostic.correct)}}>{o}</button>})}</div>{diagnosticSelected!==null&&<div style={{marginTop:16}}><div className="result"><strong>{diagnosticSelected===diagnostic.correct?'ممتاز، لديكِ أساس جيد ✅':'وجدنا نقطة تستحق التثبيت قبل الدرس'}</strong><p>{diagnostic.explanation}</p></div><button className="btn" style={{marginTop:12}} onClick={()=>{const gap=detectLikelyGap(lesson.id,[],diagnosticSelected===diagnostic.correct);if(gap&&diagnosticSelected!==diagnostic.correct){setCurrentGap(gap);setGapReturn('learn');setPhase('gap')}else setPhase('learn')}}>{diagnosticSelected===diagnostic.correct?'ابدئي التعلم':'عالج الأساس ثم ابدئي'}</button></div>}</div>{tutor}</>;
+ if(phase==='diagnostic')return <><div className="card"><span className="tag">فحص سريع · لا يدخل في الدرجة</span><h2 style={{marginTop:12}}>قبل أن نبدأ</h2><p className="muted">السؤال الأول يحدد نقطة البداية. يستخدم المعلم نتيجته ليختار مستوى الشرح المناسب بدل تقديم نفس الشرح للجميع.</p><h3>{diagnostic.text}</h3><div className="choice">{diagnostic.options.map((o,i)=>{const cls=diagnosticSelected===null?'option':i===diagnostic.correct?'option ok':i===diagnosticSelected?'option bad':'option';return <button key={o} className={cls} onClick={()=>{if(diagnosticSelected!==null)return;setDiagnosticSelected(i);setDiagnosticCorrect(i===diagnostic.correct)}}>{o}</button>})}</div>{diagnosticSelected!==null&&<div style={{marginTop:16}}><div className="result"><strong>{diagnosticSelected===diagnostic.correct?'ممتاز، لديكِ أساس جيد ✅':'وجدنا نقطة تستحق التثبيت قبل الدرس'}</strong><p>{diagnostic.explanation}</p></div><button className="btn" style={{marginTop:12}} onClick={()=>{const gap=detectLikelyGap(lesson.id,[],diagnosticSelected===diagnostic.correct);if(gap&&diagnosticSelected!==diagnostic.correct){setCurrentGap(gap);setGapReturn('learn');setPhase('gap')}else setPhase('learn')}}>{diagnosticSelected===diagnostic.correct?'ابدئي مع المعلم الذكي':'عالج الأساس ثم ابدئي'}</button></div>}</div>{tutor}</>;
 
  if(phase==='gap'&&currentGap)return <><GapCoach gap={currentGap} onComplete={()=>{localStorage.setItem(`gap:${lesson.student}:${currentGap.id}`,'practiced');setCurrentGap(null);setPhase(gapReturn)}}/>{tutor}</>;
 
- if(phase==='learn')return <><div className="card"><div className="muted">تعلم بصري + شرح</div><h2 style={{marginTop:6}}>الفكرة الأساسية</h2><LessonVisual lesson={lesson}/><div className="lessonTools"><button className="btn secondary" onClick={speakLesson}>{speaking?'⏹ إيقاف الصوت':'🔊 استمعي للشرح'}</button><button className="btn secondary" onClick={()=>setHelpOpen(v=>!v)}>لم أفهم</button></div><div style={{display:'grid',gap:10,margin:'14px 0'}}>{lesson.learningPoints.map((point,i)=><div key={point} className="lesson"><strong>{i+1}</strong><div>{point}</div></div>)}</div><div className="result"><strong>مثال محلول</strong><p style={{lineHeight:1.9,marginBottom:0}}>{lesson.example}</p></div>{helpOpen&&<div className="helpBox"><strong>شرح أبسط</strong><p>{lesson.learningPoints[0]}</p><p className="muted">ركزي على الصورة والمثال. ويمكنك أيضًا فتح المعلم الذكي لشرح مختلف أو مثال إضافي.</p></div>}<button className="btn" style={{marginTop:16}} onClick={()=>{if('speechSynthesis' in window)window.speechSynthesis.cancel();setSpeaking(false);setPhase(hasInteractiveActivity(lesson.id)?'activity':'quiz')}}>{hasInteractiveActivity(lesson.id)?'ابدئي النشاط التفاعلي':'ابدئي التدريب'}</button></div>{tutor}</>;
+ if(phase==='learn')return <><div className="card aiFirstLessonShell"><div className="muted">تعلم بصري + معلم AI شخصي</div><h2 style={{marginTop:6}}>لنشرح الفكرة بالطريقة الأنسب لكِ</h2><LessonVisual lesson={lesson}/><AITeacherLesson lesson={lesson}/><button className="btn" style={{marginTop:18}} onClick={()=>setPhase(hasInteractiveActivity(lesson.id)?'activity':'quiz')}>{hasInteractiveActivity(lesson.id)?'فهمت الفكرة — ابدئي النشاط التفاعلي':'فهمت الفكرة — ابدئي التدريب'}</button></div>{tutor}</>;
 
  if(phase==='activity')return <><InteractiveActivity lesson={lesson} onComplete={()=>setPhase('quiz')}/>{tutor}</>;
 
- if(phase==='remediate')return <><div className="card"><span className="tag">علاج مخصص</span><h2>سنراجع فقط ما أخطأتِ فيه</h2><p className="muted">لا حاجة لإعادة الدرس كاملًا.</p><div style={{display:'grid',gap:10}}>{wrong.map((idx,n)=>{const q=lesson.questions[idx];const point=lesson.learningPoints[Math.min(idx,lesson.learningPoints.length-1)];return <div className="remediation" key={q.id}><strong>{n+1}. {q.text}</strong><p>{q.explanation}</p><div className="muted">تذكري: {point}</div></div>})}</div><button className="btn" style={{marginTop:16}} onClick={()=>{setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSelected(null);setPhase('retest')}}>اختبار قصير من جديد</button></div>{tutor}</>;
+ if(phase==='remediate')return <><div className="card"><span className="tag">علاج مخصص</span><h2>سنراجع فقط ما أخطأتِ فيه</h2><p className="muted">لا حاجة لإعادة الدرس كاملًا. ويمكن للمعلم الذكي شرح كل نقطة بطريقة مختلفة.</p><div style={{display:'grid',gap:10}}>{wrong.map((idx,n)=>{const q=lesson.questions[idx];const point=lesson.learningPoints[Math.min(idx,lesson.learningPoints.length-1)];return <div className="remediation" key={q.id}><strong>{n+1}. {q.text}</strong><p>{q.explanation}</p><div className="muted">تذكري: {point}</div></div>})}</div><button className="btn" style={{marginTop:16}} onClick={()=>{setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSelected(null);setPhase('retest')}}>اختبار قصير من جديد</button></div>{tutor}</>;
 
  if(phase==='retest'){
    const idx=wrong[retestStep];const q=lesson.questions[idx];

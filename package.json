@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev":"next dev",
-    "build":"node scripts/curriculum-books.mjs probe && next build",
+    "build":"next build",
     "start":"next start",
     "kb:books:probe":"node scripts/curriculum-books.mjs probe",
     "kb:books:prepare":"node scripts/curriculum-books.mjs prepare",

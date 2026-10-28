@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {getStudent,getStudentLessons,getLessonUnit} from '../../../lib/data';
 import StudentProgress from './StudentProgress';
+import DailyPlan from './DailyPlan';
 
 export default async function StudentPage({params}:{params:Promise<{slug:string}>}){
   const {slug}=await params;
@@ -23,13 +24,15 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
       <StudentProgress lessonIds={items.map(i=>i.id)}/>
     </section>
 
-    <div style={{display:'grid',gap:30}}>{Object.entries(subjects).map(([subject,subjectLessons])=>{
+    <DailyPlan lessons={items}/>
+
+    <div style={{display:'grid',gap:30,marginTop:24}}>{Object.entries(subjects).map(([subject,subjectLessons])=>{
       const units=subjectLessons.reduce<Record<string,typeof subjectLessons>>((acc,lesson)=>{
         const unit=getLessonUnit(lesson);
         (acc[unit]??=[]).push(lesson);
         return acc;
       },{});
-      const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':subject==='English'?'🔤':'📚';
+      const icon=subject==='الرياضيات'?'📘':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📕':'🔤';
       return <section className="subjectBlock" key={subject}>
         <div className="subjectHeader"><div><span className="subjectIcon">{icon}</span><h2>{subject} — الفصل الأول</h2></div><span className="tag">{subjectLessons.filter(x=>x.kind!=='assessment').length} درسًا</span></div>
         <div style={{display:'grid',gap:22}}>{Object.entries(units).map(([unit,unitLessons])=><section key={`${subject}-${unit}`}>

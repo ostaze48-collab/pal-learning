@@ -65,7 +65,7 @@ export default function LessonPlayer({lesson}:{lesson:Lesson}){
 
  if(phase==='gap'&&currentGap)return <><GapCoach gap={currentGap} onComplete={()=>{localStorage.setItem(`gap:${lesson.student}:${currentGap.id}`,'practiced');setCurrentGap(null);setPhase(gapReturn)}}/>{tutor}</>;
 
- if(phase==='learn')return <><div className="card aiFirstLessonShell"><div className="muted">تعلم بصري + معلم AI شخصي</div><h2 style={{marginTop:6}}>لنشرح الفكرة بالطريقة الأنسب لكِ</h2><LessonVisual lesson={lesson}/><AITeacherLesson lesson={lesson}/><button className="btn" style={{marginTop:18}} onClick={()=>setPhase(hasInteractiveActivity(lesson.id)?'activity':'quiz')}>{hasInteractiveActivity(lesson.id)?'فهمت الفكرة — ابدئي النشاط التفاعلي':'فهمت الفكرة — ابدئي التدريب'}</button></div>{tutor}</>;
+ if(phase==='learn')return <><div className="card aiFirstLessonShell"><div className="muted">تعلم بصري + معلم AI شخصي</div><h2 style={{marginTop:6}}>لنشرح الفكرة بالطريقة الأنسب لكِ</h2><LessonVisual lesson={lesson}/><AITeacherLesson lesson={lesson} diagnosticCorrect={diagnosticCorrect}/><button className="btn" style={{marginTop:18}} onClick={()=>setPhase(hasInteractiveActivity(lesson.id)?'activity':'quiz')}>{hasInteractiveActivity(lesson.id)?'فهمت الفكرة — ابدئي النشاط التفاعلي':'فهمت الفكرة — ابدئي التدريب'}</button></div>{tutor}</>;
 
  if(phase==='activity')return <><InteractiveActivity lesson={lesson} onComplete={()=>setPhase('quiz')}/>{tutor}</>;
 

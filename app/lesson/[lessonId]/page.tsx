@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import {getLesson,getStudent,getOfficialSourceUrl,getLessonSourceLabel} from '../../../lib/data';
+import {getLesson,getStudent,getStudentLessons,getOfficialSourceUrl,getLessonSourceLabel} from '../../../lib/data';
 import LessonPlayer from './LessonPlayer';
 
 export default async function LessonPage({params}:{params:Promise<{lessonId:string}>}){
@@ -9,6 +9,11 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
  const student=getStudent(lesson.student)!;
  const sourceUrl=getOfficialSourceUrl(lesson);
  const sourceLabel=getLessonSourceLabel(lesson);
+ const studentLessons=getStudentLessons(student.slug);
+ const currentIndex=studentLessons.findIndex(item=>item.id===lesson.id);
+ const previous=currentIndex>0?studentLessons[currentIndex-1]:null;
+ const next=currentIndex>=0&&currentIndex<studentLessons.length-1?studentLessons[currentIndex+1]:null;
+
  return <main className="shell"><div className="wrap">
   <div className="top"><Link className="btn secondary" href={`/student/${student.slug}`}>← دروس {student.name}</Link><div className="brand">{lesson.subject}</div></div>
   <div className="lessonDesktopLayout">
@@ -17,6 +22,10 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
       <h1>{lesson.title}</h1>
       <p className="muted lessonLead">{lesson.summary}</p>
       <LessonPlayer lesson={lesson}/>
+      <nav className="lessonSequence" aria-label="التنقل بين الدروس">
+        <div>{previous&&<Link className="btn secondary" href={`/lesson/${previous.id}`}>→ السابق: {previous.title}</Link>}</div>
+        <div>{next&&<Link className="btn" href={`/lesson/${next.id}`}>التالي: {next.title} ←</Link>}</div>
+      </nav>
     </section>
 
     <aside className="lessonSidebar card">

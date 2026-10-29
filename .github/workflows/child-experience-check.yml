@@ -22,9 +22,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - name: Install
-        run: npm ci
+        run: npm install
       - name: Child-facing copy guard
         run: npm run qa:child-copy
       - name: Production build

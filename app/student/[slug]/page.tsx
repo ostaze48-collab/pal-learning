@@ -2,7 +2,7 @@ import Link from 'next/link';
 import {getStudent,getStudentLessons} from '../../../lib/data';
 import StudentProgress from './StudentProgress';
 import SubjectProgressMini from './SubjectProgressMini';
-import DailyPlan from './DailyPlan';
+import DailyPlanWithResume from './DailyPlanWithResume';
 import KidBottomNav from './KidBottomNav';
 
 const subjectInfo:Record<string,{icon:string;label:string;desc:string;tone:string;key:string}>={
@@ -51,7 +51,7 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
 
     <section className="welcomeQuest"><div className="welcomeCopy"><span className="questEyebrow">{isSalma?'مغامرتك اليوم ✨':'رحلتك اليوم ✦'}</span><h1>{isSalma?`هيا يا ${student.name}! 🌈`:`جاهزة يا ${student.name}؟`}</h1><p>{isSalma?'مهمة واحدة أولًا، ثم نرى إلى أين تقودنا المغامرة.':'ابدئي بالمهمة التالية، وخذي كل فكرة خطوة واحدة في كل مرة.'}</p></div><div className="progressBubble"><span>رحلتي</span><StudentProgress lessonIds={items.map(i=>i.id)}/></div></section>
 
-    <DailyPlan lessons={items}/>
+    <DailyPlanWithResume lessons={items}/>
 
     <section className="subjectPickerSection"><div className="sectionTitleKid"><div><span>🗺️</span><h2>اختاري عالمًا</h2></div><p>كل مادة لها طريقتها الخاصة في الاكتشاف.</p></div><div className="subjectPicker">{subjectEntries.map(([subject,subjectLessons])=>{const meta=subjectInfo[subject]??{icon:'📘',label:subject,desc:'اكتشفي وتعلمي',tone:'subjectColor1',key:encodeURIComponent(subject)};return <Link className={`subjectPickCard ${meta.tone}`} href={`/student/${slug}/subject/${meta.key}`} key={subject}><span className="subjectPickIcon">{meta.icon}</span><div className="subjectPickCopy"><strong>{meta.label}</strong><small>{meta.desc}</small><SubjectProgressMini lessonIds={subjectLessons.map(x=>x.id)}/></div><span className="subjectWorldArrow">←</span></Link>})}</div></section>
 

@@ -26,7 +26,9 @@ jobs:
         run: npm install
       - name: Child-facing copy guard
         run: npm run qa:child-copy
-      - name: Curriculum quality report
+      - name: Curriculum quality gate
+        env:
+          CURRICULUM_QUALITY_STRICT: '1'
         run: npm run qa:curriculum
       - name: Production build
         run: npm run build

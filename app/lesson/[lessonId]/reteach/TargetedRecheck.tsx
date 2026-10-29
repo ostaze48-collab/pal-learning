@@ -5,7 +5,7 @@ import type {Lesson} from '../../../../lib/data';
 import {buildEvidenceTasks,type EvidenceTask} from '../../../../lib/evidenceDesign';
 import {combineMasteryEvidence,type UnderstandingOutcome} from '../../../../lib/masteryEvidence';
 import {refreshTeacherDecision} from '../../../../lib/masteryEngine';
-import {recordObjectiveEvidenceForRetention} from '../../../../lib/objectiveRetention';
+import {markRetentionRoundCompleted,recordObjectiveEvidenceForRetention} from '../../../../lib/objectiveRetention';
 import styles from './TargetedRecheck.module.css';
 
 type CheckResult={correct:boolean|null;outcome:'understood'|'partial'|'misconception'|'unscored';confidence:number;mode:string};
@@ -19,7 +19,7 @@ function updateEvidenceAndReport(lesson:Lesson,task:EvidenceTask,result:CheckRes
  const results=[...previous.filter((x:any)=>!(x?.scope==='objective'&&Number(x?.objectiveId)===task.objectiveId)),entry];
  const transfer=saved?.transfer||results.find((x:any)=>x?.scope==='transfer')||null;
  localStorage.setItem(`lessonEvidence:${lesson.id}`,JSON.stringify({...saved,lessonId:lesson.id,results,transfer,completedAt:now}));
- recordObjectiveEvidenceForRetention(lesson,task.objectiveId,result.correct,now);
+ recordObjectiveEvidenceForRetention(lesson,task.objectiveId,result.correct,now);if(checkMode==='retention')markRetentionRoundCompleted(lesson.student);
  const objectiveResults=results.filter((x:any)=>x?.scope==='objective'&&typeof x?.correct==='boolean');const objectiveEvidenceCount=objectiveResults.length;const objectiveEvidencePercent=objectiveEvidenceCount?Math.round(objectiveResults.filter((x:any)=>x.correct===true).length/objectiveEvidenceCount*100):null;const transferSuccess=typeof transfer?.correct==='boolean'?Boolean(transfer.correct):null;
  const report=readJson(`lesson:${lesson.id}:report`);let nextReport=report;
  if(report){

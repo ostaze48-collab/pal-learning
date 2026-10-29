@@ -11,8 +11,10 @@ export type KnowledgeNode={
  evidence:MasteryEvidence[];weakPrerequisites:Array<{id:string;title:string;score:number|null}>;
 };
 export type KnowledgeMap={student:string;nodes:KnowledgeNode[];nextRecommended?:KnowledgeNode;blockedNext?:KnowledgeNode;updatedAt:string};
+export type TeacherInterventionType='none'|'spaced_review'|'objective_reteach'|'prerequisite_bridge'|'transfer_practice'|'concept_rebuild'|'evidence_conflict';
 export type TeacherEvidenceDecision={
  decision:'advance'|'review'|'targeted_reteach';
+ interventionType:TeacherInterventionType;
  reviewAt?:string;
  focus?:string;
  weakObjectiveIds?:number[];
@@ -78,7 +80,7 @@ function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidence
  const objective=clampScore(finite(report?.objectiveEvidenceScore));
  const transfer=clampScore(finite(report?.transferScore));
  const mastery=clampScore(finite(report?.mastery));
- const objectiveDetail=objectiveWeaknesses(lesson);const prerequisiteRisks=prerequisiteRisksFor(lesson,objectiveDetail.weakIds);
+ const objectiveDetail=objectiveWeaknesses(lesson);const prerequisiteRisks=prerequisiteRisksFor(lesson,objectiveDetail.weakIds);const strongPrerequisite=prerequisiteRisks.find(x=>x.confidence>=.85)||null;
  const available=[quiz,understanding,concept,objective,transfer].filter(x=>x!==null).length;
  const reportConfidence=clampScore(finite(report?.masteryConfidence));
  const confidence=reportConfidence??(available>=4?94:available===3?88:available===2?78:64);
@@ -92,17 +94,18 @@ function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidence
  if(misconception||weakConcept||weakObjective||weakTransfer||evidenceConflict){
    const objectiveFocus=objectiveDetail.labels.length?`ثبتي هذا الهدف: ${objectiveDetail.labels.slice(0,2).join(' • ')}`:`مهارة محددة داخل ${lesson.title}`;
    const focus=misconception?`تفسير الفكرة في ${lesson.title}`:weakObjective?objectiveFocus:weakTransfer?`نقل فكرة ${lesson.title} إلى موقف جديد`:weakConcept?`فهم الفكرة عمليًا في ${lesson.title}`:`ربط الحل بالفهم في ${lesson.title}`;
-   const prereqNote=weakObjective&&prerequisiteRisks.length?` ويوجد متطلب سابق لديه دليل ضعف: ${prerequisiteRisks[0].title}.`:'';
+   const interventionType:TeacherInterventionType=misconception||weakConcept?'concept_rebuild':weakObjective&&strongPrerequisite?'prerequisite_bridge':weakObjective?'objective_reteach':weakTransfer?'transfer_practice':'evidence_conflict';
+   const prereqNote=interventionType==='prerequisite_bridge'&&strongPrerequisite?` ويوجد متطلب سابق لديه دليل ضعف: ${strongPrerequisite.title}.`:'';
    const reason=(misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakObjective?'دليل هدف محدد لم يثبت بعد؛ المطلوب إعادة تمثيل هذا الهدف فقط ثم محاولة جديدة قصيرة.':weakTransfer?'الفهم الأساسي أفضل من أداء النقل؛ المطلوب مثال جديد يغيّر السياق ثم محاولة قصيرة.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.')+prereqNote;
-   return {decision:'targeted_reteach',focus,reason,...base};
+   return {decision:'targeted_reteach',interventionType,focus,reason,...base};
  }
  const partial=[understanding,concept,objective,transfer].some(x=>x!==null&&Number(x)<80);
  if(mastery!==null&&mastery>=80&&!partial){
-   return {decision:'advance',reason:'الأدلة المتنوعة متوافقة: الاختبار والمهارات/التفاعل والنقل تدعم الانتقال إلى الخطوة التالية.',...base};
+   return {decision:'advance',interventionType:'none',reason:'الأدلة المتنوعة متوافقة: الاختبار والمهارات/التفاعل والنقل تدعم الانتقال إلى الخطوة التالية.',...base};
  }
  const reviewAt=String(report?.reviewDue||new Date(Date.now()+24*60*60*1000).toISOString());
  const reason=mastery!==null&&mastery>=80?'الإتقان جيد لكن إحدى قنوات الدليل ما زالت هشّة؛ نحتاج مراجعة قصيرة لاحقة للتأكد من الثبات.':'الإتقان الكلي لم يصل بعد إلى حد التقدم بثقة؛ نراجع نقطة قصيرة ثم نعيد المحاولة.';
- return {decision:'review',reviewAt,reason,...base};
+ return {decision:'review',interventionType:'spaced_review',reviewAt,reason,...base};
 }
 
 export function refreshTeacherDecision(lesson:Lesson,report?:any){

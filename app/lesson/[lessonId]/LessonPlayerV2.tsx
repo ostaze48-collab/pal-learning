@@ -17,9 +17,11 @@ type Report={diagnosticCorrect:boolean;firstPassScore:number;finalScore:number;q
 type ReviewMeta={level:number;dueAt:string};
 type CanvasCompleteDetail={lessonId:string;objectiveId:number};
 type SavedEvidenceResult={scope?:'objective'|'transfer';correct?:boolean|null};
+type LessonSession={version:1;questionCount:number;objectiveCount:number;phase:Exclude<Phase,'done'>;conceptStep:number;practiceReveal:boolean;step:number;score:number;wrong:number[];retestStep:number;retestCorrect:number;retestMissed:number[];updatedAt:string};
 
 const phaseIndex:Record<Phase,number>={discover:0,build:1,practice:2,quiz:3,gap:3,remediate:3,retest:3,done:4};
 const phaseLabels=[['✨','اكتشف'],['🧩','ابنِ الفكرة'],['🎮','جرّب'],['🎯','تحدي']];
+const resumablePhases:Exclude<Phase,'done'>[]=['discover','build','practice','quiz','gap','remediate','retest'];
 
 function hookFor(lesson:Lesson){
  if(lesson.subject==='العلوم والحياة')return 'شاهدي الظاهرة أولًا، كوّني توقعًا، ثم ابحثي عن دليل يفسر ما حدث.';
@@ -71,6 +73,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  const [retestMissed,setRetestMissed]=useState<number[]>([]);
  const [currentGap,setCurrentGap]=useState<GapSkill|null>(null);
  const [report,setReport]=useState<Report|null>(null);
+ const [sessionReady,setSessionReady]=useState(false);
  const [startedAt]=useState(()=>Date.now());
  const internalObjectives=lesson.learningPoints.length?lesson.learningPoints:[lesson.summary];
  const journeyStep=phaseIndex[phase];
@@ -80,14 +83,43 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  }
 
  useEffect(()=>{
+   setSessionReady(false);setSelected(null);setCurrentGap(null);
    const raw=localStorage.getItem(`lesson:${lesson.id}:report`);
    if(raw){try{setReport(JSON.parse(raw))}catch{}}
    const reviewMode=localStorage.getItem(`lesson:${lesson.id}:reviewMode`)==='1';
-   if(reviewMode){localStorage.removeItem(`lesson:${lesson.id}:reviewMode`);setPhase('quiz');return}
-   if(localStorage.getItem(`lesson:${lesson.id}`)==='done')setPhase('done');
- },[lesson.id]);
+   if(reviewMode){localStorage.removeItem(`lesson:${lesson.id}:reviewMode`);localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setConceptStep(0);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setPhase('quiz');setSessionReady(true);return}
+   if(localStorage.getItem(`lesson:${lesson.id}`)==='done'){localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setPhase('done');setSessionReady(true);return}
+   try{
+     const rawSession=localStorage.getItem(`lesson:${lesson.id}:session`);
+     if(rawSession){
+       const saved=JSON.parse(rawSession) as LessonSession;
+       const compatible=saved?.version===1&&saved.questionCount===lesson.questions.length&&saved.objectiveCount===internalObjectives.length&&resumablePhases.includes(saved.phase);
+       if(compatible){
+         const validWrong=Array.isArray(saved.wrong)?Array.from(new Set(saved.wrong.filter(i=>Number.isInteger(i)&&i>=0&&i<lesson.questions.length))):[];
+         const validRetestMissed=Array.isArray(saved.retestMissed)?Array.from(new Set(saved.retestMissed.filter(i=>Number.isInteger(i)&&validWrong.includes(i)))):[];
+         const safeConcept=Math.min(Math.max(0,Number(saved.conceptStep)||0),Math.max(0,internalObjectives.length-1));
+         const safeStep=Math.min(Math.max(0,Number(saved.step)||0),Math.max(0,lesson.questions.length-1));
+         const safeRetest=Math.min(Math.max(0,Number(saved.retestStep)||0),Math.max(0,validWrong.length-1));
+         let resumePhase:Exclude<Phase,'done'>=saved.phase;
+         setConceptStep(safeConcept);setPracticeReveal(Boolean(saved.practiceReveal));setStep(safeStep);setScore(Math.min(Math.max(0,Number(saved.score)||0),lesson.questions.length));setWrong(validWrong);setRetestStep(safeRetest);setRetestCorrect(Math.min(Math.max(0,Number(saved.retestCorrect)||0),validWrong.length));setRetestMissed(validRetestMissed);
+         if(resumePhase==='gap'){
+           const ids=validWrong.map(i=>lesson.questions[i]?.id).filter(Boolean);const gap=detectLikelyGap(lesson.id,ids,true);
+           if(gap)setCurrentGap(gap);else resumePhase=validWrong.length?'remediate':'quiz';
+         }
+         if((resumePhase==='remediate'||resumePhase==='retest')&&!validWrong.length)resumePhase='quiz';
+         setPhase(resumePhase);setSessionReady(true);return;
+       }
+     }
+   }catch{}
+   localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSessionReady(true);
+ },[lesson.id,lesson.questions.length,internalObjectives.length]);
 
- useEffect(()=>{track('phase_view',{phase})},[phase]);
+ useEffect(()=>{
+   if(!sessionReady||phase==='done')return;
+   try{const data:LessonSession={version:1,questionCount:lesson.questions.length,objectiveCount:internalObjectives.length,phase,conceptStep,practiceReveal,step,score,wrong,retestStep,retestCorrect,retestMissed,updatedAt:new Date().toISOString()};localStorage.setItem(`lesson:${lesson.id}:session`,JSON.stringify(data))}catch{}
+ },[sessionReady,phase,conceptStep,practiceReveal,step,score,wrong,retestStep,retestCorrect,retestMissed,lesson.id,lesson.questions.length,internalObjectives.length]);
+
+ useEffect(()=>{if(sessionReady)track('phase_view',{phase})},[phase,sessionReady]);
 
  useEffect(()=>{
    function onCanvasComplete(event:Event){
@@ -110,7 +142,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  }
 
  function reset(){
-   localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);localStorage.removeItem(`lesson:${lesson.id}:review`);localStorage.removeItem(`lessonCoverage:${lesson.id}`);localStorage.removeItem(`lessonEvidence:${lesson.id}`);localStorage.removeItem(`lessonUx:${lesson.id}`);
+   localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);localStorage.removeItem(`lesson:${lesson.id}:review`);localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lessonCoverage:${lesson.id}`);localStorage.removeItem(`lessonEvidence:${lesson.id}`);localStorage.removeItem(`lessonUx:${lesson.id}`);
    setReport(null);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setSelected(null);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setCurrentGap(null);
  }
 
@@ -127,14 +159,14 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
    const elapsed=Math.max(1,Math.round((Date.now()-startedAt)/1000));const oldTime=Number(localStorage.getItem(`lesson:${lesson.id}:timeSeconds`)||0);localStorage.setItem(`lesson:${lesson.id}:timeSeconds`,String(oldTime+elapsed));
    const gap=saveFoundationSignal(wrongIds);saveCoverageVerified(wrongIds);
    const data:Report={diagnosticCorrect:true,firstPassScore:firstPassCorrect,finalScore:finalCorrect,quizMastery:evidence.quizScore,understandingScore:evidence.understandingScore,conceptScore:evidence.conceptScore,objectiveEvidenceScore:evidence.objectiveEvidenceScore,transferScore:evidence.transferScore,masteryConfidence:evidence.confidence,evidenceReason:evidence.reason,mastery,wrongQuestionIds:wrongIds,status,completedAt:new Date().toISOString(),reviewDue:due,timeSeconds:elapsed,gapId:gap?.id||null};
-   localStorage.setItem(`lesson:${lesson.id}`,'done');localStorage.setItem(`lesson:${lesson.id}:score`,String(finalCorrect));localStorage.setItem(`lesson:${lesson.id}:report`,JSON.stringify(data));localStorage.setItem(`lesson:${lesson.id}:review`,JSON.stringify({level,dueAt:due}));setReport(data);setPhase('done');track('lesson_complete',{mastery,status,confidence:evidence.confidence,objectiveEvidence:evidence.objectiveEvidenceScore,transfer:evidence.transferScore});
+   localStorage.setItem(`lesson:${lesson.id}`,'done');localStorage.setItem(`lesson:${lesson.id}:score`,String(finalCorrect));localStorage.setItem(`lesson:${lesson.id}:report`,JSON.stringify(data));localStorage.setItem(`lesson:${lesson.id}:review`,JSON.stringify({level,dueAt:due}));localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setReport(data);setPhase('done');track('lesson_complete',{mastery,status,confidence:evidence.confidence,objectiveEvidence:evidence.objectiveEvidenceScore,transfer:evidence.transferScore});
  }
 
  const journey=<div className={styles.journey} aria-label="رحلة الدرس">{phaseLabels.map(([icon,label],i)=><div key={label} className={`${styles.journeyStep} ${journeyStep===i?styles.active:''} ${journeyStep>i?styles.done:''}`}><span>{journeyStep>i?'✓':icon}</span><div><strong>{label}</strong></div></div>)}</div>;
 
  if(phase==='done')return <div className={styles.shell}>{journey}<section className={`card ${styles.celebration}`}><div className={styles.celebrationIcon}>🏆</div><span className={styles.eyebrow}>أكملتِ الرحلة ✨</span><h2>{report?.status==='review_needed'?'أحسنتِ — سنلعب بهذه الفكرة مرة أخرى لاحقًا':'رائعة! استخدمتِ الفكرة بنجاح'}</h2><p>{report?'أنجزتِ الدرس خطوة خطوة، والآن يمكنكِ الانتقال للمهمة التالية.':'اكتملت المهمة.'}</p><div className={styles.actionRow}><Link className={`btn ${styles.primary}`} href={`/student/${lesson.student}`}>أكمل رحلتي ←</Link><button className="btn secondary" onClick={reset}>🔁 ألعب الدرس من جديد</button></div></section></div>;
  if(phase==='discover')return <div className={styles.shell}>{journey}<section className={`card ${styles.heroCard} ${styles.stage}`}><span className={styles.eyebrow}>✨ اكتشفي</span><h2>نبدأ بالفكرة، لا بالحفظ</h2><p className={styles.lead}>{lesson.summary}</p><div className={styles.hook}><div className={styles.hookIcon}>🔎</div><div><strong>ابدئي من هنا</strong><p>{hookFor(lesson)}</p></div></div><LessonVisual lesson={lesson}/><div className={styles.missionGrid}>{learningMovesFor(lesson).map((move,i)=><div className={styles.mission} key={move}><span>{['👀','🧩','🚀'][i]}</span><span>{move}</span></div>)}</div><div className={styles.actionRow}><button className={`btn ${styles.primary}`} onClick={()=>{track('discover_complete');setPhase('build')}}>ابدئي الاكتشاف ←</button></div></section></div>;
- if(phase==='build')return <div className={styles.shell}>{journey}<LearningCanvas lesson={lesson}/></div>;
+ if(phase==='build')return <div className={styles.shell}>{journey}<LearningCanvas lesson={lesson} objectiveIndex={conceptStep}/></div>;
  if(phase==='practice')return <div className={styles.shell}>{journey}<section className={`card ${styles.practiceCard}`}><span className={styles.eyebrow}>🎮 جربيها</span><h2>الآن دورك</h2><p className={styles.lead}>جربي ما شاهدتِه. لا توجد درجات هنا.</p>{hasInteractiveActivity(lesson.id)?<InteractiveActivity lesson={lesson} onComplete={()=>{track('practice_complete',{interactive:true});setPhase('quiz')}}/>:<><div className={styles.exampleBox}><strong>مثال نراه معًا</strong><div>{lesson.example}</div></div>{practiceReveal&&<div className={styles.helpCard}><strong>خطوة البداية</strong><div>{practiceHintFor(lesson)}</div></div>}<div className={styles.actionRow}><button className={styles.smartHelp} onClick={()=>{setPracticeReveal(v=>!v);track('practice_hint')}}>{practiceReveal?'أخفي التلميح':'💡 أرني خطوة البداية'}</button><button className={`btn ${styles.primary}`} onClick={()=>{track('practice_complete',{interactive:false});setPhase('quiz')}}>جربت — نكمل ←</button></div></>}</section></div>;
  if(phase==='gap'&&currentGap)return <div className={styles.shell}>{journey}<GapCoach gap={currentGap} onComplete={()=>{localStorage.setItem(`gap:${lesson.student}:${currentGap.id}`,'practiced');track('foundation_bridge_complete',{gap:currentGap.id});setCurrentGap(null);setPhase('remediate')}}/></div>;
  if(phase==='remediate')return <div className={styles.shell}>{journey}<section className={`card ${styles.stage}`}><span className={styles.eyebrow}>🧩 نجربها بطريقة ثانية</span><h2>ننظر فقط إلى الأسئلة التي تحتاج زاوية أخرى</h2><div className={styles.wrongStack}>{wrong.map((idx,n)=>{const q=lesson.questions[idx];return <div className={styles.wrongItem} key={q.id}><span>{n+1}</span><div><strong>شاهديها من هنا</strong><p>{q.explanation}</p></div></div>})}</div><div className={styles.actionRow}><button className={`btn ${styles.primary}`} onClick={()=>{setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSelected(null);setPhase('retest')}}>✨ جرّبي مرة أخرى</button></div></section></div>;

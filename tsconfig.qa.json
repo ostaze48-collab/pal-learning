@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "outDir": ".qa-build",
+    "rootDir": ".",
+    "noEmit": false,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": false,
+    "types": ["node"]
+  },
+  "include": [
+    "scripts/check-curriculum-quality.ts",
+    "lib/**/*.ts"
+  ],
+  "exclude": ["node_modules", ".next", ".qa-build"]
+}

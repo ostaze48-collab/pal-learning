@@ -32,21 +32,24 @@ const visuals:Record<string,TeachingVisualSpec>={
 };
 
 function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):TeachingVisualSpec|null{
- if(sceneNumber!==1)return null;
- const variant=`${lessonId}|${objectiveId}`;
+ if(sceneNumber<1||sceneNumber>2)return null;
+ const variant=`${lessonId}|${objectiveId}|${sceneNumber}`;
 
  if(/prime|factor|gcf|lcm/.test(lessonId))return {kind:'factor_tree',variant};
  if(/fraction/.test(lessonId))return {kind:'fraction_bar',variant};
- if(/decimal/.test(lessonId))return {kind:'decimal_grid',variant};
+ if(/decimal/.test(lessonId))return sceneNumber===1?{kind:'decimal_grid',variant}:{kind:'fraction_bar',variant};
  if(/integer|absolute-value/.test(lessonId)){
-  if(/add-subtract|multiply-divide/.test(lessonId))return {kind:'integer_motion',variant:'-3,+5'};
-  return {kind:'number_line',variant};
+  if(/add-subtract|multiply-divide/.test(lessonId))return sceneNumber===1?{kind:'integer_motion',variant:'-3,+5'}:{kind:'number_line',variant};
+  return sceneNumber===1?{kind:'number_line',variant}:{kind:'integer_context',variant};
  }
  if(/triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation/.test(lessonId))return {kind:'geometry_lab',variant};
  if(/data|statistics|frequency|mean|median|mode|range|graph|chart/.test(lessonId))return {kind:'data_chart',variant};
  if(/proportion|ratio|scale/.test(lessonId))return {kind:'proportion_lab',variant};
 
- if(/cell/.test(lessonId))return {kind:objectiveId%2===0?'cell_compare':'cell_zoom',variant};
+ if(/cell/.test(lessonId)){
+  if(sceneNumber===2)return {kind:objectiveId===1?'cell_zoom':objectiveId===2?'cell_parts':'cell_compare',variant};
+  return {kind:objectiveId%2===0?'cell_compare':'cell_zoom',variant};
+ }
  if(/materials-properties/.test(lessonId))return {kind:'material_properties',variant};
  if(/energy-forms|energy-transformations|energy-environment/.test(lessonId))return {kind:'energy_flow',variant};
  if(/translational-motion|distance-displacement|average-speed|constant-acceleration/.test(lessonId))return {kind:'motion_lab',variant};
@@ -55,6 +58,7 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
  if(/reaction|chemical-change|physical-chemical/.test(lessonId))return {kind:'reaction_lab',variant};
  if(/pressure/.test(lessonId))return {kind:'pressure_lab',variant};
 
+ if(sceneNumber!==1)return null;
  if(/reading|poem|teacher-merit/.test(lessonId))return {kind:'reading_lens',variant};
  if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return {kind:'hamza_lab',variant};
  if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return {kind:'arabic_pattern',variant};

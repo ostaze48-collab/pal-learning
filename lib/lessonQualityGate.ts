@@ -6,7 +6,7 @@ import {getTeachingVisual} from './teachingVisuals';
 
 export type LessonQualityIssue={
  severity:'blocker'|'warning';
- code:'NO_OBJECTIVES'|'NO_QUESTIONS'|'OBJECTIVE_WITHOUT_DIRECT_EVIDENCE'|'TOO_FEW_QUESTIONS'|'NO_EXAMPLE'|'NO_SUMMARY'|'WEAK_EVIDENCE_VARIETY'|'GENERIC_TEACHING_ONLY'|'PARTIAL_TEACHING_BLUEPRINT';
+ code:'NO_OBJECTIVES'|'NO_QUESTIONS'|'OBJECTIVE_WITHOUT_DIRECT_EVIDENCE'|'OBJECTIVE_WITHOUT_INTERACTIVE_EXPERIENCE'|'TOO_FEW_QUESTIONS'|'NO_EXAMPLE'|'NO_SUMMARY'|'WEAK_EVIDENCE_VARIETY'|'GENERIC_TEACHING_ONLY'|'PARTIAL_TEACHING_BLUEPRINT';
  objectiveId?:number;
  message:string;
 };
@@ -51,12 +51,13 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
  const teachingBlueprintObjectives=plans.filter(scenes=>scenes.length>0).length;
  const teachingBlueprintPercent=objectiveCount?Math.round(teachingBlueprintObjectives/objectiveCount*100):0;
  const teachingSceneCount=plans.reduce((sum,scenes)=>sum+scenes.length,0);
- let interactiveTeachingScenes=0;let interactiveTeachingObjectives=0;
- plans.forEach((scenes,objectiveIndex)=>{let objectiveHasInteraction=false;scenes.forEach((_,sceneIndex)=>{if(getTeachingVisual(lesson.id,objectiveIndex+1,sceneIndex+1)){interactiveTeachingScenes++;objectiveHasInteraction=true}});if(objectiveHasInteraction)interactiveTeachingObjectives++});
+ let interactiveTeachingScenes=0;let interactiveTeachingObjectives=0;const objectivesWithoutInteraction:number[]=[];
+ plans.forEach((scenes,objectiveIndex)=>{let objectiveHasInteraction=false;scenes.forEach((_,sceneIndex)=>{if(getTeachingVisual(lesson.id,objectiveIndex+1,sceneIndex+1)){interactiveTeachingScenes++;objectiveHasInteraction=true}});if(objectiveHasInteraction)interactiveTeachingObjectives++;else if(scenes.length)objectivesWithoutInteraction.push(objectiveIndex+1)});
  const interactiveTeachingPercent=teachingSceneCount?Math.round(interactiveTeachingScenes/teachingSceneCount*100):0;
  const interactiveObjectivePercent=objectiveCount?Math.round(interactiveTeachingObjectives/objectiveCount*100):0;
  if(objectiveCount&&teachingBlueprintObjectives===0)issues.push({severity:'warning',code:'GENERIC_TEACHING_ONLY',message:'الدرس ما زال يعتمد على قالب شرح عام؛ يحتاج مسار تعلم موجّهًا بأهدافه.'});
  else if(teachingBlueprintObjectives<objectiveCount)issues.push({severity:'warning',code:'PARTIAL_TEACHING_BLUEPRINT',message:`مسار التعلم الموجّه يغطي ${teachingBlueprintObjectives} من ${objectiveCount} أهداف فقط.`});
+ for(const objectiveId of objectivesWithoutInteraction)issues.push({severity:'warning',code:'OBJECTIVE_WITHOUT_INTERACTIVE_EXPERIENCE',objectiveId,message:'الهدف يملك مسار تعلم موجّهًا لكنه لا يملك بعد لحظة تفاعلية من نوع افعلي/غيّري/لاحظي.'});
 
  const map=buildObjectiveQuestionMap(lesson);const tasks=buildEvidenceTasks(lesson);let directEvidenceObjectives=0;
  for(const objective of map){const task=tasks.find(x=>x.objectiveId===objective.id);const hasDirectQuestion=objective.links.some(x=>x.quality==='direct');const hasDirectTask=task?.quality==='direct';if(hasDirectQuestion||hasDirectTask)directEvidenceObjectives++;else issues.push({severity:'blocker',code:'OBJECTIVE_WITHOUT_DIRECT_EVIDENCE',objectiveId:objective.id,message:`الهدف الداخلي ${objective.id} لا يملك حتى الآن دليل تحقق مباشرًا بما يكفي.`})}

@@ -46,7 +46,11 @@ function isArabicFadedLesson(lessonId:string){return /^g[57]-ar-/.test(lessonId)
 function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):TeachingVisualSpec|null{
  if(sceneNumber<1||sceneNumber>3)return null;
  const variant=`${lessonId}|${objectiveId}|${sceneNumber}`;
- if(sceneNumber===3){if(isMathFadedLesson(lessonId)||isScienceFadedLesson(lessonId)||isEnglishFadedLesson(lessonId)||isArabicFadedLesson(lessonId))return staged('faded_math',variant,sceneNumber);return null}
+ if(sceneNumber===3){
+  if(isScienceFadedLesson(lessonId))return staged('faded_science',variant,sceneNumber);
+  if(isMathFadedLesson(lessonId)||isEnglishFadedLesson(lessonId)||isArabicFadedLesson(lessonId))return staged('faded_math',variant,sceneNumber);
+  return null;
+ }
 
  if(/prime|factor|gcf|lcm/.test(lessonId))return staged('factor_tree',variant,sceneNumber);
  if(/fraction/.test(lessonId))return staged('fraction_bar',variant,sceneNumber);

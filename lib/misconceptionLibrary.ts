@@ -1,5 +1,6 @@
 import {getLesson} from './data';
 import type {TeachingVisualKind} from './teachingVisuals';
+import {misconceptionExtensions} from './misconceptionExtensions';
 
 export type MisconceptionDetection={questionId?:string;wrongOptionIndexes?:number[];signal:'wrong_choice'|'objective_failure'|'explanation_pattern';keywords?:string[]};
 export type MisconceptionExperience={title:string;body:string;prompt:string;visualKind?:TeachingVisualKind};
@@ -162,17 +163,22 @@ const specs:MisconceptionSpec[]=[
  }
 ];
 
-export function getMisconceptions(lessonId:string,objectiveId?:number){return specs.filter(x=>x.lessonId===lessonId&&(objectiveId===undefined||x.objectiveId===objectiveId))}
+const allSpecs:MisconceptionSpec[]=[...specs,...misconceptionExtensions];
+
+export function getMisconceptions(lessonId:string,objectiveId?:number){return allSpecs.filter(x=>x.lessonId===lessonId&&(objectiveId===undefined||x.objectiveId===objectiveId))}
 export function getPrimaryMisconception(lessonId:string,objectiveId:number){return getMisconceptions(lessonId,objectiveId)[0]||null}
-export function detectMisconceptionFromChoice(lessonId:string,questionId:string,selectedIndex:number){return specs.find(spec=>spec.lessonId===lessonId&&spec.detection.some(d=>d.signal==='wrong_choice'&&d.questionId===questionId&&(!d.wrongOptionIndexes||d.wrongOptionIndexes.includes(selectedIndex))))||null}
+export function detectMisconceptionFromChoice(lessonId:string,questionId:string,selectedIndex:number){return allSpecs.find(spec=>spec.lessonId===lessonId&&spec.detection.some(d=>d.signal==='wrong_choice'&&d.questionId===questionId&&(!d.wrongOptionIndexes||d.wrongOptionIndexes.includes(selectedIndex))))||null}
 export function validateMisconceptionLibrary(){
  const issues:string[]=[];const ids=new Set<string>();
- for(const spec of specs){
+ for(const spec of allSpecs){
   if(ids.has(spec.id))issues.push(`duplicate misconception id: ${spec.id}`);ids.add(spec.id);
   const lesson=getLesson(spec.lessonId);if(!lesson){issues.push(`${spec.id}: missing lesson ${spec.lessonId}`);continue}
   const objectiveCount=Math.max(1,lesson.learningPoints.length);if(spec.objectiveId<1||spec.objectiveId>objectiveCount)issues.push(`${spec.id}: objective ${spec.objectiveId} outside 1..${objectiveCount}`);
-  for(const detection of spec.detection)if(detection.questionId&&!lesson.questions.some(q=>q.id===detection.questionId))issues.push(`${spec.id}: missing question ${detection.questionId}`);
+  for(const detection of spec.detection){
+   if(detection.questionId&&!lesson.questions.some(q=>q.id===detection.questionId))issues.push(`${spec.id}: missing question ${detection.questionId}`);
+   if(detection.questionId&&detection.wrongOptionIndexes?.length){const question=lesson.questions.find(q=>q.id===detection.questionId);if(question)for(const index of detection.wrongOptionIndexes)if(index<0||index>=question.options.length||index===question.correct)issues.push(`${spec.id}: invalid wrong option ${index} for ${detection.questionId}`)}
+  }
   if(spec.recheck.options&&(!Number.isInteger(spec.recheck.correctIndex)||Number(spec.recheck.correctIndex)<0||Number(spec.recheck.correctIndex)>=spec.recheck.options.length))issues.push(`${spec.id}: invalid recheck correctIndex`);
  }
- return {count:specs.length,issues};
+ return {count:allSpecs.length,issues};
 }

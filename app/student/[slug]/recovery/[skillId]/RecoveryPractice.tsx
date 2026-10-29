@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import {useState} from 'react';
 import type {RecoverySkill} from '../../../../../lib/recoverySkills';
 import {getDeepDiagnostic} from '../../../../../lib/deepDiagnostics';
@@ -46,7 +47,7 @@ export default function RecoveryPractice({slug,skill,focusId,retentionMode=false
 
  if(phase==='done'){
    const pct=finalPct??Math.round(score/questions.length*100);
-   return <div className="recoveryFinish"><div className="recoveryFinishIcon">{pct>=80?'🌟':'🎈'}</div><span className="questEyebrow">انتهت اللعبة</span><h3>{pct>=80?'أصبحت أسهل!':'أحسنتِ المحاولة'}</h3><p>{pct>=80?'نعود الآن إلى رحلتك، وسنذكّرك بهذه الفكرة لاحقًا إذا احتجنا.':'سنعود لهذه الفكرة في جولة صغيرة أخرى بطريقة مختلفة.'}</p><button className="btn kidPrimaryAction" onClick={()=>history.back()}>أكمل رحلتي ←</button></div>;
+   return <div className="recoveryFinish"><div className="recoveryFinishIcon">{pct>=80?'🌟':'🎈'}</div><span className="questEyebrow">انتهت اللعبة</span><h3>{pct>=80?'أصبحت أسهل!':'أحسنتِ المحاولة'}</h3><p>{pct>=80?'نعود الآن إلى رحلتك، وسنذكّرك بهذه الفكرة لاحقًا إذا احتجنا.':'سنعود لهذه الفكرة في جولة صغيرة أخرى بطريقة مختلفة.'}</p><Link className="btn kidPrimaryAction" href={`/student/${slug}`}>أكمل رحلتي ←</Link></div>;
  }
  if(phase==='learn'&&multiplicationFluency&&focus)return <MultiplicationFluencyLab slug={slug} subskillId={focus.id} onReady={()=>setPhase('quiz')}/>;
  if(phase==='learn')return <div className="recoveryMiniLesson"><span className="questEyebrow">💡 نشاهدها أولًا</span><h2>{title}</h2><p>{explanation}</p><div className="recoveryMiniExamples">{questions.slice(0,3).map(x=><span key={x.id}>{x.explanation}</span>)}</div><button className="btn kidPrimaryAction" onClick={()=>setPhase('quiz')}>أجرب بنفسي ←</button></div>;

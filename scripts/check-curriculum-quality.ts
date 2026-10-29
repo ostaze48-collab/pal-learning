@@ -10,6 +10,7 @@ const blocked=report.lessons.filter(x=>!x.ready);
 const warnings=report.lessons.flatMap(x=>x.issues.filter(i=>i.severity==='warning').map(i=>({lessonId:x.lessonId,score:x.score,...i})));
 const blockers=report.lessons.flatMap(x=>x.issues.filter(i=>i.severity==='blocker').map(i=>({lessonId:x.lessonId,score:x.score,...i})));
 const noInteractiveObjectives=report.lessons.filter(x=>x.kind==='learning'&&x.interactiveTeachingObjectives<x.objectiveCount).map(x=>({lessonId:x.lessonId,covered:x.interactiveTeachingObjectives,total:x.objectiveCount,percent:x.interactiveObjectivePercent}));
+const noRichEvidence=report.lessons.filter(x=>x.kind==='learning'&&x.richInteractionCount===0).map(x=>({lessonId:x.lessonId,interactions:x.evidenceInteractions,kinds:x.evidenceKinds}));
 const noFadedObjectives=lessons.filter(x=>x.kind!=='assessment').flatMap(lesson=>lesson.learningPoints.flatMap((objective,index)=>{
   const scenes=getDirectedTeachingScenes(lesson,index)||[];
   const visuals=scenes.map((_,sceneIndex)=>getTeachingVisual(lesson.id,index+1,sceneIndex+1));
@@ -46,6 +47,11 @@ if(missingVisualScenes.length){
   console.log('\nTEACHING SCENES WITHOUT A VISUAL');
   for(const item of missingVisualScenes)console.log(`- ${item.lessonId} · ${item.subject} · objective ${item.objectiveId} · scene ${item.sceneNumber} · ${item.objective}`);
 }else console.log('\nTEACHING SCENES WITHOUT A VISUAL: none');
+
+if(noRichEvidence.length){
+  console.log('\nLEARNING LESSONS WITHOUT RICH EVIDENCE');
+  for(const item of noRichEvidence)console.log(`- ${item.lessonId} · interactions ${item.interactions.join(',')||'none'} · kinds ${item.kinds.join(',')||'none'}`);
+}else console.log('\nLEARNING LESSONS WITHOUT RICH EVIDENCE: none');
 
 if(noInteractiveObjectives.length){
   console.log('\nOBJECTIVES WITHOUT AN INTERACTIVE EXPERIENCE');

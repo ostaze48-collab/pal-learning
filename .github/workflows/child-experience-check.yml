@@ -28,3 +28,33 @@ jobs:
         run: npm run qa:child-copy
       - name: Production build
         run: npm run build
+      - name: Child journey route smoke test
+        shell: bash
+        run: |
+          npm start -- -p 3000 > /tmp/salma-sama-next.log 2>&1 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          READY=0
+          for i in {1..30}; do
+            if curl -fsSL http://127.0.0.1:3000/student/salma > /dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" != "1" ]; then
+            cat /tmp/salma-sama-next.log
+            exit 1
+          fi
+          for path in \
+            /student/salma \
+            /student/sama \
+            /lesson/g5-science-cell-types \
+            /student/salma/practice \
+            /student/salma/resources; do
+            echo "Checking $path"
+            curl -fsSL "http://127.0.0.1:3000$path" > /dev/null || {
+              cat /tmp/salma-sama-next.log
+              exit 1
+            }
+          done

@@ -16,6 +16,7 @@
   "include": [
     "scripts/check-curriculum-quality.ts",
     "scripts/check-objective-graph.ts",
+    "scripts/check-independent-evidence.ts",
     "lib/**/*.ts"
   ],
   "exclude": ["node_modules", ".next", ".qa-build"]

@@ -39,7 +39,7 @@ export default function UXDashboard(){
     const repeated=[...phaseCounts.values()].reduce((sum,count)=>sum+Math.max(0,count-1),0);
     const friction=helps*2+quizErrors+evidenceErrors*2+Math.min(3,repeated)+(completed?0:3)+Math.min(3,unusedVisuals);
     const primaryIssue=!completed?`توقف قبل الإكمال عند ${phaseLabel(lastPhase)}`:evidenceErrors>=2?'تعثر في الفهم أو التطبيق':helps>=2?'احتاج مساندة أكثر من مرة':unusedVisuals>=2?'نماذج ظهرت ولم تُستخدم':repeated>=2?'تكرار أو رجوع بين المراحل':'لا يوجد نمط احتكاك واضح';
-    next.push({lessonId:lesson.id,title:lesson.title,student:lesson.student,subject:lesson.subject,kind:lesson.kind,phases,phaseViews,helps,readAlouds,quizErrors,evidenceErrors,visualInteractions,visualScenes,unusedVisuals,time,completed,lastPhase,bottleneckPhase,primaryIssue,friction});
+    next.push({lessonId:lesson.id,title:lesson.title,student:lesson.student,subject:lesson.subject,kind:lesson.kind||'learning',phases,phaseViews,helps,readAlouds,quizErrors,evidenceErrors,visualInteractions,visualScenes,unusedVisuals,time,completed,lastPhase,bottleneckPhase,primaryIssue,friction});
    }
    next.sort((a,b)=>b.friction-a.friction||b.time-a.time);setRows(next);
   }

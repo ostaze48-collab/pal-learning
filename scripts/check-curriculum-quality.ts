@@ -1,7 +1,9 @@
 import {lessons} from '../lib/data';
 import {auditCurriculum} from '../lib/lessonQualityGate';
+import {validateMisconceptionLibrary} from '../lib/misconceptionLibrary';
 
 const report=auditCurriculum(lessons);
+const misconceptionReport=validateMisconceptionLibrary();
 const blocked=report.lessons.filter(x=>!x.ready);
 const warnings=report.lessons.flatMap(x=>x.issues.filter(i=>i.severity==='warning').map(i=>({lessonId:x.lessonId,score:x.score,...i})));
 const blockers=report.lessons.flatMap(x=>x.issues.filter(i=>i.severity==='blocker').map(i=>({lessonId:x.lessonId,score:x.score,...i})));
@@ -17,12 +19,18 @@ console.log(`Teaching blueprint objective coverage: ${report.teachingBlueprintOb
 console.log(`Objectives with at least one interactive experience: ${report.interactiveTeachingObjectiveCoverage}%`);
 console.log(`Interactive teaching scene coverage: ${report.interactiveTeachingSceneCoverage}%`);
 console.log(`Lessons with rich evidence interactions: ${report.lessonsWithRichInteractions}/${report.learningLessons}`);
+console.log(`Explicit misconception patterns: ${misconceptionReport.count}`);
 
 if(noInteractiveObjectives.length){
   console.log('\nOBJECTIVES WITHOUT AN INTERACTIVE EXPERIENCE');
   for(const lesson of noInteractiveObjectives.slice(0,80))console.log(`- ${lesson.lessonId}: ${lesson.covered}/${lesson.total} objectives interactive (${lesson.percent}%)`);
   if(noInteractiveObjectives.length>80)console.log(`... ${noInteractiveObjectives.length-80} more lessons`);
 }else console.log('\nOBJECTIVES WITHOUT AN INTERACTIVE EXPERIENCE: none');
+
+if(misconceptionReport.issues.length){
+  console.log('\nMISCONCEPTION LIBRARY ISSUES');
+  for(const issue of misconceptionReport.issues)console.log(`- ${issue}`);
+}else console.log('\nMISCONCEPTION LIBRARY: valid');
 
 if(blockers.length){
   console.log('\nBLOCKERS');
@@ -36,8 +44,8 @@ if(warnings.length){
 }else console.log('\nWARNINGS: none');
 
 const strict=process.env.CURRICULUM_QUALITY_STRICT==='1';
-if(strict&&blocked.length){
-  console.error(`\nQuality gate failed: ${blocked.length} lesson(s) contain blocker issues.`);
+if(strict&&(blocked.length||misconceptionReport.issues.length)){
+  console.error(`\nQuality gate failed: ${blocked.length} blocked lesson(s), ${misconceptionReport.issues.length} misconception-library issue(s).`);
   process.exit(1);
 }
 

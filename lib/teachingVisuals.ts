@@ -72,7 +72,7 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
  if(/pressure/.test(lessonId))return staged('pressure_lab',variant,sceneNumber);
 
  if(/reading|poem|teacher-merit/.test(lessonId))return staged('reading_lens',variant,sceneNumber);
- if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return sceneNumber===1?staged('hamza_lab',variant,sceneNumber):null;
+ if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return staged(sceneNumber===1?'hamza_lab':'word_builder',variant,sceneNumber);
  if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return staged(sceneNumber===1?'arabic_pattern':'word_builder',variant,sceneNumber);
 
  if(/comparative/.test(lessonId))return staged(sceneNumber===1?'comparison_scale':'word_builder',variant,sceneNumber);

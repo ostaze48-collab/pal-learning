@@ -7,7 +7,7 @@
     "build":"next build",
     "start":"next start",
     "qa:child-copy":"node scripts/check-child-copy.mjs",
-    "qa:curriculum":"rm -rf .qa-build && tsc -p tsconfig.qa.json && node .qa-build/scripts/check-curriculum-quality.js",
+    "qa:curriculum":"rm -rf .qa-build && tsc -p tsconfig.qa.json && node .qa-build/scripts/check-curriculum-quality.js && node .qa-build/scripts/check-objective-graph.js",
     "kb:books:probe":"node scripts/curriculum-books.mjs probe",
     "kb:books:prepare":"node scripts/curriculum-books.mjs prepare",
     "kb:books:upload":"node scripts/curriculum-books.mjs upload",

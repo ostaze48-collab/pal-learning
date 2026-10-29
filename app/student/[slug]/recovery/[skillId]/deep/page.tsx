@@ -2,6 +2,7 @@ import Link from 'next/link';
 import {getStudent} from '../../../../../../lib/data';
 import {getDeepDiagnostic,getApplicableSubskills} from '../../../../../../lib/deepDiagnostics';
 import DeepDiagnosticPlayer from './DeepDiagnosticPlayer';
+import KidBottomNav from '../../../KidBottomNav';
 
 export default async function DeepDiagnosticPage({params}:{params:Promise<{slug:string;skillId:string}>}){
   const {slug,skillId}=await params;
@@ -13,5 +14,5 @@ export default async function DeepDiagnosticPage({params}:{params:Promise<{slug:
     <header className="kidTopbar studentTopbar"><Link className="backBubble" href={`/student/${slug}/recovery`}>→ الألعاب القصيرة</Link><div className="journeyName"><span>🧩</span><strong>لعبة خطوة بخطوة</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
     <section className="welcomeQuest recoveryWelcome"><div className="welcomeCopy"><span className="questEyebrow">✨ سؤال صغير ثم التالي</span><h1>{diagnostic.title}</h1><p>سنجرّب الفكرة بأكثر من شكل. إذا احتجتِ مساعدة، تظهر في اللحظة المناسبة فقط.</p></div></section>
     <DeepDiagnosticPlayer slug={slug} skillId={skillId} currentGrade={student.grade} subskills={subskills}/>
-  </div></main>;
+  </div><KidBottomNav slug={slug}/></main>;
 }

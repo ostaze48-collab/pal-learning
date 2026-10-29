@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 type Tab='today'|'practice'|'library';
 
-export default function KidBottomNav({slug,active}:{slug:string;active:Tab}){
+export default function KidBottomNav({slug,active}:{slug:string;active?:Tab}){
  const items:[Tab,string,string,string][]=[
   ['today',`/student/${slug}`,'🏠','اليوم'],
   ['practice',`/student/${slug}/practice`,'🎯','تحدي'],

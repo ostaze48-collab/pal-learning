@@ -6,16 +6,16 @@ import {detectLikelyGap,type GapSkill} from '../../../lib/skillGraph';
 import {readCreativeOutcome} from '../../../lib/creativeLearningProfile';
 import {combineMasteryEvidence} from '../../../lib/masteryEvidence';
 import {recordFoundationSignal} from '../../../lib/foundationSignals';
-import {getTeachingScenes} from '../../../lib/teachingBlueprints';
-import AdaptiveLessonExperience from './AdaptiveLessonExperience';
 import InteractiveActivity,{hasInteractiveActivity} from './InteractiveActivity';
 import LessonVisual from './LessonVisual';
+import LearningCanvas from './LearningCanvas';
 import GapCoach from './GapCoach';
 import styles from './LessonPlayerV2.module.css';
 
 type Phase='discover'|'build'|'practice'|'quiz'|'gap'|'remediate'|'retest'|'done';
 type Report={diagnosticCorrect:boolean;firstPassScore:number;finalScore:number;quizMastery?:number;conceptScore?:number|null;evidenceReason?:string;mastery:number;wrongQuestionIds:string[];status:'mastered'|'review_needed';completedAt:string;reviewDue?:string;timeSeconds?:number;gapId?:string|null};
 type ReviewMeta={level:number;dueAt:string};
+type CanvasCompleteDetail={lessonId:string;objectiveId:number};
 
 const phaseIndex:Record<Phase,number>={discover:0,build:1,practice:2,quiz:3,gap:3,remediate:3,retest:3,done:4};
 const phaseLabels=[['✨','اكتشف'],['🧩','ابنِ الفكرة'],['🎮','جرّب'],['🎯','تحدي']];
@@ -36,27 +36,6 @@ function learningMovesFor(lesson:Lesson){
  return ['اكتشفي','جربي','طبقي'];
 }
 
-function childStepCopy(lesson:Lesson,index:number){
- const variants=lesson.subject==='العلوم والحياة'
-  ?['شاهدي ما يحدث','قارني بين ما توقعتِه وما رأيتِه','ابحثي عن السبب','جربي الفكرة في حالة أخرى']
-  :lesson.subject==='الرياضيات'
-   ?['شاهدي العلاقة','مثليها بصورة أو نموذج','حوّليها إلى طريقة','استخدميها في موقف جديد']
-   :lesson.subject==='اللغة العربية'
-    ?['افهمي المعنى','لاحظي ما يتكرر','اكتشفي النمط','استخدميه بطريقتك']
-    :['Understand the meaning','Notice the pattern','Build the idea','Use it yourself'];
- const title=variants[index%variants.length];
- const body=index===0?(lesson.example||lesson.summary):index===1?lesson.summary:`نعود إلى مثال الدرس ونراه من زاوية جديدة حتى يصبح ${lesson.title} واضحًا ويمكن استخدامه، لا مجرد جملة محفوظة.`;
- return {title,body};
-}
-
-function helpFor(lesson:Lesson,index:number){
- if(lesson.subject==='العلوم والحياة')return index%2===0?'ركزي على ما ترينه فعلًا قبل التفسير. ما الدليل الموجود أمامك؟':'قارني بين التوقع والدليل، ثم اسألي: لماذا حدث ذلك؟';
- if(lesson.subject==='الرياضيات')return index%2===0?'ابدئي بمثال صغير أو رسم. لا تكتبي القاعدة قبل أن تري العلاقة.':'اسألي نفسك: ما الذي يتغير؟ وما الذي يبقى ثابتًا في المثال؟';
- if(lesson.subject==='اللغة العربية')return index%2===0?'ارجعي إلى معنى الجملة أولًا، ثم راقبي الكلمات التي تتغير.':'كوّني مثالًا من عندك ثم قارنيه بأمثلة الدرس.';
- if(lesson.subject==='English')return index%2===0?'Focus on the meaning first, then notice which words change.':'Try the same pattern in a different situation.';
- return 'ارجعي إلى المثال وشاهدي العلاقة خطوة خطوة.';
-}
-
 function practiceHintFor(lesson:Lesson){
  if(lesson.subject==='العلوم والحياة')return 'ابدئي بالملاحظة ثم اسألي: ما الدليل الذي يفسر ما أراه؟';
  if(lesson.subject==='الرياضيات')return 'ارسمي العلاقة أو مثليها أولًا، ثم اختاري العملية أو الرمز.';
@@ -68,7 +47,6 @@ function practiceHintFor(lesson:Lesson){
 export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  const [phase,setPhase]=useState<Phase>('discover');
  const [conceptStep,setConceptStep]=useState(0);
- const [helpOpen,setHelpOpen]=useState(false);
  const [practiceReveal,setPracticeReveal]=useState(false);
  const [step,setStep]=useState(0);
  const [selected,setSelected]=useState<number|null>(null);
@@ -79,12 +57,9 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  const [retestMissed,setRetestMissed]=useState<number[]>([]);
  const [currentGap,setCurrentGap]=useState<GapSkill|null>(null);
  const [report,setReport]=useState<Report|null>(null);
- const [teachingStepComplete,setTeachingStepComplete]=useState(true);
  const [startedAt]=useState(()=>Date.now());
  const internalObjectives=lesson.learningPoints.length?lesson.learningPoints:[lesson.summary];
- const currentExperience=childStepCopy(lesson,conceptStep);
  const journeyStep=phaseIndex[phase];
- const explicitTeaching=Boolean(getTeachingScenes(lesson,conceptStep)?.length);
 
  function track(event:string,meta:Record<string,unknown>={}){
    try{const key=`lessonUx:${lesson.id}`;const raw=localStorage.getItem(key);const old=raw?JSON.parse(raw):[];const next=Array.isArray(old)?old.slice(-179):[];next.push({event,phase,at:new Date().toISOString(),...meta});localStorage.setItem(key,JSON.stringify(next))}catch{}
@@ -101,13 +76,22 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  useEffect(()=>{track('phase_view',{phase})},[phase]);
 
  useEffect(()=>{
-   if(phase!=='build'||!explicitTeaching){setTeachingStepComplete(true);return}
-   setTeachingStepComplete(false);
-   function sync(){
-     try{const raw=localStorage.getItem(`lessonUx:${lesson.id}`);const events=raw?JSON.parse(raw):[];if(!Array.isArray(events))return;setTeachingStepComplete(events.some((e:any)=>e?.event==='teaching_objective_experience_complete'&&Number(e?.objectiveId)===conceptStep+1))}catch{}
+   function onCanvasComplete(event:Event){
+     if(phase!=='build')return;
+     const detail=(event as CustomEvent<CanvasCompleteDetail>).detail;
+     if(!detail||detail.lessonId!==lesson.id||detail.objectiveId!==conceptStep+1)return;
+     if(conceptStep<internalObjectives.length-1){
+       track('internal_target_taught',{target:conceptStep+1});
+       setConceptStep(v=>v+1);
+       return;
+     }
+     saveCoverageTaught();
+     track('teaching_coverage_complete',{total:internalObjectives.length});
+     setPhase('practice');
    }
-   sync();const timer=window.setInterval(sync,250);return()=>window.clearInterval(timer);
- },[phase,lesson.id,conceptStep,explicitTeaching]);
+   window.addEventListener('learning-canvas-complete',onCanvasComplete as EventListener);
+   return()=>window.removeEventListener('learning-canvas-complete',onCanvasComplete as EventListener);
+ },[phase,lesson.id,conceptStep,internalObjectives.length]);
 
  function saveCoverageTaught(){
    try{
@@ -131,8 +115,8 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  }
 
  function reset(){
-   localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);localStorage.removeItem(`lessonCoverage:${lesson.id}`);
-   setReport(null);setPhase('discover');setConceptStep(0);setHelpOpen(false);setPracticeReveal(false);setStep(0);setSelected(null);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setCurrentGap(null);setTeachingStepComplete(true);
+   localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);localStorage.removeItem(`lesson:${lesson.id}:review`);localStorage.removeItem(`lessonCoverage:${lesson.id}`);localStorage.removeItem(`lessonEvidence:${lesson.id}`);localStorage.removeItem(`lessonUx:${lesson.id}`);
+   setReport(null);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setSelected(null);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setCurrentGap(null);
  }
 
  function saveFoundationSignal(wrongIds:string[]){
@@ -161,7 +145,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
 
  if(phase==='discover')return <div className={styles.shell}>{journey}<section className={`card ${styles.heroCard} ${styles.stage}`}><span className={styles.eyebrow}>✨ اكتشفي</span><h2>نبدأ بالفكرة، لا بالحفظ</h2><p className={styles.lead}>{lesson.summary}</p><div className={styles.hook}><div className={styles.hookIcon}>🔎</div><div><strong>ابدئي من هنا</strong><p>{hookFor(lesson)}</p></div></div><LessonVisual lesson={lesson}/><div className={styles.missionGrid}>{learningMovesFor(lesson).map((move,i)=><div className={styles.mission} key={move}><span>{['👀','🧩','🚀'][i]}</span><span>{move}</span></div>)}</div><div className={styles.actionRow}><button className={`btn ${styles.primary}`} onClick={()=>{track('discover_complete');setPhase('build')}}>ابدئي الاكتشاف ←</button></div></section></div>;
 
- if(phase==='build')return <div className={styles.shell}>{journey}<section className={styles.stage}><div className={styles.coverage}><div><strong>رحلة الفكرة</strong><div className={styles.quietNote}>نأخذها خطوة واحدة في كل مرة.</div></div><div className={styles.coverageDots}>{internalObjectives.map((_,i)=><span key={i} className={i<conceptStep?styles.covered:''}/>)}</div></div><AdaptiveLessonExperience lesson={lesson} diagnosticCorrect={true}/><article className={styles.conceptCard}><div className={styles.conceptTop}><div><span className={styles.eyebrow}>خطوة {conceptStep+1}</span><h3>{currentExperience.title}</h3></div><div className={styles.conceptNumber}>{conceptStep+1}</div></div><p className={styles.lead}>{currentExperience.body}</p><div className={styles.conceptPrompt}>🧠 اربطي هذه الخطوة بما رأيته، ثم قولي الفكرة لنفسك بطريقتك.</div>{helpOpen&&<div className={styles.helpCard}><strong>💡 مساعدة صغيرة</strong><div>{helpFor(lesson,conceptStep)}</div></div>}{explicitTeaching&&!teachingStepComplete&&<div className={styles.helpCard}><strong>👀 قبل أن نكمل</strong><div>أكملي الاكتشاف القصير أعلاه أولًا.</div></div>}<div className={styles.actionRow}><button className={styles.smartHelp} onClick={()=>{setHelpOpen(v=>!v);track('smart_help',{conceptStep})}}>💡 ساعديني</button><button className={`btn ${styles.primary}`} disabled={explicitTeaching&&!teachingStepComplete} onClick={()=>{if(explicitTeaching&&!teachingStepComplete){track('teaching_gate_blocked',{target:conceptStep+1});return}setHelpOpen(false);if(conceptStep<internalObjectives.length-1){track('internal_target_taught',{target:conceptStep+1});setConceptStep(v=>v+1)}else{saveCoverageTaught();track('teaching_coverage_complete',{total:internalObjectives.length});setPhase('practice')}}}>{explicitTeaching&&!teachingStepComplete?'أكملي الاكتشاف أولًا':conceptStep<internalObjectives.length-1?'الخطوة التالية ←':'الآن دورك — نجرب ←'}</button></div></article></section></div>;
+ if(phase==='build')return <div className={styles.shell}>{journey}<LearningCanvas lesson={lesson}/></div>;
 
  if(phase==='practice')return <div className={styles.shell}>{journey}<section className={`card ${styles.practiceCard}`}><span className={styles.eyebrow}>🎮 جربيها</span><h2>الآن دورك</h2><p className={styles.lead}>جربي ما شاهدتِه. لا توجد درجات هنا.</p>{hasInteractiveActivity(lesson.id)?<InteractiveActivity lesson={lesson} onComplete={()=>{track('practice_complete',{interactive:true});setPhase('quiz')}}/>:<><div className={styles.exampleBox}><strong>مثال نراه معًا</strong><div>{lesson.example}</div></div>{practiceReveal&&<div className={styles.helpCard}><strong>خطوة البداية</strong><div>{practiceHintFor(lesson)}</div></div>}<div className={styles.actionRow}><button className={styles.smartHelp} onClick={()=>{setPracticeReveal(v=>!v);track('practice_hint')}}>{practiceReveal?'أخفي التلميح':'💡 أرني خطوة البداية'}</button><button className={`btn ${styles.primary}`} onClick={()=>{track('practice_complete',{interactive:false});setPhase('quiz')}}>جربت — نكمل ←</button></div></>}</section></div>;
 

@@ -48,16 +48,17 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
  if(!ready)return <section className="dailyPlan"><div className="muted">✨ أجهز لكِ مهمة اليوم…</div></section>;
  if(tasks.length===0)return <section className="dailyPlan celebrationPlan"><div><span className="tag">مهمة اليوم</span><h2>رائع! أنجزتِ ما عليكِ 🎉</h2><p className="muted">يمكنك اختيار درس تحبينه أو أخذ استراحة.</p></div></section>;
  const icon=(subject:string)=>subject==='الرياضيات'?'➗':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📚':'🌍';
+ const subjectTone=(subject:string)=>subject==='الرياضيات'?'focusMath':subject==='العلوم والحياة'?'focusScience':subject==='اللغة العربية'?'focusArabic':'focusEnglish';
  const taskIcon=(task:Task)=>task.type==='review'?'🔄':task.type==='reteach'?'✨':task.type==='retention'?'🧠':task.type==='assessment'?'🏆':task.type==='recovery'?'⚡':icon(task.subject);
- const taskLabel=(task:Task)=>task.type==='review'?'جولة سريعة':task.type==='reteach'?'طريقة ثانية':task.type==='retention'?'تثبيت سريع':task.type==='assessment'?'تحدٍ قصير':task.type==='recovery'?'تحدٍ سريع':task.subject;
+ const taskLabel=(task:Task)=>task.type==='review'?'جولة خفيفة':task.type==='reteach'?'طريقة ثانية':task.type==='retention'?'من الذاكرة':task.type==='assessment'?'تحدٍ صغير':task.type==='recovery'?'لعبة سريعة':task.subject;
  const primary=tasks[0];const later=tasks.slice(1);
  return <section className="dailyPlan focusPlan">
-   <div className="dailyPlanHead focusPlanHead"><div><span className="tag">⭐ مهمتك الآن</span><h2>{recoveryFirst?'نبدأ بتحدٍ سريع':teacherFirst?'نجربها بطريقة ثانية':primary.type==='retention'?'نسترجع فكرة صغيرة':'خطوة واحدة الآن'}</h2><p>{recoveryFirst?'ننجز هذه الخطوة الصغيرة ثم نعود مباشرة إلى رحلتك.':teacherFirst?'نرى الفكرة من زاوية جديدة، وبعدها نكمل.':primary.type==='retention'?'سؤال قصير من درس سابق، ثم نعود مباشرة لما بعده.':'ركزي على هذه المهمة فقط. ما بعدها ينتظر حتى تنتهي.'}</p></div></div>
-   <div className={`focusTask ${primary.type}`}>
+   <div className="dailyPlanHead focusPlanHead"><div><span className="tag">⭐ مهمتك الآن</span><h2>{recoveryFirst?'نبدأ بلعبة قصيرة':teacherFirst?'نجربها بطريقة ثانية':primary.type==='retention'?'نتذكر فكرة صغيرة':'خطوة واحدة الآن'}</h2><p>{recoveryFirst?'ننجز هذه الخطوة الصغيرة ثم نعود مباشرة إلى رحلتك.':teacherFirst?'نرى الفكرة من زاوية جديدة، وبعدها نكمل.':primary.type==='retention'?'نجرب من الذاكرة أولًا، ثم نعود مباشرة لرحلتنا.':'ركزي على هذه المهمة فقط. ما بعدها ينتظر حتى تنتهي.'}</p></div></div>
+   <div className={`focusTask ${primary.type} ${subjectTone(primary.subject)}`}>
      <div className="focusTaskIcon">{taskIcon(primary)}</div>
-     <div className="focusTaskCopy"><small>{taskLabel(primary)} · {primary.minutes} دقائق تقريبًا</small><h3>{primary.title}</h3><p>{primary.type==='assessment'?'جاهزة لتحدٍ صغير؟':primary.type==='reteach'?'هذه المرة سنراها بطريقة مختلفة.':primary.type==='retention'?'جربيها من ذاكرتك أولًا.':primary.type==='recovery'?'لعبة قصيرة ثم نكمل.':'ابدئي عندما تكونين جاهزة.'}</p></div>
-     <Link className="focusTaskAction" href={primary.href} onClick={()=>{if(primary.type==='review')localStorage.setItem(`lesson:${primary.id}:reviewMode`,'1')}}>ابدئي الآن <b>←</b></Link>
+     <div className="focusTaskCopy"><small>{taskLabel(primary)} · {primary.subject}</small><h3>{primary.title}</h3><p>{primary.type==='assessment'?'جاهزة لتحدٍ صغير؟':primary.type==='reteach'?'هذه المرة سنراها بطريقة مختلفة.':primary.type==='retention'?'جربيها من ذاكرتك أولًا.':primary.type==='recovery'?'لعبة قصيرة ثم نكمل.':'ابدئي عندما تكونين جاهزة.'}</p></div>
+     <Link className="focusTaskAction" href={primary.href} onClick={()=>{if(primary.type==='review')localStorage.setItem(`lesson:${primary.id}:reviewMode`,'1')}}>ابدئي <b>←</b></Link>
    </div>
-   {later.length>0&&<div className="upNext"><span>بعدها</span><div className="upNextRail">{later.map(task=><div className="upNextItem" key={`${task.type}-${task.id}`} title={task.title}><i>{taskIcon(task)}</i><small>{taskLabel(task)}</small></div>)}</div></div>}
+   {later.length>0&&<div className="upNext"><span>بعدها</span><div className="upNextRail">{later.map(task=><div className={`upNextItem ${subjectTone(task.subject)}`} key={`${task.type}-${task.id}`} title={task.title}><i>{taskIcon(task)}</i><small>{taskLabel(task)}</small></div>)}</div></div>}
  </section>;
 }

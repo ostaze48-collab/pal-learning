@@ -22,7 +22,7 @@ function alternateVisualFor(lesson:Lesson,objectiveId:number,pattern:LearningPat
  const candidates=[getTeachingVisual(lesson.id,objectiveId,2),getTeachingVisual(lesson.id,objectiveId,3),getTeachingVisual(lesson.id,objectiveId,1)].filter(Boolean) as TeachingVisualSpec[];
  if(!candidates.length)return undefined;
  const unique=candidates.filter((item,index,list)=>list.findIndex(x=>x.kind===item.kind&&x.variant===item.variant)===index);
- const learned=getInterventionFamilyRecommendation(lesson.student,lesson.subject,interventionType as any);if(learned?.confidence>=70){const proven=unique.find(x=>representationFamily(x.kind)===learned.family);if(proven)return proven}
+ const learned=getInterventionFamilyRecommendation(lesson.student,lesson.subject,interventionType as any);if(learned&&Number(learned.confidence)>=70){const proven=unique.find(x=>representationFamily(x.kind)===learned.family);if(proven)return proven}
  if(pattern?.preferredFamily&&pattern.confidence>=70){const preferred=unique.find(x=>representationFamily(x.kind)===pattern.preferredFamily&&representationFamily(x.kind)!==pattern.weakFamily);if(preferred)return preferred}
  if(pattern?.weakFamily){const safer=unique.find(x=>representationFamily(x.kind)!==pattern.weakFamily);if(safer)return safer}
  return unique[0];

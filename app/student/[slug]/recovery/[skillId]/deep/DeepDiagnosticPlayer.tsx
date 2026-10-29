@@ -6,7 +6,7 @@ import {evaluateAdaptiveSubskill,shouldStartWithVerification,type AdaptiveEviden
 
 type Mode='entry'|'verify'|'supported';
 
-export default function DeepDiagnosticPlayer({slug,skillId,currentGrade,subskills}:{slug:string;skillId:string;currentGrade:number;subskills:DeepSubskill[]}){
+export default function DeepDiagnosticPlayer({slug,skillId,currentGrade:_,subskills}:{slug:string;skillId:string;currentGrade:number;subskills:DeepSubskill[]}){
   const [subIndex,setSubIndex]=useState(0);
   const [questionIndex,setQuestionIndex]=useState(0);
   const [mode,setMode]=useState<Mode>('entry');
@@ -75,41 +75,32 @@ export default function DeepDiagnosticPlayer({slug,skillId,currentGrade,subskill
     finalizeSubskill(nextEvidence);
   }
 
-  if(!ready)return <section className="card" style={{marginTop:18}}>نجهز التشخيص المتكيف…</section>;
+  if(!ready)return <section className="recoveryGame"><div className="muted">✨ أجهز الجولة…</div></section>;
 
   if(finished){
     const ranked=subskills.map(s=>({sub:s,result:results[s.id]})).sort((a,b)=>(a.result?.score??0)-(b.result?.score??0));
-    const weak=ranked.filter(x=>(x.result?.score??0)<80);
-    return <section className="card" style={{marginTop:18}}>
-      <span className="tag">خريطة تكيفية للمهارات</span>
-      <h2>الآن نعرف مستوى الفجوة وسببها الأقرب</h2>
-      <p className="muted">النظام يقارن إجابة الأساس بسؤال التحقق، زمن الاستدعاء، والحقائق التي أُخطئ فيها لتحديد العلاج الأقصر.</p>
-      <div className="recoverySkillGrid" style={{marginTop:16}}>{ranked.map(({sub:s,result})=>{const score=result?.score??0;return <div className={`recoverySkill ${score>=80?'good':score>=50?'mid':'weak'}`} key={s.id}>
-        <div className="subjectStatTop"><strong>{s.title}</strong><span>{score}%</span></div>
-        <div className="progress"><span style={{width:`${score}%`}}/></div>
-        <p><b>{result?.label}</b> · {s.gradeAnchor}</p>
-        <div className="deepDiagnosis"><strong>السبب الأقرب:</strong><p>{result?.cause}</p></div>
-        {(result?.missedFacts?.length??0)>0&&<div className="missedFacts"><strong>أخطاء محددة:</strong>{result!.missedFacts.map(m=><div key={m.questionId}><span>{m.text}</span><small>اختارت: {m.selected} · الصحيح: {m.correct}</small></div>)}</div>}
-        {score<80?<>
-          <div className="deepTreatmentSteps"><strong>الخطوة التالية:</strong><p>{result?.nextAction}</p><ol>{s.treatmentSteps.map(x=><li key={x}>{x}</li>)}</ol></div>
-          <Link className="btn" href={`/student/${slug}/recovery/${skillId}?focus=${encodeURIComponent(s.id)}`}>ابدأ علاج {s.title}</Link>
-        </>:<span className="tag">متقنة — لا نعيدها</span>}
-      </div>})}</div>
-      <div className={weak.length?'activityHint':'activitySuccess'} style={{marginTop:16}}><strong>{weak.length?`وجدنا ${weak.length} نقاط دقيقة تحتاج تثبيتًا`:'الأساس متقن جيدًا ✅'}</strong><p>{weak.length?'ستدخل أضعف نقطة فقط إلى خطة اليوم، ثم يعاد التحقق منها بعد العلاج.':'نوفّر وقت الاستدراك ونواصل محتوى الصف الحالي.'}</p></div>
-      <div style={{display:'flex',gap:10,flexWrap:'wrap',marginTop:14}}><Link className="btn secondary" href={`/student/${slug}/recovery`}>العودة لخريطة الفجوات</Link><Link className="btn" href={`/student/${slug}`}>العودة لخطة اليوم</Link></div>
+    const nextItem=ranked.find(x=>(x.result?.score??0)<80);
+    return <section className="recoveryGame deepChildFinish">
+      <div className="recoveryFinish">
+       <div className="recoveryFinishIcon">{nextItem?'🧩':'🌟'}</div>
+       <span className="questEyebrow">انتهت الجولة</span>
+       <h3>{nextItem?'لدي لعبة صغيرة مناسبة لكِ الآن':'رائعة — نعود إلى رحلتك!'}</h3>
+       <p>{nextItem?'سنرى هذه الفكرة بطريقة أبسط ثم نكمل.':'أنجزتِ هذه الجولة، ولا تحتاجين شيئًا إضافيًا هنا الآن.'}</p>
+       {nextItem?<Link className="btn kidPrimaryAction" href={`/student/${slug}/recovery/${skillId}?focus=${encodeURIComponent(nextItem.sub.id)}`}>ابدئي اللعبة التالية ←</Link>:<Link className="btn kidPrimaryAction" href={`/student/${slug}`}>أكمل رحلتي ←</Link>}
+       <Link className="recoveryBackLink" href={`/student/${slug}`}>أعود إلى خطتي</Link>
+      </div>
     </section>;
   }
 
-  if(!sub||!q)return <section className="card" style={{marginTop:18}}>لا توجد أسئلة تشخيصية مناسبة لهذا المستوى.</section>;
+  if(!sub||!q)return <section className="recoveryGame"><div className="recoveryFinish"><div className="recoveryFinishIcon">🌟</div><h3>اكتملت الجولة</h3><Link className="btn kidPrimaryAction" href={`/student/${slug}`}>أكمل رحلتي ←</Link></div></section>;
+
   const progress=Math.round(((subIndex+(mode==='verify'||mode==='supported'?0.65:0.25))/Math.max(1,subskills.length))*100);
-  return <section className="card" style={{marginTop:18}}>
-    <div className="subjectHeader"><div><span className="tag">{sub.gradeAnchor}</span><h2 style={{margin:'8px 0 0'}}>{sub.title}</h2></div><span className="tag">مهارة {subIndex+1}/{subskills.length}</span></div>
-    <div className="progress" style={{margin:'14px 0 22px'}}><span style={{width:`${progress}%`}}/></div>
-    {mode==='supported'&&<div className="adaptiveSupport"><strong>🔎 نرجع خطوة صغيرة لتحديد أصل المشكلة</strong><p>{sub.miniLesson}</p></div>}
-    {mode==='verify'&&<div className="adaptiveVerify"><strong>⚡ سؤال تحقق</strong><span>نجحتِ في الخطوة السابقة؛ نتحقق الآن أن الفكرة ثابتة وليست مجرد تخمين.</span></div>}
-    <p className="muted">نقيس الآن: {sub.why}</p>
-    <h2>{q.text}</h2>
-    <div className="choice">{q.options.map((o,i)=>{const cls=selected===null?'option':i===q.correct?'option ok':i===selected?'option bad':'option';return <button key={o} className={cls} onClick={()=>choose(i)}>{o}</button>})}</div>
-    {selected!==null&&<div style={{marginTop:16}}><div className={selected===q.correct?'activitySuccess':'activityHint'}><strong>{selected===q.correct?'صحيح ✅':'هذه إشارة تشخيصية مفيدة'}</strong><p>{q.explanation}</p></div><button className="btn" onClick={next}>{subIndex===subskills.length-1&&(mode!=='entry'||sub.questions.length===1)?'اعرض الخريطة':'تابع التشخيص'}</button></div>}
+  return <section className="recoveryGame deepChildGame">
+    <div className="recoveryGameTop"><div><span className="questEyebrow">🧩 جولة {subIndex+1} من {subskills.length}</span><h2>{mode==='supported'?'نجربها بطريقة أبسط':mode==='verify'?'مرة ثانية بشكل مختلف':'سؤال واحد الآن'}</h2></div><div className="deepChildProgress"><span style={{width:`${progress}%`}}/></div></div>
+    {mode==='supported'&&<div className="adaptiveSupport childHint"><strong>💡 تلميح صغير</strong><p>{sub.miniLesson}</p></div>}
+    {mode==='verify'&&<div className="adaptiveVerify childHint"><strong>✨ جولة ثانية</strong><span>جربي السؤال الجديد بطريقتك.</span></div>}
+    <h2 className="recoveryQuestion">{q.text}</h2>
+    <div className="choice recoveryChoices">{q.options.map((o,i)=>{const cls=selected===null?'option':i===q.correct?'option ok':i===selected?'option bad':'option';return <button key={o} className={cls} onClick={()=>choose(i)}>{o}</button>})}</div>
+    {selected!==null&&<div className="recoveryFeedback"><div className={selected===q.correct?'activitySuccess':'activityHint'}><strong>{selected===q.correct?'رائعة! ⭐':'شاهدي هذه الفكرة 💡'}</strong><p>{q.explanation}</p></div><button className="btn kidPrimaryAction" onClick={next}>{subIndex===subskills.length-1&&(mode!=='entry'||sub.questions.length===1)?'أنهي الجولة ✨':'نكمل ←'}</button></div>}
   </section>;
 }

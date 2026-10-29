@@ -5,12 +5,13 @@ import type {TeachingVisualSpec} from '../../../lib/teachingVisuals';
 import styles from './CurriculumExtraVisual.module.css';
 
 const extraKinds=new Set(['material_properties','energy_flow','reading_lens','word_builder','punctuation_lab','comparison_scale']);
+function sceneNumber(variant?:string){const parts=String(variant||'').split('|');return Number(parts[2])||1}
 
 export default function CurriculumExtraVisual({spec,lesson}:{spec:TeachingVisualSpec;lesson:Lesson}){
  if(!extraKinds.has(spec.kind))return null;
  if(spec.kind==='material_properties')return <MaterialProperties/>;
  if(spec.kind==='energy_flow')return <EnergyFlow lessonId={lesson.id}/>;
- if(spec.kind==='reading_lens')return <ReadingLens lesson={lesson}/>;
+ if(spec.kind==='reading_lens')return <ReadingLens lesson={lesson} scene={sceneNumber(spec.variant)}/>;
  if(spec.kind==='word_builder')return <WordBuilder lesson={lesson}/>;
  if(spec.kind==='punctuation_lab')return <PunctuationLab lesson={lesson}/>;
  if(spec.kind==='comparison_scale')return <ComparisonScale/>;
@@ -53,9 +54,11 @@ function cleanReadingText(lesson:Lesson){
  return source.length>180?`${source.slice(0,177)}…`:source;
 }
 
-function ReadingLens({lesson}:{lesson:Lesson}){
- const text=cleanReadingText(lesson);const words=useMemo(()=>text.split(' ').filter(Boolean),[text]);const [picked,setPicked]=useState<number|null>(null);
+function ReadingLens({lesson,scene}:{lesson:Lesson;scene:number}){
+ const text=cleanReadingText(lesson);const words=useMemo(()=>text.split(' ').filter(Boolean),[text]);const [picked,setPicked]=useState<number|null>(null);const [evidence,setEvidence]=useState<number[]>([]);
  const selected=picked===null?'اختاري كلمة من النص':words[picked]?.replace(/[،؛,.!?؟:«»]/g,'')||'';
+ function toggleEvidence(index:number){setEvidence(old=>old.includes(index)?old.filter(x=>x!==index):old.length>=5?[...old.slice(1),index]:[...old,index])}
+ if(scene===2){const evidenceText=evidence.length?evidence.sort((a,b)=>a-b).map(i=>words[i]).join(' '):'اختاري كلمات تصنع دليلًا صغيرًا';return <Frame icon="🧭" title="اجمعي دليلًا من النص" hint="اختاري حتى خمس كلمات تساعدك على تبرير فهمك. لا توجد درجة هنا؛ المهم أن تعودي للنص نفسه."><div className={styles.readingLab}><div className={styles.readingPaper}>{words.map((word,i)=><button key={`${word}-${i}`} className={evidence.includes(i)?styles.wordPicked:''} onClick={()=>toggleEvidence(i)}>{word}</button>)}</div><div className={styles.lensResult}><span>🧩</span><strong>{evidenceText}</strong></div></div></Frame>}
  return <Frame icon="🔎" title={lesson.id.includes('poem')?'عدسة القصيدة':'عدسة النص'} hint="المعنى يُبنى من الكلمات داخل السياق؛ المسِي كلمة ثم عودي للجملة كاملة."><div className={styles.readingLab}><div className={styles.readingPaper}>{words.map((word,i)=><button key={`${word}-${i}`} className={picked===i?styles.wordPicked:''} onClick={()=>setPicked(i)}>{word}</button>)}</div><div className={styles.lensResult}><span>🔍</span><strong>{selected}</strong></div></div></Frame>;
 }
 

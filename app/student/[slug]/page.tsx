@@ -38,13 +38,14 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
       .studentJourney .upNextItem.focusMath{background:#f1eaff}.studentJourney .upNextItem.focusScience{background:#e6fbf7}.studentJourney .upNextItem.focusArabic{background:#fff0ed}.studentJourney .upNextItem.focusEnglish{background:#eaf4ff}
       @media(max-width:800px){
         .studentJourney .subjectPicker{grid-template-columns:repeat(2,minmax(0,1fr))!important}
-        .studentJourney .welcomeQuest{padding:20px!important}
-        .studentJourney .welcomeQuest h1{font-size:32px!important}
+        .studentJourney .welcomeQuest{grid-template-columns:1fr!important;padding:12px 14px!important;margin:4px auto 8px!important;border-radius:20px!important}
+        .studentJourney .welcomeQuest h1{font-size:26px!important;margin:3px 0 0!important}
+        .studentJourney .welcomeCopy p,.studentJourney .progressBubble{display:none!important}
         .studentJourney .journeyWrap{width:min(100% - 18px,980px)!important}
         .studentJourney .practiceBubble,.studentJourney .kidUtilityRow{display:none!important}
         .studentJourney .subjectPickerSection{margin-bottom:94px}
       }
-      @media(max-width:430px){.studentJourney .subjectPickerSection{margin-top:22px}.studentJourney .subjectPicker{gap:10px!important}.studentJourney .subjectPickCard{min-height:132px;padding:15px!important}.studentJourney .welcomeCopy p{font-size:14px!important}.studentJourney .sectionTitleKid p{display:none}.studentJourney .focusTask[class*='focus']:before{font-size:25px;letter-spacing:6px;inset:auto 8px 2px auto}}
+      @media(max-width:430px){.studentJourney .subjectPickerSection{margin-top:22px}.studentJourney .subjectPicker{gap:10px!important}.studentJourney .subjectPickCard{min-height:132px;padding:15px!important}.studentJourney .sectionTitleKid p{display:none}.studentJourney .focusTask[class*='focus']:before{font-size:25px;letter-spacing:6px;inset:auto 8px 2px auto}}
     `}</style>
     <header className="kidTopbar studentTopbar"><Link href="/" className="backBubble">→ الرئيسية</Link><div className="journeyName"><span>{student.emoji}</span><strong>{student.name}</strong></div><Link href={`/student/${slug}/practice`} className="practiceBubble">🎯 تدريب</Link></header>
 

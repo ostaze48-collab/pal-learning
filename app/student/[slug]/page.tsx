@@ -40,7 +40,7 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
         .studentJourney .subjectPicker{grid-template-columns:repeat(2,minmax(0,1fr))!important}
         .studentJourney .welcomeQuest{grid-template-columns:1fr!important;padding:12px 14px!important;margin:4px auto 8px!important;border-radius:20px!important}
         .studentJourney .welcomeQuest h1{font-size:26px!important;margin:3px 0 0!important}
-        .studentJourney .welcomeCopy p,.studentJourney .progressBubble{display:none!important}
+        .studentJourney .welcomeCopy p,.studentJourney .progressBubble,.studentJourney .upNext{display:none!important}
         .studentJourney .journeyWrap{width:min(100% - 18px,980px)!important}
         .studentJourney .practiceBubble,.studentJourney .kidUtilityRow{display:none!important}
         .studentJourney .subjectPickerSection{margin-bottom:94px}

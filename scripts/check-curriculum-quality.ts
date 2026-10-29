@@ -18,6 +18,8 @@ console.log(`Average learning quality: ${report.averageScore}/100`);
 console.log(`Teaching blueprint objective coverage: ${report.teachingBlueprintObjectiveCoverage}%`);
 console.log(`Objectives with at least one interactive experience: ${report.interactiveTeachingObjectiveCoverage}%`);
 console.log(`Interactive teaching scene coverage: ${report.interactiveTeachingSceneCoverage}%`);
+console.log(`Objectives reaching faded interactive application: ${report.fadedApplicationObjectiveCoverage}%`);
+console.log(`Faded application scenes: ${report.fadedApplicationScenes}`);
 console.log(`Lessons with rich evidence interactions: ${report.lessonsWithRichInteractions}/${report.learningLessons}`);
 console.log(`Explicit misconception patterns: ${misconceptionReport.count}`);
 

@@ -1,7 +1,7 @@
 export type TeachingVisualKind=
  'cell_zoom'|'cell_compare'|'cell_parts'|'filter_lab'|'magnet_lab'|'evaporation_lab'|
  'integer_context'|'number_line'|'integer_motion'|'pronoun_swap'|'question_blocks'|'do_does'|
- 'factor_tree'|'fraction_bar'|'decimal_grid'|'geometry_lab'|'data_chart'|'proportion_lab'|
+ 'factor_tree'|'fraction_bar'|'decimal_grid'|'geometry_lab'|'data_chart'|'proportion_lab'|'faded_math'|
  'motion_lab'|'force_lab'|'atom_builder'|'reaction_lab'|'pressure_lab'|
  'arabic_pattern'|'hamza_lab'|'tense_timeline'|
  'material_properties'|'energy_flow'|'reading_lens'|'word_builder'|'punctuation_lab'|'comparison_scale';
@@ -39,10 +39,12 @@ function stageMeta(sceneNumber:number){
  return {purpose:'representation' as const,scaffold:'full' as const};
 }
 function staged(kind:TeachingVisualKind,variant:string|undefined,sceneNumber:number):TeachingVisualSpec{return {kind,variant,...stageMeta(sceneNumber)}}
+function isMathFadedLesson(lessonId:string){return /prime|factor|gcf|lcm|fraction|decimal|integer|absolute-value|triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation|data|statistics|frequency|mean|median|mode|range|graph|chart|proportion|ratio|scale/.test(lessonId)}
 
 function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):TeachingVisualSpec|null{
  if(sceneNumber<1||sceneNumber>3)return null;
  const variant=`${lessonId}|${objectiveId}|${sceneNumber}`;
+ if(sceneNumber===3)return isMathFadedLesson(lessonId)?staged('faded_math',variant,sceneNumber):null;
 
  if(/prime|factor|gcf|lcm/.test(lessonId))return staged('factor_tree',variant,sceneNumber);
  if(/fraction/.test(lessonId))return staged('fraction_bar',variant,sceneNumber);
@@ -55,7 +57,6 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
  if(/data|statistics|frequency|mean|median|mode|range|graph|chart/.test(lessonId))return staged('data_chart',variant,sceneNumber);
  if(/proportion|ratio|scale/.test(lessonId))return staged('proportion_lab',variant,sceneNumber);
 
- if(sceneNumber>2)return null;
  if(/cell/.test(lessonId)){
   if(sceneNumber===2)return staged(objectiveId===1?'cell_zoom':objectiveId===2?'cell_parts':'cell_compare',variant,sceneNumber);
   return staged(objectiveId%2===0?'cell_compare':'cell_zoom',variant,sceneNumber);

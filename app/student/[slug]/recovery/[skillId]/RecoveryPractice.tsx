@@ -1,8 +1,7 @@
 'use client';
-import {useMemo,useState} from 'react';
+import {useState} from 'react';
 import type {RecoverySkill} from '../../../../../lib/recoverySkills';
 import {getDeepDiagnostic} from '../../../../../lib/deepDiagnostics';
-import SmartPractice from './SmartPractice';
 import MultiplicationFluencyLab from './MultiplicationFluencyLab';
 
 export default function RecoveryPractice({slug,skill,focusId,retentionMode=false}:{slug:string;skill:RecoverySkill;focusId?:string;retentionMode?:boolean}){
@@ -11,20 +10,11 @@ export default function RecoveryPractice({slug,skill,focusId,retentionMode=false
  const questions=focus?.questions??skill.screening;
  const title=focus?.title??skill.title;
  const explanation=focus?.miniLesson??skill.explanation;
- const treatmentSteps=focus?.treatmentSteps??[];
  const multiplicationFluency=Boolean(focus?.id?.startsWith('tables-'));
  const [phase,setPhase]=useState<'learn'|'quiz'|'done'>(retentionMode?'quiz':'learn');
  const [step,setStep]=useState(0);const [selected,setSelected]=useState<number|null>(null);const [score,setScore]=useState(0);
  const [finalPct,setFinalPct]=useState<number|null>(null);
  const q=questions[step];
- const deepKey=focus?`recoveryDeep:${slug}:${skill.id}:${focus.id}`:null;
- const previousDeep=useMemo(()=>focus&&deepKey?Number(globalThis?.localStorage?.getItem?.(deepKey)??NaN):NaN,[deepKey,focus]);
- const savedMistakes=useMemo(()=>{
-   if(!focus)return [];
-   const raw=globalThis?.localStorage?.getItem?.(`recoveryDeepResult:${slug}:${skill.id}:${focus.id}`);
-   if(!raw)return [];
-   try{const parsed=JSON.parse(raw);return Array.isArray(parsed?.missedFacts)?parsed.missedFacts:[]}catch{return []}
- },[slug,skill.id,focus?.id]);
 
  function persistFocusedResult(pct:number){
    if(!focus||!diagnostic)return;
@@ -56,11 +46,11 @@ export default function RecoveryPractice({slug,skill,focusId,retentionMode=false
 
  if(phase==='done'){
    const pct=finalPct??Math.round(score/questions.length*100);
-   return <><div className="card result"><h1>{pct>=80?(retentionMode?'المهارة ما زالت ثابتة ✅':'تم تثبيت المهارة ✅'):'نحتاج جلسة قصيرة أخرى'}</h1><p>{retentionMode?'راجعنا':'تدربنا على'} <strong>{title}</strong>. النتيجة الحالية: {pct}%.</p>{focus&&<p className="muted">{retentionMode?'هذا اختبار احتفاظ دون شرح مسبق.':'كان هذا تدريبًا مركزًا على جزء محدد، وليس إعادة المجال كاملًا.'}</p>}<p className="muted">{pct>=80?(retentionMode?'سيبعد النظام موعد المراجعة التالية تدريجيًا لأن المهارة بقيت ثابتة.':'ستنتقل هذه النقطة إلى مراجعة احتفاظ قصيرة بعد 3 أيام للتأكد أنها بقيت متاحة في الذاكرة.'):'ستعود هذه النقطة كتحدٍ قصير، وبطريقة تعليم مختلفة إذا احتجنا.'}</p><button className="btn" onClick={()=>history.back()}>العودة</button></div>{focus&&!retentionMode&&<SmartPractice slug={slug} skillId={skill.id} subskillId={focus.id} mistakes={savedMistakes}/>}</>;
+   return <div className="recoveryFinish"><div className="recoveryFinishIcon">{pct>=80?'🌟':'🎈'}</div><span className="questEyebrow">انتهت اللعبة</span><h3>{pct>=80?'أصبحت أسهل!':'أحسنتِ المحاولة'}</h3><p>{pct>=80?'نعود الآن إلى رحلتك، وسنذكّرك بهذه الفكرة لاحقًا إذا احتجنا.':'سنعود لهذه الفكرة في جولة صغيرة أخرى بطريقة مختلفة.'}</p><button className="btn kidPrimaryAction" onClick={()=>history.back()}>أكمل رحلتي ←</button></div>;
  }
  if(phase==='learn'&&multiplicationFluency&&focus)return <MultiplicationFluencyLab slug={slug} subskillId={focus.id} onReady={()=>setPhase('quiz')}/>;
- if(phase==='learn')return <div className="card"><span className="tag">تدريب ذكي قصير</span><h1>{title}</h1>{focus&&<div className="muted" style={{marginBottom:10}}>نثبت هذه المهارة بأقصر طريق مناسب لكِ{Number.isFinite(previousDeep)?` · آخر قياس ${previousDeep}%`:''}</div>}<p style={{lineHeight:1.9}}>{explanation}</p>{treatmentSteps.length>0&&<div className="gapExplanation"><strong>خطة هذه الجلسة</strong><ol>{treatmentSteps.map(x=><li key={x}>{x}</li>)}</ol></div>}<div className="exampleChips">{questions.map(x=><span key={x.id}>{x.explanation}</span>)}</div><button className="btn" style={{marginTop:18}} onClick={()=>setPhase('quiz')}>ابدأ التحقق بعد الشرح</button></div>;
+ if(phase==='learn')return <div className="recoveryMiniLesson"><span className="questEyebrow">💡 نشاهدها أولًا</span><h2>{title}</h2><p>{explanation}</p><div className="recoveryMiniExamples">{questions.slice(0,3).map(x=><span key={x.id}>{x.explanation}</span>)}</div><button className="btn kidPrimaryAction" onClick={()=>setPhase('quiz')}>أجرب بنفسي ←</button></div>;
  function choose(i:number){if(selected!==null)return;setSelected(i)}
  function next(){const gained=score+(selected===q.correct?1:0);if(step===questions.length-1){const pct=Math.round(gained/questions.length*100);if(focus)persistFocusedResult(pct);else localStorage.setItem(`recovery:${slug}:${skill.id}`,String(pct));setScore(gained);setFinalPct(pct);setPhase('done');return}setScore(gained);setStep(v=>v+1);setSelected(null)}
- return <div className="card"><span className="tag">{retentionMode?'اختبار احتفاظ':'تحقق بعد التدريب'} · {step+1}/{questions.length}</span>{retentionMode&&<div className="adaptiveVerify"><strong>🧠 دون تلميح هذه المرة</strong><span>نقيس ما بقي في الذاكرة بعد مرور الوقت.</span></div>}<h2>{q.text}</h2><div className="choice">{q.options.map((o,i)=>{const cls=selected===null?'option':i===q.correct?'option ok':i===selected?'option bad':'option';return <button key={o} className={cls} onClick={()=>choose(i)}>{o}</button>})}</div>{selected!==null&&<div style={{marginTop:16}}><div className={selected===q.correct?'activitySuccess':'activityHint'}><strong>{selected===q.correct?'ممتاز ✅':'نغيّر طريقة الوصول للجواب'}</strong><p>{q.explanation}</p></div><button className="btn" onClick={next}>{step===questions.length-1?'احفظ النتيجة':'التالي'}</button></div>}</div>;
+ return <div className="recoveryQuestionRound"><div className="recoveryGameTop"><span className="questEyebrow">{retentionMode?'🔄 جولة تذكّر':'🎯 جربي'}</span><div className="recoveryDots">{questions.map((_,i)=><i key={i} className={i<step?'done':i===step?'active':''}/>)}</div></div>{retentionMode&&<div className="childHint"><strong>🧠 جربي من ذاكرتك أولًا</strong><span>لا يوجد تلميح قبل المحاولة هذه المرة.</span></div>}<h2 className="recoveryQuestion">{q.text}</h2><div className="choice recoveryChoices">{q.options.map((o,i)=>{const cls=selected===null?'option':i===q.correct?'option ok':i===selected?'option bad':'option';return <button key={o} className={cls} onClick={()=>choose(i)}>{o}</button>})}</div>{selected!==null&&<div className="recoveryFeedback"><div className={selected===q.correct?'activitySuccess':'activityHint'}><strong>{selected===q.correct?'رائعة! ⭐':'شاهدي الفكرة 💡'}</strong><p>{q.explanation}</p></div><button className="btn kidPrimaryAction" onClick={next}>{step===questions.length-1?'أنهي اللعبة ✨':'التالي ←'}</button></div>}</div>;
 }

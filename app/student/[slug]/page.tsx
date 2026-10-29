@@ -25,8 +25,15 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
       .studentJourney .subjectPickCard:active{transform:scale(.98)}
       .studentJourney .subjectPickIcon{font-size:38px!important}
       .studentJourney .kidUtilityRow{max-width:620px;margin:18px auto 88px;grid-template-columns:repeat(2,1fr)!important}
-      @media(max-width:800px){.studentJourney .subjectPicker{grid-template-columns:repeat(2,minmax(0,1fr))!important}.studentJourney .welcomeQuest{padding:20px!important}.studentJourney .welcomeQuest h1{font-size:32px!important}.studentJourney .journeyWrap{width:min(100% - 18px,980px)!important}}
-      @media(max-width:430px){.studentJourney .subjectPickerSection{margin-top:22px}.studentJourney .subjectPicker{gap:10px!important}.studentJourney .subjectPickCard{min-height:132px;padding:15px!important}.studentJourney .kidUtilityRow{grid-template-columns:1fr 1fr!important;gap:9px}.studentJourney .welcomeCopy p{font-size:14px!important}.studentJourney .sectionTitleKid p{display:none}}
+      @media(max-width:800px){
+        .studentJourney .subjectPicker{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+        .studentJourney .welcomeQuest{padding:20px!important}
+        .studentJourney .welcomeQuest h1{font-size:32px!important}
+        .studentJourney .journeyWrap{width:min(100% - 18px,980px)!important}
+        .studentJourney .practiceBubble,.studentJourney .kidUtilityRow{display:none!important}
+        .studentJourney .subjectPickerSection{margin-bottom:94px}
+      }
+      @media(max-width:430px){.studentJourney .subjectPickerSection{margin-top:22px}.studentJourney .subjectPicker{gap:10px!important}.studentJourney .subjectPickCard{min-height:132px;padding:15px!important}.studentJourney .welcomeCopy p{font-size:14px!important}.studentJourney .sectionTitleKid p{display:none}}
     `}</style>
     <header className="kidTopbar studentTopbar"><Link href="/" className="backBubble">→ الرئيسية</Link><div className="journeyName"><span>{student.emoji}</span><strong>{student.name}</strong></div><Link href={`/student/${slug}/practice`} className="practiceBubble">🎯 تدريب</Link></header>
 

@@ -6,6 +6,7 @@
     "dev":"next dev",
     "build":"next build",
     "start":"next start",
+    "qa:child-copy":"node scripts/check-child-copy.mjs",
     "kb:books:probe":"node scripts/curriculum-books.mjs probe",
     "kb:books:prepare":"node scripts/curriculum-books.mjs prepare",
     "kb:books:upload":"node scripts/curriculum-books.mjs upload",

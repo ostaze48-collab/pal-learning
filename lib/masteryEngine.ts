@@ -1,5 +1,5 @@
 import {lessons,getLessonUnit,getStudent,type Lesson} from './data';
-import {gapSkills,lessonPrerequisites} from './skillGraph';
+import {lessonPrerequisites} from './skillGraph';
 import {recoverySkills} from './recoverySkills';
 
 export type MasteryStatus='unknown'|'check'|'blocked'|'ready'|'learning'|'mastered'|'secure'|'review';
@@ -99,11 +99,12 @@ function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidence
  return {decision:'review',reviewAt,reason,...base};
 }
 
-function persistTeacherDecision(lesson:Lesson,report:any){
- if(typeof window==='undefined'||!report)return null;
+export function refreshTeacherDecision(lesson:Lesson,report?:any){
+ if(typeof window==='undefined')return null;
+ const actualReport=report??readJson(`lesson:${lesson.id}:report`);if(!actualReport)return null;
  const existing=readJson(`lesson:${lesson.id}:teacherDecision`)||readJson(`teacherDecision:${lesson.id}`);
  if(existing?.manual===true||existing?.source==='objective_coverage'||existing?.source==='transfer_evidence')return existing;
- const decision=deriveTeacherEvidenceDecision(lesson,report);if(!decision)return existing;
+ const decision=deriveTeacherEvidenceDecision(lesson,actualReport);if(!decision)return existing;
  const packed=JSON.stringify(decision);localStorage.setItem(`lesson:${lesson.id}:teacherDecision`,packed);localStorage.setItem(`teacherDecision:${lesson.id}`,packed);return decision;
 }
 
@@ -120,7 +121,6 @@ function lessonEvidence(lesson:Lesson):MasteryEvidence[]{
  if(typeof window==='undefined')return [];
  const ev:MasteryEvidence[]=[];const report=readJson(`lesson:${lesson.id}:report`);const mastery=finite(report?.mastery);if(mastery!==null)ev.push({source:'lesson_mastery',score:mastery,weight:1,at:String(report?.completedAt||'')});
  const creative=readJson(`conceptStudio:${lesson.student}:${lesson.id}`)||readJson(`creativeProfile:${lesson.student}:${lesson.id}`);const c=finite(creative?.successRate);if(c!==null)ev.push({source:'concept_studio',score:c,weight:0.55,at:String(creative?.lastAt||creative?.at||'')});
- persistTeacherDecision(lesson,report);
  return ev;
 }
 

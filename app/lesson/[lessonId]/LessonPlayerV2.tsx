@@ -87,8 +87,8 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
    const raw=localStorage.getItem(`lesson:${lesson.id}:report`);
    if(raw){try{setReport(JSON.parse(raw))}catch{}}
    const reviewMode=localStorage.getItem(`lesson:${lesson.id}:reviewMode`)==='1';
-   if(reviewMode){localStorage.removeItem(`lesson:${lesson.id}:reviewMode`);localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setConceptStep(0);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setPhase('quiz');setSessionReady(true);return}
-   if(localStorage.getItem(`lesson:${lesson.id}`)==='done'){localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setPhase('done');setSessionReady(true);return}
+   if(reviewMode){localStorage.removeItem(`lesson:${lesson.id}:reviewMode`);localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);setConceptStep(0);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setPhase('quiz');setSessionReady(true);return}
+   if(localStorage.getItem(`lesson:${lesson.id}`)==='done'){localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);setPhase('done');setSessionReady(true);return}
    try{
      const rawSession=localStorage.getItem(`lesson:${lesson.id}:session`);
      if(rawSession){
@@ -111,7 +111,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
        }
      }
    }catch{}
-   localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSessionReady(true);
+   localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSessionReady(true);
  },[lesson.id,lesson.questions.length,internalObjectives.length]);
 
  useEffect(()=>{
@@ -142,7 +142,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  }
 
  function reset(){
-   localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);localStorage.removeItem(`lesson:${lesson.id}:review`);localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lessonCoverage:${lesson.id}`);localStorage.removeItem(`lessonEvidence:${lesson.id}`);localStorage.removeItem(`lessonUx:${lesson.id}`);
+   localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);localStorage.removeItem(`lesson:${lesson.id}:review`);localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);localStorage.removeItem(`lessonCoverage:${lesson.id}`);localStorage.removeItem(`lessonEvidence:${lesson.id}`);localStorage.removeItem(`lessonUx:${lesson.id}`);
    setReport(null);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setSelected(null);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setCurrentGap(null);
  }
 
@@ -159,7 +159,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
    const elapsed=Math.max(1,Math.round((Date.now()-startedAt)/1000));const oldTime=Number(localStorage.getItem(`lesson:${lesson.id}:timeSeconds`)||0);localStorage.setItem(`lesson:${lesson.id}:timeSeconds`,String(oldTime+elapsed));
    const gap=saveFoundationSignal(wrongIds);saveCoverageVerified(wrongIds);
    const data:Report={diagnosticCorrect:true,firstPassScore:firstPassCorrect,finalScore:finalCorrect,quizMastery:evidence.quizScore,understandingScore:evidence.understandingScore,conceptScore:evidence.conceptScore,objectiveEvidenceScore:evidence.objectiveEvidenceScore,transferScore:evidence.transferScore,masteryConfidence:evidence.confidence,evidenceReason:evidence.reason,mastery,wrongQuestionIds:wrongIds,status,completedAt:new Date().toISOString(),reviewDue:due,timeSeconds:elapsed,gapId:gap?.id||null};
-   localStorage.setItem(`lesson:${lesson.id}`,'done');localStorage.setItem(`lesson:${lesson.id}:score`,String(finalCorrect));localStorage.setItem(`lesson:${lesson.id}:report`,JSON.stringify(data));localStorage.setItem(`lesson:${lesson.id}:review`,JSON.stringify({level,dueAt:due}));localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);setReport(data);setPhase('done');track('lesson_complete',{mastery,status,confidence:evidence.confidence,objectiveEvidence:evidence.objectiveEvidenceScore,transfer:evidence.transferScore});
+   localStorage.setItem(`lesson:${lesson.id}`,'done');localStorage.setItem(`lesson:${lesson.id}:score`,String(finalCorrect));localStorage.setItem(`lesson:${lesson.id}:report`,JSON.stringify(data));localStorage.setItem(`lesson:${lesson.id}:review`,JSON.stringify({level,dueAt:due}));localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);setReport(data);setPhase('done');track('lesson_complete',{mastery,status,confidence:evidence.confidence,objectiveEvidence:evidence.objectiveEvidenceScore,transfer:evidence.transferScore});
  }
 
  const journey=<div className={styles.journey} aria-label="رحلة الدرس">{phaseLabels.map(([icon,label],i)=><div key={label} className={`${styles.journeyStep} ${journeyStep===i?styles.active:''} ${journeyStep>i?styles.done:''}`}><span>{journeyStep>i?'✓':icon}</span><div><strong>{label}</strong></div></div>)}</div>;
@@ -173,7 +173,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  if(phase==='retest'){
    const idx=wrong[retestStep];const q=lesson.questions[idx];if(!q){complete(score,[],score);return null}const isCorrect=selected===q.correct;
    function nextRetest(){if(selected===null)return;const ok=selected===q.correct;const gained=retestCorrect+(ok?1:0);const missedNow=ok?retestMissed:[...retestMissed,idx];if(retestStep===wrong.length-1){complete(score+gained,missedNow.map(i=>lesson.questions[i].id),score);return}setRetestCorrect(gained);setRetestMissed(missedNow);setRetestStep(v=>v+1);setSelected(null)}
-   return <div className={styles.shell}>{journey}<section className={`card ${styles.quizCard}`}><div className={styles.questionTop}><small>جولة قصيرة جديدة</small><strong>{retestStep+1} / {wrong.length}</strong></div><h2 className={styles.question}>{q.text}</h2><div className={styles.choices}>{q.options.map((o,i)=><button key={o} className={`${styles.choice} ${selected!==null&&i===q.correct?styles.correct:''} ${selected===i&&i!==q.correct?styles.wrong:''}`} disabled={selected!==null} onClick={()=>setSelected(i)}>{o}</button>)}</div>{selected!==null&&<div className={styles.feedback}><strong>{isCorrect?'⭐ الآن أصبحت أوضح':'💡 نشاهدها مرة أخرى'}</strong><div>{q.explanation}</div></div>}<div className={styles.actionRow}><button className={`btn ${styles.primary}`} disabled={selected===null} onClick={nextRetest}>{retestStep===wrong.length-1?'أنهي الجولة':'التالي ←'}</button></div></section></div>;
+   return <div className={styles.shell}>{journey}<section className={`card ${styles.quizCard}`}><div className={styles.questionTop}><small>جولة قصيرة جديدة</small><strong>{retestStep+1} / {wrong.length}</strong></div><h2 className={styles.question}>{q.text}</h2><div className={styles.choices}>{q.options.map((o,i)=><button key={o} className={`${styles.choice} ${selected!==null&&i===q.correct?styles.correct:''} ${selected===i&&i!==q.correct?styles.wrong:''}`} disabled={selected!==null} onClick={()=>setSelected(i)}>{o}</button>)}</div>{selected!==null&&<div className={selected===q.correct?styles.feedback:styles.feedback}><strong>{isCorrect?'⭐ الآن أصبحت أوضح':'💡 نشاهدها مرة أخرى'}</strong><div>{q.explanation}</div></div>}<div className={styles.actionRow}><button className={`btn ${styles.primary}`} disabled={selected===null} onClick={nextRetest}>{retestStep===wrong.length-1?'أنهي الجولة':'التالي ←'}</button></div></section></div>;
  }
  const q=lesson.questions[step];if(!q)return <div className={styles.shell}>{journey}<section className={`card ${styles.celebration}`}><h2>اكتملت تجربة هذا الدرس</h2><button className="btn" onClick={()=>complete(0,[],0)}>إنهاء الدرس</button></section></div>;
  const isCorrect=selected===q.correct;

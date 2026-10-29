@@ -5,7 +5,7 @@ import {lessons} from '../../../lib/data';
 import styles from './UXDashboard.module.css';
 
 type Filter='all'|'salma'|'sama';
-type Row={lessonId:string;title:string;student:string;subject:string;phaseViews:number;helps:number;readAlouds:number;quizErrors:number;evidenceErrors:number;visualInteractions:number;visualScenes:number;unusedVisuals:number;time:number;completed:boolean;lastPhase:string;bottleneckPhase:string;primaryIssue:string;friction:number};
+type Row={lessonId:string;title:string;student:string;subject:string;kind:string;phases:string[];phaseViews:number;helps:number;readAlouds:number;quizErrors:number;evidenceErrors:number;visualInteractions:number;visualScenes:number;unusedVisuals:number;time:number;completed:boolean;lastPhase:string;bottleneckPhase:string;primaryIssue:string;friction:number};
 
 function readJson(key:string){try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null}catch{return null}}
 function phaseLabel(phase:string){return phase==='discover'?'الاكتشاف':phase==='build'?'بناء الفكرة':phase==='practice'?'التجربة':phase==='quiz'?'التحدي':phase==='gap'?'الجسر القصير':phase==='remediate'?'الطريقة الثانية':phase==='retest'?'المحاولة الجديدة':phase||'—'}
@@ -19,6 +19,7 @@ export default function UXDashboard(){
     const events=readJson(`lessonUx:${lesson.id}`);if(!Array.isArray(events)||!events.length)continue;
     const report=readJson(`lesson:${lesson.id}:report`);
     const phaseEvents=events.filter((e:any)=>e?.event==='phase_view'&&typeof e?.phase==='string');
+    const phases=[...new Set(phaseEvents.map((e:any)=>String(e.phase)))];
     const phaseViews=phaseEvents.length;
     const phaseCounts=new Map<string,number>();for(const e of phaseEvents)phaseCounts.set(e.phase,(phaseCounts.get(e.phase)||0)+1);
     const bottleneck=[...phaseCounts.entries()].sort((a,b)=>b[1]-a[1])[0];
@@ -38,13 +39,22 @@ export default function UXDashboard(){
     const repeated=[...phaseCounts.values()].reduce((sum,count)=>sum+Math.max(0,count-1),0);
     const friction=helps*2+quizErrors+evidenceErrors*2+Math.min(3,repeated)+(completed?0:3)+Math.min(3,unusedVisuals);
     const primaryIssue=!completed?`توقف قبل الإكمال عند ${phaseLabel(lastPhase)}`:evidenceErrors>=2?'تعثر في الفهم أو التطبيق':helps>=2?'احتاج مساندة أكثر من مرة':unusedVisuals>=2?'نماذج ظهرت ولم تُستخدم':repeated>=2?'تكرار أو رجوع بين المراحل':'لا يوجد نمط احتكاك واضح';
-    next.push({lessonId:lesson.id,title:lesson.title,student:lesson.student,subject:lesson.subject,phaseViews,helps,readAlouds,quizErrors,evidenceErrors,visualInteractions,visualScenes,unusedVisuals,time,completed,lastPhase,bottleneckPhase,primaryIssue,friction});
+    next.push({lessonId:lesson.id,title:lesson.title,student:lesson.student,subject:lesson.subject,kind:lesson.kind,phases,phaseViews,helps,readAlouds,quizErrors,evidenceErrors,visualInteractions,visualScenes,unusedVisuals,time,completed,lastPhase,bottleneckPhase,primaryIssue,friction});
    }
    next.sort((a,b)=>b.friction-a.friction||b.time-a.time);setRows(next);
   }
   scan();const timer=window.setInterval(scan,1500);return()=>window.clearInterval(timer);
  },[]);
  const visible=useMemo(()=>filter==='all'?rows:rows.filter(x=>x.student===filter),[rows,filter]);
+ const learningRows=visible.filter(x=>x.kind!=='assessment');
+ const started=learningRows.length;
+ const reachedBuild=learningRows.filter(x=>x.phases.includes('build')||x.phases.includes('practice')||x.phases.includes('quiz')||x.completed).length;
+ const reachedPractice=learningRows.filter(x=>x.phases.includes('practice')||x.phases.includes('quiz')||x.completed).length;
+ const reachedQuiz=learningRows.filter(x=>x.phases.includes('quiz')||x.completed).length;
+ const funnelDone=learningRows.filter(x=>x.completed).length;
+ const funnelStages=[{label:'بدأ',value:started},{label:'بنى الفكرة',value:reachedBuild},{label:'جرّب',value:reachedPractice},{label:'وصل للتحدي',value:reachedQuiz},{label:'أكمل',value:funnelDone}];
+ const funnelDrops=funnelStages.slice(0,-1).map((stage,i)=>({from:stage.label,to:funnelStages[i+1].label,drop:Math.max(0,stage.value-funnelStages[i+1].value),base:stage.value}));
+ const biggestDrop=[...funnelDrops].sort((a,b)=>b.drop-a.drop)[0];
  const incomplete=visible.filter(x=>!x.completed).length;const high=visible.filter(x=>x.friction>=6).length;const helps=visible.reduce((s,x)=>s+x.helps,0);const readAlouds=visible.reduce((s,x)=>s+x.readAlouds,0);const unusedVisuals=visible.reduce((s,x)=>s+x.unusedVisuals,0);const avgTime=visible.length?Math.round(visible.reduce((s,x)=>s+x.time,0)/visible.length/60):0;
  function status(row:Row){if(row.friction>=6)return {label:'احتكاك مرتفع',cls:styles.high};if(row.friction>=3)return {label:'راقبيه',cls:styles.medium};return {label:'سلس',cls:styles.good}}
  return <main className={styles.page}><div className={styles.wrap}>
@@ -53,6 +63,7 @@ export default function UXDashboard(){
   <section className={styles.panel}><div className={styles.toolbar}><div className={styles.filters}><button className={`${styles.filter} ${filter==='all'?styles.active:''}`} onClick={()=>setFilter('all')}>الكل</button><button className={`${styles.filter} ${filter==='salma'?styles.active:''}`} onClick={()=>setFilter('salma')}>سلمى · صف 5</button><button className={`${styles.filter} ${filter==='sama'?styles.active:''}`} onClick={()=>setFilter('sama')}>سما · صف 7</button></div><span className={styles.note}>غير مكتمل: {incomplete} · الأعلى احتكاكًا يظهر أولًا</span></div>
    <div className={styles.hint}>نفرّق الآن بين تعثر الفهم، الحاجة للمساعدة، الرجوع بين المراحل، والمشهد البصري الذي ظهر ولم يُستخدم. القراءة الصوتية إشارة وصول/تصميم وليست علامة ضعف.</div>
   </section>
+  <section className={styles.panel}><div className={styles.toolbar}><strong>مسار رحلة التعلم</strong><span className={styles.note}>{started<3?'نحتاج محاولات أكثر قبل الاستنتاج':biggestDrop&&biggestDrop.drop>0?`أكبر تسرب حاليًا: ${biggestDrop.from} ← ${biggestDrop.to} (${biggestDrop.drop})`:'لا يظهر تسرب واضح حاليًا'}</span></div><div className={styles.summary}>{funnelStages.map(stage=><div className={styles.metric} key={stage.label}><strong>{stage.value}</strong><span>{stage.label}{started?` · ${Math.round(stage.value/started*100)}%`:''}</span></div>)}</div><div className={styles.hint}>هذا Funnel يستخدم الدروس التعليمية فقط، ويعتمد على المراحل التي ظهرت فعليًا على هذا الجهاز. لا نعتبر فرقًا صغيرًا مشكلة قبل وجود عدة محاولات.</div></section>
   <section className={styles.panel}>{visible.length?<div className={styles.rows}>{visible.map(row=>{const s=status(row);return <div className={styles.row} key={row.lessonId}><div className={styles.lesson}><Link href={`/lesson/${row.lessonId}`}><strong>{row.title}</strong></Link><small>{row.student==='salma'?'سلمى':'سما'} · {row.subject} · {row.primaryIssue}</small><small>أكثر مرحلة تكررت: {row.bottleneckPhase} · تفاعل بصري {row.visualInteractions}/{row.visualScenes} · غير مستخدم {row.unusedVisuals} · استماع {row.readAlouds}</small></div><div className={styles.number}><strong>{row.helps}</strong><small>مساعدة</small></div><div className={styles.number}><strong>{row.quizErrors}</strong><small>خطأ اختبار</small></div><div className={styles.number}><strong>{row.evidenceErrors}</strong><small>دليل تعثر</small></div><div className={styles.number}><strong>{row.time?Math.max(1,Math.round(row.time/60)):'—'}</strong><small>دقيقة</small></div><div><span className={`${styles.status} ${s.cls}`}>{s.label}</span></div></div>})}</div>:<div className={styles.empty}>لا توجد بيانات تجربة على هذا الجهاز بعد. افتحي درسًا وجربي الرحلة ثم عودي هنا.</div>}</section>
  </div></main>;
 }

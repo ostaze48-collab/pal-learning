@@ -2,6 +2,7 @@
 import {useEffect,useMemo,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
 import {getDirectedTeachingScenes} from '../../../lib/lessonDirector';
+import {buildLearningPatternRecommendation,learningCue,type RepresentationFamily} from '../../../lib/learningPatternModel';
 import type {TeachingScene} from '../../../lib/teachingBlueprints';
 import {getTeachingVisual} from '../../../lib/teachingVisuals';
 import TeachingSceneVisual from './TeachingSceneVisual';
@@ -39,14 +40,16 @@ function englishSteps(lesson:Lesson,focus:number):CanvasStep[]{return [
 ]}
 function getSteps(lesson:Lesson,focus:number){const directed=getDirectedTeachingScenes(lesson,focus);if(directed?.length)return directed;if(lesson.subject==='العلوم والحياة')return scienceSteps(lesson,focus);if(lesson.subject==='الرياضيات')return mathSteps(lesson,focus);if(lesson.subject==='اللغة العربية')return arabicSteps(lesson,focus);if(lesson.subject==='English')return englishSteps(lesson,focus);return mathSteps(lesson,focus)}
 function appendUx(lessonId:string,event:Record<string,unknown>){try{const key=`lessonUx:${lessonId}`;const raw=localStorage.getItem(key);const old=raw?JSON.parse(raw):[];const next=Array.isArray(old)?old.slice(-199):[];next.push({at:new Date().toISOString(),...event});localStorage.setItem(key,JSON.stringify(next))}catch{}}
+function englishCue(family:RepresentationFamily|null){if(family==='spatial')return 'Start by looking at position, order, or movement.';if(family==='construct')return 'Build the idea piece by piece and notice the pattern.';if(family==='compare')return 'Compare two cases side by side and look for the key difference.';if(family==='experiment')return 'Change one thing and watch what happens before you explain it.';if(family==='context')return 'Start from a meaningful situation, then return to the rule or word.';if(family==='data')return 'Start from the values or model, then find the relationship.';if(family==='language')return 'Start from meaning, then notice the repeated pattern.';return null}
 
 export default function LearningCanvas({lesson,objectiveIndex}:{lesson:Lesson;objectiveIndex:number}){
  const maxFocus=Math.max(0,(lesson.learningPoints.length||1)-1);const focus=Math.min(maxFocus,Math.max(0,objectiveIndex));
- const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);const [speechAvailable,setSpeechAvailable]=useState(false);const [speaking,setSpeaking]=useState(false);const [completing,setCompleting]=useState(false);const [resumeReady,setResumeReady]=useState(false);
+ const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);const [speechAvailable,setSpeechAvailable]=useState(false);const [speaking,setSpeaking]=useState(false);const [completing,setCompleting]=useState(false);const [resumeReady,setResumeReady]=useState(false);const [adaptiveFamily,setAdaptiveFamily]=useState<RepresentationFamily|null>(null);
  const steps=useMemo(()=>getSteps(lesson,focus),[lesson,focus]);const safeIndex=Math.min(Math.max(0,index),Math.max(0,steps.length-1));const current=steps[safeIndex];const visual=getTeachingVisual(lesson.id,focus+1,safeIndex+1);const subjectIcon=lesson.subject==='العلوم والحياة'?'🔬':lesson.subject==='الرياضيات'?'➗':lesson.subject==='اللغة العربية'?'📚':'🌍';
  useEffect(()=>{setResumeReady(false);setReflected(false);setVisualTouched(false);setCompleting(false);let restored=0;try{const raw=localStorage.getItem(`lesson:${lesson.id}:canvasSession`);if(raw){const saved=JSON.parse(raw) as CanvasResume;if(saved?.version===1&&saved.objectiveIndex===focus&&saved.sceneCount===steps.length&&Number.isInteger(saved.sceneIndex)&&saved.sceneIndex>=0&&saved.sceneIndex<steps.length)restored=saved.sceneIndex}}catch{}setIndex(restored);setResumeReady(true)},[lesson.id,focus,steps.length]);
  useEffect(()=>{if(!resumeReady||!steps.length)return;try{const data:CanvasResume={version:1,objectiveIndex:focus,sceneIndex:safeIndex,sceneCount:steps.length,updatedAt:new Date().toISOString()};localStorage.setItem(`lesson:${lesson.id}:canvasSession`,JSON.stringify(data))}catch{}},[resumeReady,lesson.id,focus,safeIndex,steps.length]);
  useEffect(()=>{setSpeechAvailable(typeof window!=='undefined'&&'speechSynthesis'in window&&typeof SpeechSynthesisUtterance!=='undefined');return()=>{try{window.speechSynthesis?.cancel()}catch{}}},[]);
+ useEffect(()=>{const recommendation=buildLearningPatternRecommendation(lesson.student,lesson.subject);setAdaptiveFamily(recommendation.confidence>=70?recommendation.preferredFamily:null)},[lesson.student,lesson.subject,lesson.id]);
  useEffect(()=>{setVisualTouched(false);if(current&&resumeReady)appendUx(lesson.id,{event:'teaching_scene_view',objectiveId:focus+1,scene:safeIndex+1,hasVisual:Boolean(visual),visualKind:visual?.kind||null})},[focus,safeIndex,current?.title,lesson.id,visual?.kind,resumeReady]);
  function stopSpeech(){try{window.speechSynthesis?.cancel()}catch{}setSpeaking(false)}
  function speakCurrent(){if(!speechAvailable||!current)return;if(speaking){stopSpeech();return}try{window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(`${current.title}. ${current.body}. ${current.prompt}`);utterance.lang=lesson.subject==='English'?'en-US':'ar';utterance.rate=lesson.subject==='English'?0.9:0.88;utterance.pitch=1;utterance.onend=()=>setSpeaking(false);utterance.onerror=()=>setSpeaking(false);setSpeaking(true);appendUx(lesson.id,{event:'scene_read_aloud',objectiveId:focus+1,scene:safeIndex+1});window.speechSynthesis.speak(utterance)}catch{setSpeaking(false)}}
@@ -54,6 +57,7 @@ export default function LearningCanvas({lesson,objectiveIndex}:{lesson:Lesson;ob
  function move(next:number){stopSpeech();const safe=Math.max(0,Math.min(steps.length-1,next));if(safeIndex===steps.length-1&&safe===safeIndex){finishObjective();return}setIndex(safe);setReflected(false);setVisualTouched(false)}
  function visualInteraction(){if(!visual||visualTouched)return;setVisualTouched(true);appendUx(lesson.id,{event:'teaching_visual_interaction',objectiveId:focus+1,scene:safeIndex+1,visual:visual.kind})}
  if(!current)return null;
+ const adaptiveCue=safeIndex===0&&adaptiveFamily?(lesson.subject==='English'?englishCue(adaptiveFamily):learningCue(adaptiveFamily)):null;
  return <section className={styles.canvas} aria-label="جربي واكتشفي">
   <div className={styles.top}>
    <div className={styles.guide}><span className={styles.guideIcon}>{subjectIcon}</span><div><small>جربي واكتشفي</small><strong>{current.label}</strong></div></div>
@@ -65,7 +69,7 @@ export default function LearningCanvas({lesson,objectiveIndex}:{lesson:Lesson;ob
    <p>{current.body}</p>
    {speechAvailable&&<button type="button" className={`${styles.listenButton} ${speaking?styles.speaking:''}`} onClick={speakCurrent} aria-pressed={speaking}>{speaking?'⏹ أوقفي الصوت':'🔊 اسمعي الفكرة'}</button>}
    {visual&&<div className={styles.visualStage} onClickCapture={visualInteraction}><TeachingSceneVisual spec={visual}/><CurriculumConceptVisual spec={visual}/><CurriculumExtraVisual spec={visual} lesson={lesson}/></div>}
-   <div className={styles.prompt}><span>💭</span><strong>{current.prompt}</strong></div>
+   <div className={styles.prompt}><span>💭</span><strong>{current.prompt}{adaptiveCue?` ${adaptiveCue}`:''}</strong></div>
   </div>
 
   {reflected&&<div className={styles.reflection}><span>✨</span><div><strong>خذي لحظة وفكري</strong><p>قولي الفكرة لنفسك بطريقتك، ثم كملي عندما تصبح واضحة.</p></div></div>}

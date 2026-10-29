@@ -103,7 +103,7 @@ export function refreshTeacherDecision(lesson:Lesson,report?:any){
  if(typeof window==='undefined')return null;
  const actualReport=report??readJson(`lesson:${lesson.id}:report`);if(!actualReport)return null;
  const existing=readJson(`lesson:${lesson.id}:teacherDecision`)||readJson(`teacherDecision:${lesson.id}`);
- if(existing?.manual===true||existing?.source==='objective_coverage'||existing?.source==='transfer_evidence')return existing;
+ if(existing?.manual===true)return existing;
  const decision=deriveTeacherEvidenceDecision(lesson,actualReport);if(!decision)return existing;
  const packed=JSON.stringify(decision);localStorage.setItem(`lesson:${lesson.id}:teacherDecision`,packed);localStorage.setItem(`teacherDecision:${lesson.id}`,packed);return decision;
 }

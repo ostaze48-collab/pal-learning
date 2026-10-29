@@ -53,6 +53,10 @@ jobs:
           for path in \
             /student/salma \
             /student/sama \
+            /student/salma/subject/math \
+            /student/salma/subject/arabic \
+            /student/sama/subject/science \
+            /student/sama/subject/english \
             /lesson/g5-science-cell-types \
             /lesson/g5-science-cell-types/reteach \
             '/lesson/g5-science-cell-types/refresh?objective=1' \

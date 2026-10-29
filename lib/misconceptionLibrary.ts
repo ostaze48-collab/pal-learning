@@ -41,6 +41,46 @@ const specs:MisconceptionSpec[]=[
   recheck:{prompt:'ماء مالح اختفى فيه الملح تمامًا. أي طريقة تساعد على استرجاع الملح؟',options:['الترشيح','التبخير','المغناطيس'],correctIndex:1,explanation:'الملح مذاب ويمر مع الماء عبر المرشح؛ بالتبخير يزول الماء وتبقى بلورات الملح.'}
  },
  {
+  id:'whole-times-fraction-changes-denominator',lessonId:'g5-math-whole-times-fraction',objectiveId:2,
+  wrongIdea:'عند ضرب عدد صحيح في كسر يجب ضرب البسط والمقام في العدد الصحيح معًا.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q1',wrongOptionIndexes:[3]},{signal:'wrong_choice',questionId:'q2',wrongOptionIndexes:[2]}],
+  prevention:{title:'ثبتي حجم الجزء أولًا',body:'في 2 × 3/4 نحن نأخذ مجموعتين من ثلاثة أرباع. حجم الجزء ما زال ربعًا، لذلك المقام 4 لا يتغير؛ الذي يزداد هو عدد الأجزاء.',prompt:'إذا كررنا ثلاثة أرباع مرتين، هل تغير حجم الربع نفسه أم عدد الأرباع؟',visualKind:'fraction_bar'},
+  correction:{title:'المقام يصف حجم الجزء',body:'العدد الصحيح يكرر عدد الأجزاء، لذلك نضربه في البسط. المقام يبقى لأنه يصف إلى كم جزء متساوٍ قُسم الواحد.',prompt:'في 4 × 1/3، كم ثلثًا أصبح لدينا؟',visualKind:'fraction_bar'},
+  recheck:{prompt:'ما التمثيل الصحيح لـ 3 × 2/5؟',options:['6/5','6/15','2/15'],correctIndex:0,explanation:'نكرر 2/5 ثلاث مرات، فيصبح لدينا 6 أخماس؛ المقام 5 لا يتغير.'}
+ },
+ {
+  id:'fraction-multiply-adds-parts',lessonId:'g5-math-fraction-times-fraction',objectiveId:1,
+  wrongIdea:'عند ضرب كسرين يمكن جمع البسطين وجمع المقامين بدل الضرب.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q1',wrongOptionIndexes:[1]}],
+  prevention:{title:'الضرب يعني جزءًا من جزء',body:'في 1/2 × 3/5 لا نجمع الكسرين؛ نحن نأخذ نصف ثلاثة أخماس. استخدمي شريط الكسر لتري أن العملية تصغر الكمية بدل أن تجمعها.',prompt:'هل نصف 3/5 يجب أن يكون أكبر من 3/5 أم أصغر؟',visualKind:'fraction_bar'},
+  correction:{title:'اضربي الأجزاء لا تجمعيها',body:'نضرب البسط في البسط والمقام في المقام لأننا نأخذ جزءًا من جزء: 1×3 على 2×5 = 3/10.',prompt:'ما الذي يجعل 4/7 غير منطقي كناتج لـ 1/2 × 3/5؟',visualKind:'fraction_bar'},
+  recheck:{prompt:'ما ناتج 2/3 × 1/4؟',options:['3/7','2/12','2/7'],correctIndex:1,explanation:'نضرب البسطين 2×1=2 والمقامين 3×4=12، فيكون الناتج 2/12 ثم يمكن تبسيطه.'}
+ },
+ {
+  id:'fraction-product-not-simplified',lessonId:'g5-math-fraction-times-fraction',objectiveId:3,
+  wrongIdea:'إذا وصلنا إلى كسر صحيح حسابيًا مثل 6/12 فالمهمة انتهت حتى لو كان يمكن تبسيطه.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q2',wrongOptionIndexes:[0]}],
+  prevention:{title:'ابحثي عن اسم أبسط لنفس الكمية',body:'بعد الضرب، قارني البسط والمقام: هل لهما عامل مشترك؟ شريط الكسر يريك أن 6/12 و1/2 يمثلان الكمية نفسها، لكن 1/2 أبسط.',prompt:'ما العدد الذي نستطيع قسمة 6 و12 عليه معًا؟',visualKind:'fraction_bar'},
+  correction:{title:'التبسيط لا يغيّر الكمية',body:'قسمة البسط والمقام على العامل نفسه تعطي اسمًا أبسط للكسر نفسه. 6/12 ÷ 6/6 = 1/2.',prompt:'كيف تعرفين أن 6/12 و1/2 متساويان؟',visualKind:'fraction_bar'},
+  recheck:{prompt:'ما أبسط صورة للكسر 8/12؟',options:['4/6','2/3','8/6'],correctIndex:1,explanation:'نقسم 8 و12 على 4 فنحصل على 2/3، وهي أبسط صورة.'}
+ },
+ {
+  id:'whole-div-fraction-does-not-invert-divisor',lessonId:'g5-math-whole-div-fraction',objectiveId:3,
+  wrongIdea:'في قسمة عدد صحيح على كسر نترك الكسر الثاني كما هو أو نقلب العدد الأول بدل قلب المقسوم عليه.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q2',wrongOptionIndexes:[0]},{signal:'wrong_choice',questionId:'q3',wrongOptionIndexes:[0]}],
+  prevention:{title:'اسألي كم جزءًا صغيرًا يوجد؟',body:'4 ÷ 1/2 يعني: كم نصفًا يوجد في أربعة؟ كل واحد فيه نصفان، لذلك الجواب 8. الضرب في مقلوب الكسر الثاني يعبر عن هذا المعنى.',prompt:'إذا كان في كل واحد نصفان، فكم نصفًا في 4؟',visualKind:'fraction_bar'},
+  correction:{title:'نقلب المقسوم عليه فقط',body:'نثبت العدد الأول، نحول القسمة إلى ضرب، ثم نقلب الكسر الذي نقسم عليه. 3 ÷ 2/5 = 3 × 5/2.',prompt:'أي كسر يمثل عدد الأخماس الموجودة في كل 2/5؟',visualKind:'fraction_bar'},
+  recheck:{prompt:'ما الخطوة الصحيحة في 5 ÷ 2/3؟',options:['5 × 2/3','5 × 3/2','1/5 × 2/3'],correctIndex:1,explanation:'نثبت 5 ونحوّل القسمة إلى ضرب ونقلب الكسر الثاني فقط: 5 × 3/2.'}
+ },
+ {
+  id:'fraction-division-inverts-wrong-fraction',lessonId:'g5-math-fraction-div-fraction',objectiveId:3,
+  wrongIdea:'في قسمة كسرين نقلب الكسر الأول أو نقلب الكسرين معًا.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q2',wrongOptionIndexes:[0,2]}],
+  prevention:{title:'الأول يبقى والثاني يتغير',body:'اعتبري الكسر الأول هو الكمية التي نملكها، والثاني هو حجم المجموعة التي نسأل كم مرة تدخل فيها. لذلك الكسر الأول يبقى كما هو، ونستخدم مقلوب الثاني لتحويل القسمة إلى ضرب.',prompt:'في 3/5 ÷ 2/7، أي كسر يمثل الكمية التي نبدأ بها؟',visualKind:'fraction_bar'},
+  correction:{title:'ثبتي الأول واقلبي الثاني',body:'اكتبي الخطوات ببطء: 3/5 ÷ 2/7 → 3/5 × 7/2. لا نقلب 3/5 لأنه هو المقسوم.',prompt:'بعد تحويل علامة القسمة إلى ضرب، أي كسر يتغير شكله؟',visualKind:'fraction_bar'},
+  recheck:{prompt:'أي تحويل صحيح لـ 4/7 ÷ 2/3؟',options:['7/4 × 3/2','4/7 × 3/2','7/4 × 2/3'],correctIndex:1,explanation:'نبقي الكسر الأول 4/7 كما هو ونقلب الكسر الثاني 2/3 إلى 3/2.'}
+ },
+ {
   id:'integers-bigger-absolute-means-bigger',lessonId:'g7-math-integers',objectiveId:3,
   wrongIdea:'العدد ذو القيمة المطلقة الأكبر هو دائمًا العدد الأكبر، حتى عندما يكون سالبًا.',
   detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q2'}],

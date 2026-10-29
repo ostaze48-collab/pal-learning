@@ -4,6 +4,7 @@ import type {Lesson} from '../../../lib/data';
 import {getTeachingScenes,type TeachingScene} from '../../../lib/teachingBlueprints';
 import {getTeachingVisual} from '../../../lib/teachingVisuals';
 import TeachingSceneVisual from './TeachingSceneVisual';
+import CurriculumConceptVisual from './CurriculumConceptVisual';
 import styles from './LearningCanvas.module.css';
 
 type CanvasStep=TeachingScene;
@@ -40,7 +41,7 @@ export default function LearningCanvas({lesson}:{lesson:Lesson}){
  const [active,setActive]=useState(false);const [focus,setFocus]=useState(0);const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);
  const steps=useMemo(()=>getSteps(lesson,focus),[lesson,focus]);const current=steps[index];const internalCount=Math.max(1,lesson.learningPoints.length);const visual=getTeachingVisual(lesson.id,focus+1,index+1);const subjectIcon=lesson.subject==='العلوم والحياة'?'🔬':lesson.subject==='الرياضيات'?'➗':lesson.subject==='اللغة العربية'?'📚':'🌍';
  useEffect(()=>{function sync(){try{const raw=localStorage.getItem(`lessonUx:${lesson.id}`);const events=raw?JSON.parse(raw):[];if(!Array.isArray(events))return;const phaseEvents=events.filter((e:any)=>e?.event==='phase_view');const currentPhase=phaseEvents.at(-1)?.phase;setActive(currentPhase==='build');const progressed=events.filter((e:any)=>e?.event==='internal_target_taught'||e?.event==='objective_covered').at(-1);const rawFocus=progressed?Number(progressed.target??progressed.objective??0):0;const nextFocus=Math.min(internalCount-1,Math.max(0,rawFocus));setFocus(v=>{if(v!==nextFocus){setIndex(0);setReflected(false);setVisualTouched(false)}return nextFocus})}catch{}}sync();const timer=window.setInterval(sync,350);return()=>window.clearInterval(timer)},[lesson.id,internalCount]);
- useEffect(()=>{setVisualTouched(false);if(active&&current)appendUx(lesson.id,{event:'teaching_scene_view',objectiveId:focus+1,scene:index+1,hasVisual:Boolean(visual)})},[active,focus,index,current?.title,lesson.id,visual?.kind]);
+ useEffect(()=>{setVisualTouched(false);if(active&&current)appendUx(lesson.id,{event:'teaching_scene_view',objectiveId:focus+1,scene:index+1,hasVisual:Boolean(visual),visualKind:visual?.kind||null})},[active,focus,index,current?.title,lesson.id,visual?.kind]);
  function move(next:number){const safe=Math.max(0,Math.min(steps.length-1,next));if(index===steps.length-1&&safe===index)appendUx(lesson.id,{event:'teaching_objective_experience_complete',objectiveId:focus+1});setIndex(safe);setReflected(false);setVisualTouched(false)}
  function visualInteraction(){if(!visual||visualTouched)return;setVisualTouched(true);appendUx(lesson.id,{event:'teaching_visual_interaction',objectiveId:focus+1,scene:index+1,visual:visual.kind})}
  if(!active||!current)return null;
@@ -53,7 +54,7 @@ export default function LearningCanvas({lesson}:{lesson:Lesson}){
   <div className={styles.scene}>
    <h3>{current.title}</h3>
    <p>{current.body}</p>
-   {visual&&<div className={styles.visualStage} onClickCapture={visualInteraction}><TeachingSceneVisual spec={visual}/></div>}
+   {visual&&<div className={styles.visualStage} onClickCapture={visualInteraction}><TeachingSceneVisual spec={visual}/><CurriculumConceptVisual spec={visual}/></div>}
    <div className={styles.prompt}><span>💭</span><strong>{current.prompt}</strong></div>
   </div>
 

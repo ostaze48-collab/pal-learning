@@ -23,7 +23,7 @@ export default function PracticeLab({slug,bank}:Props){
 
  if(phase==='setup')return <section className="practiceGame practiceSetupGame">
    <div className="practiceWorlds">{subjects.map(s=><button key={s} className={`practiceWorld ${subject===s?'active':''}`} onClick={()=>setSubject(s)}><span>{subjectIcon(s)}</span><strong>{s}</strong></button>)}</div>
-   <div className="practiceLength"><span>كم تريدين أن تطول الجولة؟</span><div>{[[5,'سريعة'],[10,'متوسطة'],[15,'طويلة']].map(([n,label])=><button key={n} className={count===n?'active':''} onClick={()=>setCount(Number(n))}><strong>{label}</strong><small>{n} أسئلة</small></button>)}</div></div>
+   <div className="practiceLength"><span>اختاري إيقاع الجولة</span><div>{[[5,'خفيفة','بضع دقائق'],[10,'ممتعة','وقت أكثر قليلًا'],[15,'مغامرة','جولة أطول']].map(([n,label,desc])=><button key={n} className={count===n?'active':''} onClick={()=>setCount(Number(n))}><strong>{label}</strong><small>{desc}</small></button>)}</div></div>
    <button className="practiceStart" onClick={start} disabled={!bank.some(q=>q.subject===subject)}>ابدئي الجولة <b>←</b></button>
  </section>;
 

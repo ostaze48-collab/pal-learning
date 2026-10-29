@@ -38,8 +38,8 @@ function stageMeta(sceneNumber:number){
  return {purpose:'representation' as const,scaffold:'full' as const};
 }
 function staged(kind:TeachingVisualKind,variant:string|undefined,sceneNumber:number):TeachingVisualSpec{return {kind,variant,...stageMeta(sceneNumber)}}
-function isMathFadedLesson(lessonId:string){return /prime|factor|gcf|lcm|fraction|decimal|integer|absolute-value|triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation|data|statistics|frequency|mean|median|mode|range|graph|chart|proportion|ratio|scale/.test(lessonId)}
-function isScienceFadedLesson(lessonId:string){return /cell-types|materials-properties|separation-methods|physical-chemical-changes|energy-forms|energy-transformations|energy-environment|translational-motion|distance-displacement|average-speed|constant-acceleration|newton|force|atom-structure|element-compound|important-compounds|chemical-reactions|atmospheric-pressure/.test(lessonId)}
+function isMathFadedLesson(lessonId:string){return /^g[57]-math-/.test(lessonId)&&!/-check$/.test(lessonId)}
+function isScienceFadedLesson(lessonId:string){return /^g[57]-science-/.test(lessonId)&&!/-check$/.test(lessonId)}
 function isEnglishFadedLesson(lessonId:string){return /^g[57]-en-/.test(lessonId)&&!/-check$/.test(lessonId)}
 function isArabicFadedLesson(lessonId:string){return /^g[57]-ar-/.test(lessonId)&&!/-check$/.test(lessonId)}
 

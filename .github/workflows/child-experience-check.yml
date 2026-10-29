@@ -57,7 +57,8 @@ jobs:
             /lesson/g5-science-cell-types/reteach \
             '/lesson/g5-science-cell-types/refresh?objective=1' \
             /student/salma/practice \
-            /student/salma/resources; do
+            /student/salma/resources \
+            /admin/learning; do
             echo "Checking $path"
             curl -fsSL "http://127.0.0.1:3000$path" > /dev/null || {
               cat /tmp/salma-sama-next.log

@@ -26,6 +26,8 @@ jobs:
         run: npm install
       - name: Child-facing copy guard
         run: npm run qa:child-copy
+      - name: Curriculum quality report
+        run: npm run qa:curriculum
       - name: Production build
         run: npm run build
       - name: Child journey route smoke test

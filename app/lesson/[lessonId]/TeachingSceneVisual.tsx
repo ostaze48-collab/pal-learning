@@ -1,6 +1,7 @@
 'use client';
 import {useMemo,useState} from 'react';
 import type {TeachingVisualSpec} from '../../../lib/teachingVisuals';
+import FadedMathVisual from './FadedMathVisual';
 import styles from './TeachingSceneVisual.module.css';
 
 export default function TeachingSceneVisual({spec}:{spec:TeachingVisualSpec}){
@@ -16,6 +17,7 @@ export default function TeachingSceneVisual({spec}:{spec:TeachingVisualSpec}){
  if(spec.kind==='pronoun_swap')return <PronounSwap/>;
  if(spec.kind==='question_blocks')return <QuestionBlocks variant={spec.variant}/>;
  if(spec.kind==='do_does')return <DoDoes/>;
+ if(spec.kind==='faded_math')return <FadedMathVisual spec={spec}/>;
  return null;
 }
 
@@ -41,4 +43,4 @@ function PronounSwap(){const [swap,setSwap]=useState(false);return <div classNam
 
 function QuestionBlocks({variant}:{variant?:string}){const source=variant==='does-base'?['Does','he','play','football?']:['Where','do','you','live?'];const scrambled=variant==='does-base'?['he','plays','Does','football?']:['you','Where','live?','do'];const [built,setBuilt]=useState<string[]>([]);return <div className={styles.visual}><span className={styles.title}>🧱 ابنِي السؤال من كتل</span><div className={styles.stage}><div style={{display:'grid',gap:12}}><div className={styles.blocks}>{scrambled.map(word=><button className={styles.block} disabled={built.includes(word)} onClick={()=>setBuilt(v=>[...v,word])} key={word}>{word}</button>)}</div><div className={styles.built}>{built.map((x,i)=><span className={styles.block} key={`${x}-${i}`}>{x}</span>)}</div><div className={styles.hint}>{built.length===source.length?(built.join(' ')===source.join(' ')?'ترتيب صحيح ✓':'قارني ترتيبك بالنمط: question word / auxiliary / subject / verb'):'اختاري الكلمات بالترتيب الذي يصنع سؤالًا صحيحًا.'}</div></div></div>{built.length>0&&<button className={styles.button} onClick={()=>setBuilt([])}>ابدئي الترتيب من جديد</button>}</div>}
 
-function DoDoes(){const [subject,setSubject]=useState('she');const useDoes=['he','she','it'].includes(subject);return <div className={styles.visual}><span className={styles.title}>💬 اختاري الفاعل ثم لاحظي المساعد</span><div className={styles.stage}><div className={styles.doDoes}><div className={styles.aux}><small>Subject</small><strong>{subject}</strong></div><div className={styles.aux}><small>Question helper</small><strong>{useDoes?'Does':'Do'}</strong></div></div></div><div className={styles.actions}>{['you','we','they','he','she'].map(x=><button className={`${styles.button} ${subject===x?styles.active:''}`} onClick={()=>setSubject(x)} key={x}>{x}</button>)}</div></div>}
+function DoDoes(){const [subject,setSubject]=useState('she');const useDoes=['he','she','it'].includes(subject);return <div className={styles.visual}><span className={styles.title}>💬 اختاري الفاعل ثم لاحظي المساعد</span><div className={styles.stage}><div className={styles.doDoes}><div className={styles.aux}><small>Subject</small><strong>{subject}</strong></div><div className={styles.aux}><small>Question helper</small><strong>{useDoes?'Does':'Do'}</strong></div></div></div><div className={styles.actions}>{['you','we','they','he','she'].map(x=><button className={`${styles.button} ${subject===x?styles.active:''}`} onClick={()=>setSubject(x)} key={x}>{x}</button>)}</div></div>

@@ -1,7 +1,8 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
-import {getTeachingScenes,type TeachingScene} from '../../../lib/teachingBlueprints';
+import {getDirectedTeachingScenes} from '../../../lib/lessonDirector';
+import type {TeachingScene} from '../../../lib/teachingBlueprints';
 import {getTeachingVisual} from '../../../lib/teachingVisuals';
 import TeachingSceneVisual from './TeachingSceneVisual';
 import CurriculumConceptVisual from './CurriculumConceptVisual';
@@ -36,7 +37,7 @@ function englishSteps(lesson:Lesson,focus:number):CanvasStep[]{return [
  {icon:'🧩',label:'Build',title:'Build it yourself',body:evidenceText(lesson,focus),prompt:'How would you explain the pattern simply?'},
  {icon:'💬',label:'Use',title:'Try a new situation',body:'Make a new sentence with the same idea.',prompt:'What changed and what stayed the same?'}
 ]}
-function getSteps(lesson:Lesson,focus:number){const explicit=getTeachingScenes(lesson,focus);if(explicit?.length)return explicit;if(lesson.subject==='العلوم والحياة')return scienceSteps(lesson,focus);if(lesson.subject==='الرياضيات')return mathSteps(lesson,focus);if(lesson.subject==='اللغة العربية')return arabicSteps(lesson,focus);if(lesson.subject==='English')return englishSteps(lesson,focus);return mathSteps(lesson,focus)}
+function getSteps(lesson:Lesson,focus:number){const directed=getDirectedTeachingScenes(lesson,focus);if(directed?.length)return directed;if(lesson.subject==='العلوم والحياة')return scienceSteps(lesson,focus);if(lesson.subject==='الرياضيات')return mathSteps(lesson,focus);if(lesson.subject==='اللغة العربية')return arabicSteps(lesson,focus);if(lesson.subject==='English')return englishSteps(lesson,focus);return mathSteps(lesson,focus)}
 function appendUx(lessonId:string,event:Record<string,unknown>){try{const key=`lessonUx:${lessonId}`;const raw=localStorage.getItem(key);const old=raw?JSON.parse(raw):[];const next=Array.isArray(old)?old.slice(-199):[];next.push({at:new Date().toISOString(),...event});localStorage.setItem(key,JSON.stringify(next))}catch{}}
 
 export default function LearningCanvas({lesson,objectiveIndex}:{lesson:Lesson;objectiveIndex:number}){

@@ -4,6 +4,7 @@ import {getExplicitEvidenceSpecs} from './evidenceSpecs';
 import {getEvidenceSpecExtensions} from './evidenceSpecsExtensions';
 import {getLanguageEvidenceSpecs} from './evidenceLanguageSpecs';
 import {getPriorityEvidenceSpecs} from './evidencePrioritySpecs';
+import {getMathMechanicsEvidenceSpecs} from './evidenceMathMechanicsSpecs';
 import {getMisconceptions} from './misconceptionLibrary';
 
 export type EvidenceKind='recognize'|'apply'|'explain'|'construct'|'compare'|'correct_error'|'transfer';
@@ -97,11 +98,12 @@ function preferredStructuredInteraction(lesson:Lesson,objective:string,kind:Evid
 }
 
 function explicitTasks(lesson:Lesson):EvidenceTask[]|null{
+ const mechanics=getMathMechanicsEvidenceSpecs(lesson.id)||[];
  const priority=getPriorityEvidenceSpecs(lesson.id)||[];
  const language=getLanguageEvidenceSpecs(lesson.id)||[];
  const extensions=getEvidenceSpecExtensions(lesson.id)||[];
  const base=getExplicitEvidenceSpecs(lesson.id)||[];
- const specs=[...priority,...language,...extensions,...base];if(!specs.length)return null;
+ const specs=[...mechanics,...priority,...language,...extensions,...base];if(!specs.length)return null;
  return specs.map(spec=>{
    const q=spec.questionId?lesson.questions.find(x=>x.id===spec.questionId):undefined;
    const deep=spec.interaction==='short_text';

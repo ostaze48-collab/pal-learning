@@ -5,10 +5,11 @@ import type {Lesson} from '../../../lib/data';
 import {recoverySkills} from '../../../lib/recoverySkills';
 import {getDeepDiagnostic} from '../../../lib/deepDiagnostics';
 import {buildKnowledgeMap} from '../../../lib/masteryEngine';
+import {getDueObjectiveReviews} from '../../../lib/objectiveRetention';
 import {getNextOpenFoundationGoal} from '../../../lib/foundationGoals';
 import {getOpenFoundationSignals} from '../../../lib/foundationSignals';
 
-type Task={id:string;href:string;title:string;subject:string;minutes:number;type:'review'|'reteach'|'new'|'assessment'|'recovery'};
+type Task={id:string;href:string;title:string;subject:string;minutes:number;type:'review'|'reteach'|'retention'|'new'|'assessment'|'recovery'};
 type SavedPlan={skillId:string;average:number;weak:Array<{id:string;title:string;gradeAnchor:string;score:number}>};
 type TeacherDecision={decision:'advance'|'review'|'targeted_reteach';reviewAt?:string;focus?:string};
 
@@ -22,7 +23,8 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
      if(rawDecision){try{const decision=JSON.parse(rawDecision) as TeacherDecision;if(decision.decision==='targeted_reteach'){const rawCooldown=localStorage.getItem(`lesson:${l.id}:reteachCooldownUntil`);const cooldownUntil=rawCooldown?new Date(rawCooldown).getTime():0;if(!Number.isFinite(cooldownUntil)||cooldownUntil<=now){reviews.push({id:l.id,href:`/lesson/${l.id}/reteach`,title:`نجرب ${l.title} بطريقة ثانية`,subject:l.subject,minutes:8,type:'reteach'})}teacherHandled=true}else if(decision.decision==='review'){const due=decision.reviewAt?new Date(decision.reviewAt).getTime()<=now:false;if(due){reviews.push({id:l.id,href:`/lesson/${l.id}`,title:l.title,subject:l.subject,minutes:5,type:'review'});teacherHandled=true}}}catch{}}
      if(teacherHandled)return;let due=false;const rawReview=localStorage.getItem(`lesson:${l.id}:review`);if(rawReview){try{const meta=JSON.parse(rawReview);due=new Date(meta.dueAt).getTime()<=now}catch{}}const rawReport=localStorage.getItem(`lesson:${l.id}:report`);if(rawReport){try{const report=JSON.parse(rawReport);if(report.status==='review_needed'){const reportDue=report.reviewDue?new Date(report.reviewDue).getTime()<=now:true;if(reportDue)due=true}}catch{}}if(due)reviews.push({id:l.id,href:`/lesson/${l.id}`,title:l.title,subject:l.subject,minutes:5,type:'review'});
    });
-   reviews.sort((a,b)=>a.type===b.type?0:a.type==='reteach'?-1:b.type==='reteach'?1:0);
+   if(slug){const dueObjective=getDueObjectiveReviews(slug,now,1)[0];if(dueObjective){const lesson=dueObjective.lesson;const objectiveId=dueObjective.record.objectiveId;const urgentForSameLesson=reviews.some(t=>t.type==='reteach'&&t.id===lesson.id);if(!urgentForSameLesson){for(let i=reviews.length-1;i>=0;i--){if(reviews[i].type==='review'&&reviews[i].id===lesson.id)reviews.splice(i,1)}reviews.push({id:`retention:${lesson.id}:${objectiveId}`,href:`/lesson/${lesson.id}/refresh?objective=${objectiveId}`,title:`جولة صغيرة من ${lesson.title}`,subject:lesson.subject,minutes:4,type:'retention'})}}}
+   const priority=(task:Task)=>task.type==='reteach'?0:task.type==='retention'?1:2;reviews.sort((a,b)=>priority(a)-priority(b));
    const newTasks:Task[]=[];const subjects=[...new Set(incomplete.map(l=>l.subject))];subjects.forEach(subject=>{const subjectIncomplete=incomplete.filter(l=>l.subject===subject);const nodeFor=(l:Lesson)=>knowledgeNodes.find(n=>n.id===`lesson:${l.id}`);const picked=subjectIncomplete.find(l=>l.kind!=='assessment'&&nodeFor(l)?.readinessStatus==='ready')??subjectIncomplete.find(l=>l.kind!=='assessment'&&nodeFor(l)?.readinessStatus==='check')??subjectIncomplete.find(l=>l.kind==='assessment'&&nodeFor(l)?.readinessStatus==='ready')??subjectIncomplete.find(l=>l.kind==='assessment'&&nodeFor(l)?.readinessStatus==='check');if(picked)newTasks.push({id:picked.id,href:`/lesson/${picked.id}`,title:picked.title,subject:picked.subject,minutes:picked.kind==='assessment'?Math.min(picked.minutes,15):Math.min(picked.minutes,18),type:picked.kind==='assessment'?'assessment':'new'})});
 
    let recoveryTask:Task|undefined;let severeGap=false;
@@ -45,14 +47,14 @@ export default function DailyPlan({lessons}:{lessons:Lesson[]}){
  if(!ready)return <section className="dailyPlan"><div className="muted">✨ أجهز لكِ مهمة اليوم…</div></section>;
  if(tasks.length===0)return <section className="dailyPlan celebrationPlan"><div><span className="tag">مهمة اليوم</span><h2>رائع! أنجزتِ ما عليكِ 🎉</h2><p className="muted">يمكنك اختيار درس تحبينه أو أخذ استراحة.</p></div></section>;
  const icon=(subject:string)=>subject==='الرياضيات'?'➗':subject==='العلوم والحياة'?'🔬':subject==='اللغة العربية'?'📚':'🌍';
- const taskIcon=(task:Task)=>task.type==='review'?'🔄':task.type==='reteach'?'✨':task.type==='assessment'?'🏆':task.type==='recovery'?'⚡':icon(task.subject);
- const taskLabel=(task:Task)=>task.type==='review'?'جولة سريعة':task.type==='reteach'?'طريقة ثانية':task.type==='assessment'?'تحدٍ قصير':task.type==='recovery'?'تحدٍ سريع':task.subject;
+ const taskIcon=(task:Task)=>task.type==='review'?'🔄':task.type==='reteach'?'✨':task.type==='retention'?'🧠':task.type==='assessment'?'🏆':task.type==='recovery'?'⚡':icon(task.subject);
+ const taskLabel=(task:Task)=>task.type==='review'?'جولة سريعة':task.type==='reteach'?'طريقة ثانية':task.type==='retention'?'تثبيت سريع':task.type==='assessment'?'تحدٍ قصير':task.type==='recovery'?'تحدٍ سريع':task.subject;
  const primary=tasks[0];const later=tasks.slice(1);
  return <section className="dailyPlan focusPlan">
-   <div className="dailyPlanHead focusPlanHead"><div><span className="tag">⭐ مهمتك الآن</span><h2>{recoveryFirst?'نبدأ بتحدٍ سريع':teacherFirst?'نجربها بطريقة ثانية':'خطوة واحدة الآن'}</h2><p>{recoveryFirst?'ننجز هذه الخطوة الصغيرة ثم نعود مباشرة إلى رحلتك.':teacherFirst?'نرى الفكرة من زاوية جديدة، وبعدها نكمل.':'ركزي على هذه المهمة فقط. ما بعدها ينتظر حتى تنتهي.'}</p></div></div>
+   <div className="dailyPlanHead focusPlanHead"><div><span className="tag">⭐ مهمتك الآن</span><h2>{recoveryFirst?'نبدأ بتحدٍ سريع':teacherFirst?'نجربها بطريقة ثانية':primary.type==='retention'?'نسترجع فكرة صغيرة':'خطوة واحدة الآن'}</h2><p>{recoveryFirst?'ننجز هذه الخطوة الصغيرة ثم نعود مباشرة إلى رحلتك.':teacherFirst?'نرى الفكرة من زاوية جديدة، وبعدها نكمل.':primary.type==='retention'?'سؤال قصير من درس سابق، ثم نعود مباشرة لما بعده.':'ركزي على هذه المهمة فقط. ما بعدها ينتظر حتى تنتهي.'}</p></div></div>
    <div className={`focusTask ${primary.type}`}>
      <div className="focusTaskIcon">{taskIcon(primary)}</div>
-     <div className="focusTaskCopy"><small>{taskLabel(primary)} · {primary.minutes} دقائق تقريبًا</small><h3>{primary.title}</h3><p>{primary.type==='assessment'?'جاهزة لتحدٍ صغير؟':primary.type==='reteach'?'هذه المرة سنراها بطريقة مختلفة.':primary.type==='recovery'?'لعبة قصيرة ثم نكمل.':'ابدئي عندما تكونين جاهزة.'}</p></div>
+     <div className="focusTaskCopy"><small>{taskLabel(primary)} · {primary.minutes} دقائق تقريبًا</small><h3>{primary.title}</h3><p>{primary.type==='assessment'?'جاهزة لتحدٍ صغير؟':primary.type==='reteach'?'هذه المرة سنراها بطريقة مختلفة.':primary.type==='retention'?'جربيها من ذاكرتك أولًا.':primary.type==='recovery'?'لعبة قصيرة ثم نكمل.':'ابدئي عندما تكونين جاهزة.'}</p></div>
      <Link className="focusTaskAction" href={primary.href} onClick={()=>{if(primary.type==='review')localStorage.setItem(`lesson:${primary.id}:reviewMode`,'1')}}>ابدئي الآن <b>←</b></Link>
    </div>
    {later.length>0&&<div className="upNext"><span>بعدها</span><div className="upNextRail">{later.map(task=><div className="upNextItem" key={`${task.type}-${task.id}`} title={task.title}><i>{taskIcon(task)}</i><small>{taskLabel(task)}</small></div>)}</div></div>}

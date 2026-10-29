@@ -3,6 +3,7 @@ import {useEffect} from 'react';
 import type {Lesson} from '../../../lib/data';
 import {evaluateObjectiveCoverage} from '../../../lib/objectiveCoverage';
 import {combineMasteryEvidence} from '../../../lib/masteryEvidence';
+import {refreshTeacherDecision} from '../../../lib/masteryEngine';
 import {getTeachingScenes} from '../../../lib/teachingBlueprints';
 
 function readJson(key:string){try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null}catch{return null}}
@@ -44,7 +45,7 @@ export default function ObjectiveCoverageBridge({lesson}:{lesson:Lesson}){
        });
        const teachingIncomplete=explicitMissing.length>0;
        const enhancedStatus=teachingIncomplete?'review_needed':enhanced.status;
-       const enhancedReason=teachingIncomplete?'جزء من تجربة الشرح المصممة لم يُستكمل بعد؛ لا نعتمد الإتقان قبل المرور به.':enhanced.reason;
+       const enhancedReason=teachingIncomplete?'جزء من تجربة الشرح المصممة لم يُستكمل بعد؛ لا نعتمد النتيجة قبل المرور به.':enhanced.reason;
        const enhancedReport={...report,mastery:enhanced.mastery,masteryConfidence:teachingIncomplete?Math.min(enhanced.confidence,60):enhanced.confidence,objectiveEvidenceScore:enhanced.objectiveEvidenceScore,transferScore:enhanced.transferScore,evidenceReason:enhancedReason,status:enhancedStatus,richEvidenceIncluded:true,teachingComplete:!teachingIncomplete};
        localStorage.setItem(`lesson:${lesson.id}:report`,JSON.stringify(enhancedReport));
        if(enhancedStatus==='review_needed'){
@@ -59,15 +60,9 @@ export default function ObjectiveCoverageBridge({lesson}:{lesson:Lesson}){
        const existingDecision=readJson(`teacherDecision:${lesson.id}`)||readJson(`lesson:${lesson.id}:teacherDecision`);
        if(existingDecision?.manual!==true){
          if(teachingIncomplete){
-           const decision={decision:'review',focus:'إكمال تجربة التعلم قبل اعتماد النتيجة',reason:'تم تجاوز جزء من تجربة الشرح المخصصة؛ لا ننسب ذلك إلى فجوة لدى الطفلة، بل نعيدها لإكمال تجربة التعلم.',confidence:95,objectiveIds:explicitMissing,source:'teaching_gate',generatedAt:new Date().toISOString()};
+           const decision={decision:'review',focus:'إكمال تجربة التعلم قبل اعتماد النتيجة',reason:'تم تجاوز جزء من تجربة الشرح المخصصة؛ لا ننسب ذلك إلى مشكلة لدى الطفلة، بل نعيدها لإكمال تجربة التعلم.',confidence:95,objectiveIds:explicitMissing,source:'teaching_gate',generatedAt:new Date().toISOString()};
            localStorage.setItem(`teacherDecision:${lesson.id}`,JSON.stringify(decision));localStorage.setItem(`lesson:${lesson.id}:teacherDecision`,JSON.stringify(decision));
-         }else if(coverage.needsSupport.length){
-           const decision={decision:'targeted_reteach',focus:'جزء من الدرس يحتاج تثبيتًا قصيرًا',reason:`أدلة مباشرة أظهرت أن الأهداف الداخلية ${coverage.needsSupport.join(', ')} تحتاج دعمًا إضافيًا.`,confidence:Math.max(88,enhanced.confidence),objectiveIds:coverage.needsSupport,source:'objective_coverage',generatedAt:new Date().toISOString()};
-           localStorage.setItem(`teacherDecision:${lesson.id}`,JSON.stringify(decision));localStorage.setItem(`lesson:${lesson.id}:teacherDecision`,JSON.stringify(decision));
-         }else if(transferStatus==='needs_support'){
-           const decision={decision:'targeted_reteach',focus:`نقل فكرة ${lesson.title} إلى موقف جديد`,reason:'فهم الدرس الأساسي موجود، لكن دليل النقل كشف صعوبة في استخدام الفكرة عندما تغير السياق. المطلوب مثال جديد مختلف السطح ثم إعادة قياس قصيرة.',confidence:Math.max(88,enhanced.confidence),gapType:'transfer_gap',source:'transfer_evidence',generatedAt:new Date().toISOString()};
-           localStorage.setItem(`teacherDecision:${lesson.id}`,JSON.stringify(decision));localStorage.setItem(`lesson:${lesson.id}:teacherDecision`,JSON.stringify(decision));
-         }
+         }else refreshTeacherDecision(lesson,enhancedReport);
        }
 
        if(coverage.needsStrongerEvidence.length||teachingIncomplete){

@@ -41,6 +41,22 @@ const specs:MisconceptionSpec[]=[
   recheck:{prompt:'ماء مالح اختفى فيه الملح تمامًا. أي طريقة تساعد على استرجاع الملح؟',options:['الترشيح','التبخير','المغناطيس'],correctIndex:1,explanation:'الملح مذاب ويمر مع الماء عبر المرشح؛ بالتبخير يزول الماء وتبقى بلورات الملح.'}
  },
  {
+  id:'materials-chosen-by-appearance',lessonId:'g5-science-materials-properties',objectiveId:2,
+  wrongIdea:'نختار المادة للاستخدام بحسب شكلها أو لونها، وليس بحسب الخاصية التي يحتاجها الاستخدام.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q2',wrongOptionIndexes:[1,2]}],
+  prevention:{title:'ابدئي من المهمة لا من الشكل',body:'قبل اختيار المادة، اسألي ما الذي يجب أن تفعله: توصل الكهرباء أم تمنعها؟ تكون صلبة أم مرنة؟ الخاصية المطلوبة هي التي تقود الاختيار.',prompt:'غطاء السلك يجب أن يوصل الكهرباء أم يمنع مرورها إلى اليد؟',visualKind:'material_properties'},
+  correction:{title:'اربطي الاستخدام بالخاصية',body:'المعدن مناسب داخل السلك لأنه موصل، بينما البلاستيك مناسب خارجه لأنه عازل. اللون والشكل لا يفسران سبب الاختيار.',prompt:'أي خاصية للبلاستيك تجعله مناسبًا لتغطية السلك؟',visualKind:'material_properties'},
+  recheck:{prompt:'نريد مقبضًا لأداة ساخنة. أي خاصية أهم عند اختيار المادة؟',options:['أن تكون عازلة للحرارة','أن يكون لونها لامعًا','أن تذوب بسرعة'],correctIndex:0,explanation:'الوظيفة المطلوبة هي حماية اليد من الحرارة، لذلك نحتاج مادة عازلة للحرارة.'}
+ },
+ {
+  id:'visible-change-means-chemical',lessonId:'g5-science-physical-chemical-changes',objectiveId:1,
+  wrongIdea:'أي تغير واضح في الشكل أو الحالة يعني أن مادة جديدة تكونت وأن التغير كيميائي.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q1',wrongOptionIndexes:[1]}],
+  prevention:{title:'اسألي: هل ظهرت مادة جديدة؟',body:'الانصهار يغير حالة المادة فقط؛ الثلج يصبح ماءً لكنه ما زال المادة نفسها. التغير الكيميائي يحتاج دليلًا على تكوّن مادة جديدة.',prompt:'بعد ذوبان الثلج، هل أصبحت المادة شيئًا غير الماء؟',visualKind:'reaction_lab'},
+  correction:{title:'الشكل وحده لا يكفي',body:'قد يكون التغير كبيرًا وواضحًا لكنه فيزيائي إذا لم تتكون مادة جديدة. الانصهار والتجمد يغيران الحالة لا هوية المادة.',prompt:'ما السؤال الذي يفرق بين التغير الفيزيائي والكيميائي؟',visualKind:'reaction_lab'},
+  recheck:{prompt:'سحق قطعة طباشير إلى مسحوق دون تكوّن مادة جديدة هو تغير:',options:['فيزيائي','كيميائي'],correctIndex:0,explanation:'تغير الشكل فقط ولم تتكون مادة جديدة، لذلك التغير فيزيائي.'}
+ },
+ {
   id:'whole-times-fraction-changes-denominator',lessonId:'g5-math-whole-times-fraction',objectiveId:2,
   wrongIdea:'عند ضرب عدد صحيح في كسر يجب ضرب البسط والمقام في العدد الصحيح معًا.',
   detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q1',wrongOptionIndexes:[3]},{signal:'wrong_choice',questionId:'q2',wrongOptionIndexes:[2]}],
@@ -79,6 +95,30 @@ const specs:MisconceptionSpec[]=[
   prevention:{title:'الأول يبقى والثاني يتغير',body:'اعتبري الكسر الأول هو الكمية التي نملكها، والثاني هو حجم المجموعة التي نسأل كم مرة تدخل فيها. لذلك الكسر الأول يبقى كما هو، ونستخدم مقلوب الثاني لتحويل القسمة إلى ضرب.',prompt:'في 3/5 ÷ 2/7، أي كسر يمثل الكمية التي نبدأ بها؟',visualKind:'fraction_bar'},
   correction:{title:'ثبتي الأول واقلبي الثاني',body:'اكتبي الخطوات ببطء: 3/5 ÷ 2/7 → 3/5 × 7/2. لا نقلب 3/5 لأنه هو المقسوم.',prompt:'بعد تحويل علامة القسمة إلى ضرب، أي كسر يتغير شكله؟',visualKind:'fraction_bar'},
   recheck:{prompt:'أي تحويل صحيح لـ 4/7 ÷ 2/3؟',options:['7/4 × 3/2','4/7 × 3/2','7/4 × 2/3'],correctIndex:1,explanation:'نبقي الكسر الأول 4/7 كما هو ونقلب الكسر الثاني 2/3 إلى 3/2.'}
+ },
+ {
+  id:'atom-neutrality-neutron-confusion',lessonId:'g7-science-atom-structure',objectiveId:4,
+  wrongIdea:'تعادل الذرة يعتمد على عدد النيوترونات، أو يكفي وجود نواة متعادلة حتى تكون الذرة كلها متعادلة.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q3',wrongOptionIndexes:[1,2]}],
+  prevention:{title:'وازني الموجب مع السالب',body:'الشحنة الكلية تأتي من البروتونات الموجبة والإلكترونات السالبة. النيوترونات لا تضيف شحنة، لذلك الذرة المتعادلة تحتاج عددًا متساويًا من البروتونات والإلكترونات.',prompt:'إذا كان لدينا 8 شحنات موجبة، كم شحنة سالبة نحتاج ليصبح المجموع صفرًا؟',visualKind:'atom_builder'},
+  correction:{title:'النيوترون لا يوازن الشحنة',body:'البروتون +1 والإلكترون -1، وهما اللذان يوازنان بعضهما. النيوترون شحنته صفر، لذلك لا يغير صافي الشحنة.',prompt:'ذرة فيها 6 بروتونات و6 إلكترونات: ما صافي الشحنة؟',visualKind:'atom_builder'},
+  recheck:{prompt:'ذرة متعادلة تحتوي 11 بروتونًا. كم إلكترونًا تحتوي؟',options:['11','22','10'],correctIndex:0,explanation:'في الذرة المتعادلة يتساوى عدد البروتونات الموجبة والإلكترونات السالبة.'}
+ },
+ {
+  id:'compound-is-element-or-mixture',lessonId:'g7-science-important-compounds',objectiveId:1,
+  wrongIdea:'المركب هو مجرد عنصر له رمز، أو خليط يمكن فصل مكوناته دون تغير كيميائي.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q1',wrongOptionIndexes:[1,2]}],
+  prevention:{title:'ابحثي عن أكثر من عنصر مرتبط كيميائيًا',body:'المركب يتكون من عنصرين أو أكثر متحدين كيميائيًا بنسبة محددة. الصيغة H₂O تخبرنا بوجود نوعين من العناصر مرتبطين في مادة واحدة.',prompt:'كم نوعًا من العناصر يظهر في H₂O؟',visualKind:'atom_builder'},
+  correction:{title:'العنصر نوع واحد، المركب أكثر من نوع',body:'Fe يمثل عنصر الحديد، بينما H₂O وNaCl يحتويان أكثر من عنصر متحد كيميائيًا. المركب له خواصه الخاصة وليس مجرد وضع العناصر جنبًا إلى جنب.',prompt:'ما الدليل في الصيغة NaCl على أنها مركب؟',visualKind:'atom_builder'},
+  recheck:{prompt:'أي مما يلي مركب؟',options:['O₂','NaCl','Fe'],correctIndex:1,explanation:'NaCl يحتوي عنصرين مختلفين، الصوديوم والكلور، متحدين كيميائيًا.'}
+ },
+ {
+  id:'reaction-atoms-disappear',lessonId:'g7-science-chemical-reactions',objectiveId:4,
+  wrongIdea:'أثناء التفاعل الكيميائي تختفي الذرات القديمة وتظهر ذرات جديدة من العدم.',
+  detection:[{signal:'objective_failure'},{signal:'wrong_choice',questionId:'q3',wrongOptionIndexes:[2]}],
+  prevention:{title:'اتبعي الذرات قبل وبعد',body:'في التفاعل الكيميائي لا نحتاج أن تختفي الذرات؛ ما يتغير هو طريقة ارتباطها وترتيبها لتكوين مواد جديدة.',prompt:'إذا بقيت أنواع الذرات نفسها، فما الذي يمكن أن يتغير ليظهر مركب جديد؟',visualKind:'reaction_lab'},
+  correction:{title:'التفاعل يعيد الترتيب',body:'المتفاعلات تتحول إلى نواتج لأن الروابط والترتيب يتغيران. الذرات نفسها يعاد تنظيمها بدل أن تختفي.',prompt:'ما الفرق بين تغير الذرات نفسها وتغير طريقة ارتباطها؟',visualKind:'reaction_lab'},
+  recheck:{prompt:'ماذا يحدث للذرات في تفاعل كيميائي بصورة مبسطة؟',options:['يعاد ترتيبها لتكوين مواد جديدة','تختفي تمامًا','تبقى المواد كما هي بلا تغير'],correctIndex:0,explanation:'الذرات يعاد ترتيبها وارتباطها لتكوين مواد جديدة.'}
  },
  {
   id:'integers-bigger-absolute-means-bigger',lessonId:'g7-math-integers',objectiveId:3,

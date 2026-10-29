@@ -2,23 +2,12 @@
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
-
-type ActiveSession={lesson:Lesson;updatedAt:number};
+import {findMostRecentActiveLesson} from '../../../lib/activeLessonSession';
 
 export default function WorldContinueButton({lessons}:{lessons:Lesson[]}){
  const [next,setNext]=useState<Lesson|null>(null);const [resuming,setResuming]=useState(false);const [ready,setReady]=useState(false);
  useEffect(()=>{
-  const active:ActiveSession[]=[];
-  for(const lesson of lessons){
-   if(localStorage.getItem(`lesson:${lesson.id}`)==='done')continue;
-   try{
-    const raw=localStorage.getItem(`lesson:${lesson.id}:session`);if(!raw)continue;
-    const saved=JSON.parse(raw);const updatedAt=Date.parse(String(saved?.updatedAt||''));
-    if(Number.isFinite(updatedAt))active.push({lesson,updatedAt});
-   }catch{}
-  }
-  active.sort((a,b)=>b.updatedAt-a.updatedAt);
-  const resumed=active[0]?.lesson||null;
+  const resumed=findMostRecentActiveLesson(lessons);
   const first=lessons.find(lesson=>localStorage.getItem(`lesson:${lesson.id}`)!=='done')||null;
   setNext(resumed||first);setResuming(Boolean(resumed));setReady(true);
  },[lessons]);

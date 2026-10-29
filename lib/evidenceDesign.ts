@@ -95,8 +95,7 @@ function explicitTasks(lesson:Lesson):EvidenceTask[]|null{
  });
 }
 
-export function buildEvidenceTasks(lesson:Lesson):EvidenceTask[]{
- const explicit=explicitTasks(lesson);if(explicit)return explicit;
+function generatedEvidenceTasks(lesson:Lesson):EvidenceTask[]{
  const objectives=lesson.learningPoints.length?lesson.learningPoints:[lesson.summary];
  const map=buildObjectiveQuestionMap(lesson);
  const prepared=objectives.map((objective,index)=>{
@@ -111,6 +110,15 @@ export function buildEvidenceTasks(lesson:Lesson):EvidenceTask[]{
    const mustWrite=!q?.options?.length;const deep=mustWrite||deepIndexes.has(index);const interaction:EvidenceInteraction=deep?'short_text':'choice';
    return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),questionId:q?.id||null,options:interaction==='choice'?q?.options:undefined,correctIndex:interaction==='choice'?q?.correct:undefined,explanation:q?.explanation,quality,depth:deep?'deep':'quick'};
  });
+}
+
+export function buildEvidenceTasks(lesson:Lesson):EvidenceTask[]{
+ const generated=generatedEvidenceTasks(lesson);
+ const explicit=explicitTasks(lesson);
+ if(!explicit)return generated;
+ const byObjective=new Map<number,EvidenceTask>();
+ for(const task of explicit){if(task.objectiveId>=1&&task.objectiveId<=generated.length&&!byObjective.has(task.objectiveId))byObjective.set(task.objectiveId,task)}
+ return generated.map(task=>byObjective.get(task.objectiveId)||task);
 }
 
 export function buildTransferTask(lesson:Lesson):EvidenceTask{

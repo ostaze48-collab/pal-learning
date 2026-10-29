@@ -1,6 +1,7 @@
 'use client';
 import {useMemo,useState} from 'react';
 import type {TeachingVisualSpec} from '../../../lib/teachingVisuals';
+import FadedScienceVisual from './FadedScienceVisual';
 import styles from './TeachingSceneVisual.module.css';
 
 type Challenge={title:string;prompt:string;options:string[];correct:number;success:string};
@@ -24,6 +25,7 @@ function challengeFor(spec:TeachingVisualSpec):Challenge{
 }
 
 export default function FadedMathVisual({spec}:{spec:TeachingVisualSpec}){
+ const id=lessonId(spec.variant);if(/-science-/.test(id))return <FadedScienceVisual spec={spec}/>;
  const challenge=useMemo(()=>challengeFor(spec),[spec.variant]);const [picked,setPicked]=useState<number|null>(null);const correct=picked===challenge.correct;
  return <div className={styles.visual}><span className={styles.title}>🎯 {challenge.title}</span><div className={styles.stage}><div style={{display:'grid',gap:12,width:'100%'}}><strong style={{fontSize:18,lineHeight:1.7}}>{challenge.prompt}</strong><div className={styles.actions}>{challenge.options.map((option,index)=><button type="button" key={option} className={`${styles.button} ${picked===index?(index===challenge.correct?styles.active:''):''}`} onClick={()=>setPicked(index)}>{option}</button>)}</div>{picked!==null&&<div className={styles.hint}>{correct?`✓ ${challenge.success}`:'قريبة. ارجعي للعلاقة التي اكتشفتِها في المشهد السابق ثم جرّبي خيارًا آخر.'}</div>}</div></div></div>;
 }

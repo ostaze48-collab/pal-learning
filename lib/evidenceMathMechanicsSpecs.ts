@@ -19,12 +19,12 @@ const specs:Record<string,ExplicitEvidenceSpec[]>={
  'g5-math-bar-chart':[
   {objectiveId:1,kind:'compare',interaction:'match',quality:'direct',prompt:'اربطي ارتفاع العمود بالقيمة التي يمثلها.',targets:['3','5','8'],pairs:[{item:'عمود يصل إلى التدريج 3',target:'3'},{item:'عمود يصل إلى التدريج 5',target:'5'},{item:'عمود يصل إلى التدريج 8',target:'8'}]},
   {objectiveId:2,kind:'construct',interaction:'order',quality:'direct',prompt:'رتّبي ما تقرئينه قبل تفسير الرسم بالأعمدة.',orderItems:['أقرأ عنوان الرسم','أقرأ أسماء الفئات والمحاور','أفحص المقياس','أقارن ارتفاع الأعمدة']},
-  {objectiveId:3,kind:'experiment_choice',interaction:'experiment_choice',quality:'direct',prompt:'انظري إلى المقارنة ثم اختاري الاستنتاج الأدق.',observation:'الفئة أ قيمتها 8 والفئة ب قيمتها 5 على المقياس نفسه.',options:['الفئة أ أكبر من ب بمقدار 3','الفئة ب أكبر من أ بمقدار 3','لا يمكن المقارنة'],correctIndex:0,explanation:'8 - 5 = 3 عند استخدام المقياس نفسه.'}
+  {objectiveId:3,kind:'compare',interaction:'experiment_choice',quality:'direct',prompt:'انظري إلى المقارنة ثم اختاري الاستنتاج الأدق.',observation:'الفئة أ قيمتها 8 والفئة ب قيمتها 5 على المقياس نفسه.',options:['الفئة أ أكبر من ب بمقدار 3','الفئة ب أكبر من أ بمقدار 3','لا يمكن المقارنة'],correctIndex:0,explanation:'8 - 5 = 3 عند استخدام المقياس نفسه.'}
  ],
  'g5-math-line-chart':[
   {objectiveId:1,kind:'compare',interaction:'match',quality:'direct',prompt:'اربطي اتجاه الخط بما يعنيه عن القيم.',targets:['زيادة','نقصان','ثبات'],pairs:[{item:'الخط يصعد مع الزمن',target:'زيادة'},{item:'الخط يهبط مع الزمن',target:'نقصان'},{item:'الخط أفقي',target:'ثبات'}]},
   {objectiveId:2,kind:'construct',interaction:'order',quality:'direct',prompt:'رتّبي طريقة قراءة تغير زمني من الرسم الخطي.',orderItems:['أحدد الزمن على المحور الأفقي','أقرأ قيمة كل نقطة','أقارن القيم المتتالية','أصف أين زادت أو نقصت']},
-  {objectiveId:3,kind:'experiment_choice',interaction:'experiment_choice',quality:'direct',prompt:'اختاري الوصف الذي يطابق التغير.',observation:'ارتفعت القيمة من 4 إلى 9 ثم انخفضت إلى 7.',options:['زادت 5 ثم نقصت 2','نقصت 5 ثم زادت 2','بقيت ثابتة'],correctIndex:0,explanation:'9-4 = 5 زيادة، ثم 9-7 = 2 نقصان.'}
+  {objectiveId:3,kind:'compare',interaction:'experiment_choice',quality:'direct',prompt:'اختاري الوصف الذي يطابق التغير.',observation:'ارتفعت القيمة من 4 إلى 9 ثم انخفضت إلى 7.',options:['زادت 5 ثم نقصت 2','نقصت 5 ثم زادت 2','بقيت ثابتة'],correctIndex:0,explanation:'9-4 = 5 زيادة، ثم 9-7 = 2 نقصان.'}
  ],
  'g7-math-absolute-value':[
   {objectiveId:1,kind:'compare',interaction:'match',quality:'direct',prompt:'اربطي العدد بمسافته عن الصفر.',targets:['0 وحدات','3 وحدات','8 وحدات'],pairs:[{item:'0',target:'0 وحدات'},{item:'-3',target:'3 وحدات'},{item:'8',target:'8 وحدات'}]},

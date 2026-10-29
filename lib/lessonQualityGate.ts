@@ -1,7 +1,7 @@
 import type {Lesson} from './data';
 import {buildObjectiveQuestionMap} from './objectiveCoverage';
 import {buildEvidenceTasks} from './evidenceDesign';
-import {getTeachingScenes} from './teachingBlueprints';
+import {getDirectedTeachingScenes} from './lessonDirector';
 import {getTeachingVisual} from './teachingVisuals';
 
 export type LessonQualityIssue={
@@ -45,15 +45,15 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
  if(!lesson.example?.trim())issues.push({severity:'warning',code:'NO_EXAMPLE',message:'الدرس يحتاج مثالًا أو موقفًا تطبيقيًا واضحًا.'});
  if(objectiveCount&&lesson.questions.length<objectiveCount)issues.push({severity:'warning',code:'TOO_FEW_QUESTIONS',message:`عدد الأسئلة (${lesson.questions.length}) أقل من عدد الأهداف الداخلية (${objectiveCount})، لذلك يجب أن تعوض مهام الدليل هذا النقص.`});
 
- const plans=Array.from({length:objectiveCount},(_,index)=>getTeachingScenes(lesson,index)||[]);
+ const plans=Array.from({length:objectiveCount},(_,index)=>getDirectedTeachingScenes(lesson,index)||[]);
  const teachingBlueprintObjectives=plans.filter(scenes=>scenes.length>0).length;
  const teachingBlueprintPercent=objectiveCount?Math.round(teachingBlueprintObjectives/objectiveCount*100):0;
  const teachingSceneCount=plans.reduce((sum,scenes)=>sum+scenes.length,0);
  let interactiveTeachingScenes=0;
  plans.forEach((scenes,objectiveIndex)=>scenes.forEach((_,sceneIndex)=>{if(getTeachingVisual(lesson.id,objectiveIndex+1,sceneIndex+1))interactiveTeachingScenes++}));
  const interactiveTeachingPercent=teachingSceneCount?Math.round(interactiveTeachingScenes/teachingSceneCount*100):0;
- if(objectiveCount&&teachingBlueprintObjectives===0)issues.push({severity:'warning',code:'GENERIC_TEACHING_ONLY',message:'الدرس ما زال يعتمد على قالب شرح عام؛ يحتاج Teaching Blueprint إبداعيًا مصممًا خصيصًا لأهدافه.'});
- else if(teachingBlueprintObjectives<objectiveCount)issues.push({severity:'warning',code:'PARTIAL_TEACHING_BLUEPRINT',message:`الشرح الإبداعي المخصص يغطي ${teachingBlueprintObjectives} من ${objectiveCount} أهداف فقط.`});
+ if(objectiveCount&&teachingBlueprintObjectives===0)issues.push({severity:'warning',code:'GENERIC_TEACHING_ONLY',message:'الدرس ما زال يعتمد على قالب شرح عام؛ يحتاج مسار تعلم موجّهًا بأهدافه.'});
+ else if(teachingBlueprintObjectives<objectiveCount)issues.push({severity:'warning',code:'PARTIAL_TEACHING_BLUEPRINT',message:`مسار التعلم الموجّه يغطي ${teachingBlueprintObjectives} من ${objectiveCount} أهداف فقط.`});
 
  const map=buildObjectiveQuestionMap(lesson);const tasks=buildEvidenceTasks(lesson);let directEvidenceObjectives=0;
  for(const objective of map){const task=tasks.find(x=>x.objectiveId===objective.id);const hasDirectQuestion=objective.links.some(x=>x.quality==='direct');const hasDirectTask=task?.quality==='direct';if(hasDirectQuestion||hasDirectTask)directEvidenceObjectives++;else issues.push({severity:'blocker',code:'OBJECTIVE_WITHOUT_DIRECT_EVIDENCE',objectiveId:objective.id,message:`الهدف الداخلي ${objective.id} لا يملك حتى الآن دليل تحقق مباشرًا بما يكفي.`})}

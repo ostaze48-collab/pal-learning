@@ -25,6 +25,17 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
       .studentJourney .subjectPickCard:active{transform:scale(.98)}
       .studentJourney .subjectPickIcon{font-size:38px!important}
       .studentJourney .kidUtilityRow{max-width:620px;margin:18px auto 88px;grid-template-columns:repeat(2,1fr)!important}
+      .studentJourney .focusTask.focusMath{--focus:#7657de;--focus-soft:#f1eaff;--focus-mark:'○  ×  △'}
+      .studentJourney .focusTask.focusScience{--focus:#0b9d8d;--focus-soft:#e6fbf7;--focus-mark:'◌  ⚗  ✦'}
+      .studentJourney .focusTask.focusArabic{--focus:#dc615b;--focus-soft:#fff0ed;--focus-mark:'أ  ب  ت'}
+      .studentJourney .focusTask.focusEnglish{--focus:#277bd5;--focus-soft:#eaf4ff;--focus-mark:'Hi!  A  ?'}
+      .studentJourney .focusTask.focusMath,.studentJourney .focusTask.focusScience,.studentJourney .focusTask.focusArabic,.studentJourney .focusTask.focusEnglish{position:relative;overflow:hidden;background:linear-gradient(135deg,var(--focus-soft),#fff 70%)!important;box-shadow:0 15px 36px color-mix(in srgb,var(--focus) 10%,transparent)!important}
+      .studentJourney .focusTask.focusMath:before,.studentJourney .focusTask.focusScience:before,.studentJourney .focusTask.focusArabic:before,.studentJourney .focusTask.focusEnglish:before{content:var(--focus-mark);position:absolute;inset:auto 18px -9px auto;font-size:35px;font-weight:1000;letter-spacing:9px;direction:ltr;color:var(--focus);opacity:.055;white-space:nowrap;pointer-events:none}
+      .studentJourney .focusTask .focusTaskIcon,.studentJourney .focusTask .focusTaskCopy,.studentJourney .focusTask .focusTaskAction{position:relative;z-index:1}
+      .studentJourney .focusTask[class*='focus'] .focusTaskIcon{background:rgba(255,255,255,.84)!important;color:var(--focus);box-shadow:0 9px 24px color-mix(in srgb,var(--focus) 10%,transparent)}
+      .studentJourney .focusTask[class*='focus'] .focusTaskCopy small{color:var(--focus)!important}
+      .studentJourney .focusTask[class*='focus'] .focusTaskAction{background:linear-gradient(135deg,var(--focus),color-mix(in srgb,var(--focus) 74%,#243d38))!important;box-shadow:0 6px 0 color-mix(in srgb,var(--focus) 20%,transparent)!important}
+      .studentJourney .upNextItem.focusMath{background:#f1eaff}.studentJourney .upNextItem.focusScience{background:#e6fbf7}.studentJourney .upNextItem.focusArabic{background:#fff0ed}.studentJourney .upNextItem.focusEnglish{background:#eaf4ff}
       @media(max-width:800px){
         .studentJourney .subjectPicker{grid-template-columns:repeat(2,minmax(0,1fr))!important}
         .studentJourney .welcomeQuest{padding:20px!important}
@@ -33,7 +44,7 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
         .studentJourney .practiceBubble,.studentJourney .kidUtilityRow{display:none!important}
         .studentJourney .subjectPickerSection{margin-bottom:94px}
       }
-      @media(max-width:430px){.studentJourney .subjectPickerSection{margin-top:22px}.studentJourney .subjectPicker{gap:10px!important}.studentJourney .subjectPickCard{min-height:132px;padding:15px!important}.studentJourney .welcomeCopy p{font-size:14px!important}.studentJourney .sectionTitleKid p{display:none}}
+      @media(max-width:430px){.studentJourney .subjectPickerSection{margin-top:22px}.studentJourney .subjectPicker{gap:10px!important}.studentJourney .subjectPickCard{min-height:132px;padding:15px!important}.studentJourney .welcomeCopy p{font-size:14px!important}.studentJourney .sectionTitleKid p{display:none}.studentJourney .focusTask[class*='focus']:before{font-size:25px;letter-spacing:6px;inset:auto 8px 2px auto}}
     `}</style>
     <header className="kidTopbar studentTopbar"><Link href="/" className="backBubble">→ الرئيسية</Link><div className="journeyName"><span>{student.emoji}</span><strong>{student.name}</strong></div><Link href={`/student/${slug}/practice`} className="practiceBubble">🎯 تدريب</Link></header>
 

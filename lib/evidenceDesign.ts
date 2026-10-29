@@ -1,6 +1,7 @@
 import type {Lesson} from './data';
 import {buildObjectiveQuestionMap} from './objectiveCoverage';
 import {getExplicitEvidenceSpecs} from './evidenceSpecs';
+import {getEvidenceSpecExtensions} from './evidenceSpecsExtensions';
 import {getMisconceptions} from './misconceptionLibrary';
 
 export type EvidenceKind='recognize'|'apply'|'explain'|'construct'|'compare'|'correct_error'|'transfer';
@@ -94,7 +95,9 @@ function preferredStructuredInteraction(lesson:Lesson,objective:string,kind:Evid
 }
 
 function explicitTasks(lesson:Lesson):EvidenceTask[]|null{
- const specs=getExplicitEvidenceSpecs(lesson.id);if(!specs)return null;
+ const extensions=getEvidenceSpecExtensions(lesson.id)||[];
+ const base=getExplicitEvidenceSpecs(lesson.id)||[];
+ const specs=[...extensions,...base];if(!specs.length)return null;
  return specs.map(spec=>{
    const q=spec.questionId?lesson.questions.find(x=>x.id===spec.questionId):undefined;
    const deep=spec.interaction==='short_text';

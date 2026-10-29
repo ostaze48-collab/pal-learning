@@ -24,8 +24,11 @@ function challengeFor(spec:TeachingVisualSpec):Challenge{
  return {title:'جربيها بمساندة أقل',prompt:'أي خطوة تدل على أنكِ تستخدمين العلاقة بنفسك؟',options:['أعيد المثال نفسه حرفيًا','أطبقها على قيم جديدة','أختار جوابًا بلا سبب'],correct:1,success:'انتقلتِ من المشاهدة إلى الاستخدام.'};
 }
 
-export default function FadedMathVisual({spec}:{spec:TeachingVisualSpec}){
- const id=lessonId(spec.variant);if(/-science-/.test(id))return <FadedScienceVisual spec={spec}/>;
+function MathChallenge({spec}:{spec:TeachingVisualSpec}){
  const challenge=useMemo(()=>challengeFor(spec),[spec.variant]);const [picked,setPicked]=useState<number|null>(null);const correct=picked===challenge.correct;
  return <div className={styles.visual}><span className={styles.title}>🎯 {challenge.title}</span><div className={styles.stage}><div style={{display:'grid',gap:12,width:'100%'}}><strong style={{fontSize:18,lineHeight:1.7}}>{challenge.prompt}</strong><div className={styles.actions}>{challenge.options.map((option,index)=><button type="button" key={option} className={`${styles.button} ${picked===index?(index===challenge.correct?styles.active:''):''}`} onClick={()=>setPicked(index)}>{option}</button>)}</div>{picked!==null&&<div className={styles.hint}>{correct?`✓ ${challenge.success}`:'قريبة. ارجعي للعلاقة التي اكتشفتِها في المشهد السابق ثم جرّبي خيارًا آخر.'}</div>}</div></div></div>;
+}
+
+export default function FadedMathVisual({spec}:{spec:TeachingVisualSpec}){
+ return /-science-/.test(lessonId(spec.variant))?<FadedScienceVisual spec={spec}/>:<MathChallenge spec={spec}/>;
 }

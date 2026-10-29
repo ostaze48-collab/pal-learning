@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
+import {getInterleavedConnection} from '../../../lib/interleavingEngine';
 import {getDirectedTeachingScenes} from '../../../lib/lessonDirector';
 import {buildLearningPatternRecommendation,learningCue,type RepresentationFamily} from '../../../lib/learningPatternModel';
 import {getPrimaryMisconception} from '../../../lib/misconceptionLibrary';
@@ -11,7 +12,7 @@ import CurriculumConceptVisual from './CurriculumConceptVisual';
 import CurriculumExtraVisual from './CurriculumExtraVisual';
 import styles from './LearningCanvas.module.css';
 
-type CanvasStep=TeachingScene&{misconceptionId?:string;misconceptionVisualKind?:TeachingVisualKind};
+type CanvasStep=TeachingScene&{misconceptionId?:string;misconceptionVisualKind?:TeachingVisualKind;connectionId?:string;suppressVisual?:boolean};
 type CanvasResume={version:1;objectiveIndex:number;sceneIndex:number;sceneCount:number;updatedAt:string};
 
 function evidenceText(lesson:Lesson,index=0){const q=lesson.questions[index%Math.max(1,lesson.questions.length)];return q?.explanation||lesson.example||lesson.summary}
@@ -39,6 +40,9 @@ function englishSteps(lesson:Lesson,focus:number):CanvasStep[]{return [
  {icon:'🧩',label:'Build',title:'Build it yourself',body:evidenceText(lesson,focus),prompt:'How would you explain the pattern simply?'},
  {icon:'💬',label:'Use',title:'Try a new situation',body:'Make a new sentence with the same idea.',prompt:'What changed and what stayed the same?'}
 ]}
+function withInterleavedConnection(lesson:Lesson,focus:number,base:CanvasStep[]){
+ if(focus!==0||!base.length)return base;const connection=getInterleavedConnection(lesson,focus+1);if(!connection)return base;const english=lesson.subject==='English';const step:CanvasStep={icon:'🔗',label:english?'Recall':'أربط',title:english?'Bring back an earlier idea':'استرجعي فكرة سابقة',body:english?`Before we go further, bring this idea back from memory: ${connection.sourceText}`:`قبل أن نكمل، استرجعي من ذاكرتك هذه الفكرة السابقة: ${connection.sourceText}`,prompt:`${connection.prompt} ${connection.bridge}`,connectionId:`${connection.sourceLessonId}:${connection.sourceObjectiveId}`,suppressVisual:true};return[base[0],step,...base.slice(1)];
+}
 function withMisconceptionPrevention(lesson:Lesson,focus:number,base:CanvasStep[]){
  const misconception=getPrimaryMisconception(lesson.id,focus+1);if(!misconception||!base.length)return base;
  const p=misconception.prevention;const prevention:CanvasStep={icon:'🧭',label:lesson.subject==='English'?'Check':'أتحقق',title:p.title,body:p.body,prompt:p.prompt,misconceptionId:misconception.id,misconceptionVisualKind:p.visualKind};
@@ -52,7 +56,7 @@ function getSteps(lesson:Lesson,focus:number){
  else if(lesson.subject==='اللغة العربية')base=arabicSteps(lesson,focus);
  else if(lesson.subject==='English')base=englishSteps(lesson,focus);
  else base=mathSteps(lesson,focus);
- return withMisconceptionPrevention(lesson,focus,base);
+ return withMisconceptionPrevention(lesson,focus,withInterleavedConnection(lesson,focus,base));
 }
 function appendUx(lessonId:string,event:Record<string,unknown>={}){try{const key=`lessonUx:${lessonId}`;const raw=localStorage.getItem(key);const old=raw?JSON.parse(raw):[];const next=Array.isArray(old)?old.slice(-199):[];next.push({at:new Date().toISOString(),...event});localStorage.setItem(key,JSON.stringify(next))}catch{}}
 function englishCue(family:RepresentationFamily|null){if(family==='spatial')return 'Start by looking at position, order, or movement.';if(family==='construct')return 'Build the idea piece by piece and notice the pattern.';if(family==='compare')return 'Compare two cases side by side and look for the key difference.';if(family==='experiment')return 'Change one thing and watch what happens before you explain it.';if(family==='context')return 'Start from a meaningful situation, then return to the rule or word.';if(family==='data')return 'Start from the values or model, then find the relationship.';if(family==='language')return 'Start from meaning, then notice the repeated pattern.';return null}
@@ -60,17 +64,17 @@ function englishCue(family:RepresentationFamily|null){if(family==='spatial')retu
 export default function LearningCanvas({lesson,objectiveIndex}:{lesson:Lesson;objectiveIndex:number}){
  const maxFocus=Math.max(0,(lesson.learningPoints.length||1)-1);const focus=Math.min(maxFocus,Math.max(0,objectiveIndex));
  const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);const [speechAvailable,setSpeechAvailable]=useState(false);const [speaking,setSpeaking]=useState(false);const [completing,setCompleting]=useState(false);const [resumeReady,setResumeReady]=useState(false);const [adaptiveFamily,setAdaptiveFamily]=useState<RepresentationFamily|null>(null);
- const steps=useMemo(()=>getSteps(lesson,focus),[lesson,focus]);const safeIndex=Math.min(Math.max(0,index),Math.max(0,steps.length-1));const current=steps[safeIndex];const visual=current?.misconceptionVisualKind?{kind:current.misconceptionVisualKind}:getTeachingVisual(lesson.id,focus+1,safeIndex+1);const subjectIcon=lesson.subject==='العلوم والحياة'?'🔬':lesson.subject==='الرياضيات'?'➗':lesson.subject==='اللغة العربية'?'📚':'🌍';
+ const steps=useMemo(()=>getSteps(lesson,focus),[lesson,focus]);const safeIndex=Math.min(Math.max(0,index),Math.max(0,steps.length-1));const current=steps[safeIndex];const visual=current?.suppressVisual?null:current?.misconceptionVisualKind?{kind:current.misconceptionVisualKind}:getTeachingVisual(lesson.id,focus+1,safeIndex+1);const subjectIcon=lesson.subject==='العلوم والحياة'?'🔬':lesson.subject==='الرياضيات'?'➗':lesson.subject==='اللغة العربية'?'📚':'🌍';
  useEffect(()=>{setResumeReady(false);setReflected(false);setVisualTouched(false);setCompleting(false);let restored=0;try{const raw=localStorage.getItem(`lesson:${lesson.id}:canvasSession`);if(raw){const saved=JSON.parse(raw) as CanvasResume;if(saved?.version===1&&saved.objectiveIndex===focus&&saved.sceneCount===steps.length&&Number.isInteger(saved.sceneIndex)&&saved.sceneIndex>=0&&saved.sceneIndex<steps.length)restored=saved.sceneIndex}}catch{}setIndex(restored);setResumeReady(true)},[lesson.id,focus,steps.length]);
  useEffect(()=>{if(!resumeReady||!steps.length)return;try{const data:CanvasResume={version:1,objectiveIndex:focus,sceneIndex:safeIndex,sceneCount:steps.length,updatedAt:new Date().toISOString()};localStorage.setItem(`lesson:${lesson.id}:canvasSession`,JSON.stringify(data))}catch{}},[resumeReady,lesson.id,focus,safeIndex,steps.length]);
  useEffect(()=>{setSpeechAvailable(typeof window!=='undefined'&&'speechSynthesis'in window&&typeof SpeechSynthesisUtterance!=='undefined');return()=>{try{window.speechSynthesis?.cancel()}catch{}}},[]);
  useEffect(()=>{const recommendation=buildLearningPatternRecommendation(lesson.student,lesson.subject);setAdaptiveFamily(recommendation.confidence>=70?recommendation.preferredFamily:null)},[lesson.student,lesson.subject,lesson.id]);
- useEffect(()=>{setVisualTouched(false);if(current&&resumeReady)appendUx(lesson.id,{event:current.misconceptionId?'misconception_prevention_view':'teaching_scene_view',objectiveId:focus+1,scene:safeIndex+1,hasVisual:Boolean(visual),visualKind:visual?.kind||null,misconceptionId:current.misconceptionId||null})},[focus,safeIndex,current?.title,current?.misconceptionId,lesson.id,visual?.kind,resumeReady]);
+ useEffect(()=>{setVisualTouched(false);if(current&&resumeReady){const event=current.connectionId?'interleaved_recall_view':current.misconceptionId?'misconception_prevention_view':'teaching_scene_view';appendUx(lesson.id,{event,objectiveId:focus+1,scene:safeIndex+1,hasVisual:Boolean(visual),visualKind:visual?.kind||null,misconceptionId:current.misconceptionId||null,connectionId:current.connectionId||null})}},[focus,safeIndex,current?.title,current?.misconceptionId,current?.connectionId,lesson.id,visual?.kind,resumeReady]);
  function stopSpeech(){try{window.speechSynthesis?.cancel()}catch{}setSpeaking(false)}
- function speakCurrent(){if(!speechAvailable||!current)return;if(speaking){stopSpeech();return}try{window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(`${current.title}. ${current.body}. ${current.prompt}`);utterance.lang=lesson.subject==='English'?'en-US':'ar';utterance.rate=lesson.subject==='English'?0.9:0.88;utterance.pitch=1;utterance.onend=()=>setSpeaking(false);utterance.onerror=()=>setSpeaking(false);setSpeaking(true);appendUx(lesson.id,{event:'scene_read_aloud',objectiveId:focus+1,scene:safeIndex+1,misconceptionId:current.misconceptionId||null});window.speechSynthesis.speak(utterance)}catch{setSpeaking(false)}}
+ function speakCurrent(){if(!speechAvailable||!current)return;if(speaking){stopSpeech();return}try{window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(`${current.title}. ${current.body}. ${current.prompt}`);utterance.lang=lesson.subject==='English'?'en-US':'ar';utterance.rate=lesson.subject==='English'?0.9:0.88;utterance.pitch=1;utterance.onend=()=>setSpeaking(false);utterance.onerror=()=>setSpeaking(false);setSpeaking(true);appendUx(lesson.id,{event:'scene_read_aloud',objectiveId:focus+1,scene:safeIndex+1,misconceptionId:current.misconceptionId||null,connectionId:current.connectionId||null});window.speechSynthesis.speak(utterance)}catch{setSpeaking(false)}}
  function finishObjective(){if(completing)return;stopSpeech();setCompleting(true);appendUx(lesson.id,{event:'teaching_objective_experience_complete',objectiveId:focus+1});window.dispatchEvent(new CustomEvent('learning-canvas-complete',{detail:{lessonId:lesson.id,objectiveId:focus+1}}))}
  function move(next:number){stopSpeech();const safe=Math.max(0,Math.min(steps.length-1,next));if(safeIndex===steps.length-1&&safe===safeIndex){finishObjective();return}setIndex(safe);setReflected(false);setVisualTouched(false)}
- function visualInteraction(){if(!visual||visualTouched)return;setVisualTouched(true);appendUx(lesson.id,{event:'teaching_visual_interaction',objectiveId:focus+1,scene:safeIndex+1,visual:visual.kind,misconceptionId:current?.misconceptionId||null})}
+ function visualInteraction(){if(!visual||visualTouched)return;setVisualTouched(true);appendUx(lesson.id,{event:'teaching_visual_interaction',objectiveId:focus+1,scene:safeIndex+1,visual:visual.kind,misconceptionId:current?.misconceptionId||null,connectionId:current?.connectionId||null})}
  if(!current)return null;
  const adaptiveCue=safeIndex===0&&adaptiveFamily?(lesson.subject==='English'?englishCue(adaptiveFamily):learningCue(adaptiveFamily)):null;
  return <section className={styles.canvas} aria-label="جربي واكتشفي">
@@ -90,7 +94,7 @@ export default function LearningCanvas({lesson,objectiveIndex}:{lesson:Lesson;ob
   {reflected&&<div className={styles.reflection}><span>✨</span><div><strong>خذي لحظة وفكري</strong><p>قولي الفكرة لنفسك بطريقتك، ثم كملي عندما تصبح واضحة.</p></div></div>}
 
   <div className={styles.actions}>
-   <div className={styles.secondaryActions}>{safeIndex>0&&<button type="button" className={styles.secondary} onClick={()=>move(safeIndex-1)} disabled={completing}>→ السابق</button>}<button type="button" className={styles.secondary} onClick={()=>{setReflected(v=>!v);appendUx(lesson.id,{event:'teaching_reflection',objectiveId:focus+1,scene:safeIndex+1,misconceptionId:current.misconceptionId||null})}} disabled={completing}>💡 أفكر</button></div>
+   <div className={styles.secondaryActions}>{safeIndex>0&&<button type="button" className={styles.secondary} onClick={()=>move(safeIndex-1)} disabled={completing}>→ السابق</button>}<button type="button" className={styles.secondary} onClick={()=>{setReflected(v=>!v);appendUx(lesson.id,{event:'teaching_reflection',objectiveId:focus+1,scene:safeIndex+1,misconceptionId:current.misconceptionId||null,connectionId:current.connectionId||null})}} disabled={completing}>💡 أفكر</button></div>
    <button type="button" className={styles.primary} onClick={()=>move(safeIndex<steps.length-1?safeIndex+1:safeIndex)} disabled={completing}>{completing?'رائعة… ✨':safeIndex<steps.length-1?'نكمل الاكتشاف ←':'فهمت الفكرة ✓'}</button>
   </div>
  </section>;

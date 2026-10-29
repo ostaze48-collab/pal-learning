@@ -22,6 +22,8 @@ console.log(`Objectives reaching faded interactive application: ${report.fadedAp
 console.log(`Faded application scenes: ${report.fadedApplicationScenes}`);
 console.log(`Lessons with rich evidence interactions: ${report.lessonsWithRichInteractions}/${report.learningLessons}`);
 console.log(`Explicit misconception patterns: ${misconceptionReport.count}`);
+console.log('\nFADED APPLICATION BY SUBJECT');
+for(const row of report.fadedApplicationBySubject)console.log(`- ${row.subject}: ${row.fadedApplicationCoverage}% (${row.fadedApplicationObjectives}/${row.objectives}) · any interaction ${row.interactiveCoverage}%`);
 
 if(noInteractiveObjectives.length){
   console.log('\nOBJECTIVES WITHOUT AN INTERACTIVE EXPERIENCE');

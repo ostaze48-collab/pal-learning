@@ -3,7 +3,8 @@ export type TeachingVisualKind=
  'integer_context'|'number_line'|'integer_motion'|'pronoun_swap'|'question_blocks'|'do_does'|
  'factor_tree'|'fraction_bar'|'decimal_grid'|'geometry_lab'|'data_chart'|'proportion_lab'|
  'motion_lab'|'force_lab'|'atom_builder'|'reaction_lab'|'pressure_lab'|
- 'arabic_pattern'|'hamza_lab'|'tense_timeline';
+ 'arabic_pattern'|'hamza_lab'|'tense_timeline'|
+ 'material_properties'|'energy_flow'|'reading_lens'|'word_builder'|'punctuation_lab'|'comparison_scale';
 
 export type TeachingVisualSpec={kind:TeachingVisualKind;variant?:string};
 
@@ -37,21 +38,32 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
  if(/prime|factor|gcf|lcm/.test(lessonId))return {kind:'factor_tree',variant};
  if(/fraction/.test(lessonId))return {kind:'fraction_bar',variant};
  if(/decimal/.test(lessonId))return {kind:'decimal_grid',variant};
+ if(/integer|absolute-value/.test(lessonId)){
+  if(/add-subtract|multiply-divide/.test(lessonId))return {kind:'integer_motion',variant:'-3,+5'};
+  return {kind:'number_line',variant};
+ }
  if(/triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation/.test(lessonId))return {kind:'geometry_lab',variant};
  if(/data|statistics|mean|median|mode|range|graph|chart/.test(lessonId))return {kind:'data_chart',variant};
  if(/proportion|ratio|scale/.test(lessonId))return {kind:'proportion_lab',variant};
 
+ if(/cell/.test(lessonId))return {kind:objectiveId%2===0?'cell_compare':'cell_zoom',variant};
+ if(/materials-properties/.test(lessonId))return {kind:'material_properties',variant};
+ if(/energy-forms|energy-transformations|energy-environment/.test(lessonId))return {kind:'energy_flow',variant};
  if(/translational-motion|distance-displacement|average-speed|constant-acceleration/.test(lessonId))return {kind:'motion_lab',variant};
  if(/newton|force/.test(lessonId))return {kind:'force_lab',variant};
  if(/atom|element|compound/.test(lessonId))return {kind:'atom_builder',variant};
  if(/reaction|chemical-change|physical-chemical/.test(lessonId))return {kind:'reaction_lab',variant};
  if(/pressure/.test(lessonId))return {kind:'pressure_lab',variant};
 
+ if(/reading|poem|teacher-merit/.test(lessonId))return {kind:'reading_lens',variant};
  if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return {kind:'hamza_lab',variant};
  if(/noun|pronoun|verb|definite|indefinite|inflection|built/.test(lessonId))return {kind:'arabic_pattern',variant};
 
- if(/present|past|future|perfect|continuous|adverbs-frequency|stative|comparative/.test(lessonId))return {kind:'tense_timeline',variant};
- if(/question-order/.test(lessonId))return {kind:'question_blocks',variant:'does-base'};
+ if(/comparative/.test(lessonId))return {kind:'comparison_scale',variant};
+ if(/punctuation/.test(lessonId))return {kind:'punctuation_lab',variant};
+ if(/question-order|which-or/.test(lessonId))return {kind:'question_blocks',variant:'does-base'};
+ if(/present|past|future|perfect|continuous|adverbs-frequency|stative/.test(lessonId))return {kind:'tense_timeline',variant};
+ if(/new-friends|mini-olympics|holidays|basketball|animal-magic|keep-in-touch|sport-report|directions|reflexive|message-friend/.test(lessonId))return {kind:'word_builder',variant};
  return null;
 }
 

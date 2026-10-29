@@ -45,7 +45,6 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
  if(!lesson.questions.length)issues.push({severity:'blocker',code:'NO_QUESTIONS',message:'لا توجد أدلة تحقق بعد التعلم.'});
  if(!lesson.summary?.trim())issues.push({severity:'warning',code:'NO_SUMMARY',message:'الدرس يحتاج فكرة مركزية واضحة تقود تجربة التعلم.'});
  if(!lesson.example?.trim())issues.push({severity:'warning',code:'NO_EXAMPLE',message:'الدرس يحتاج مثالًا أو موقفًا تطبيقيًا واضحًا.'});
- if(objectiveCount&&lesson.questions.length<objectiveCount)issues.push({severity:'warning',code:'TOO_FEW_QUESTIONS',message:`عدد الأسئلة (${lesson.questions.length}) أقل من عدد الأهداف الداخلية (${objectiveCount})، لذلك يجب أن تعوض مهام الدليل هذا النقص.`});
 
  const plans=Array.from({length:objectiveCount},(_,index)=>getDirectedTeachingScenes(lesson,index)||[]);
  const teachingBlueprintObjectives=plans.filter(scenes=>scenes.length>0).length;
@@ -61,6 +60,7 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
 
  const map=buildObjectiveQuestionMap(lesson);const tasks=buildEvidenceTasks(lesson);let directEvidenceObjectives=0;
  for(const objective of map){const task=tasks.find(x=>x.objectiveId===objective.id);const hasDirectQuestion=objective.links.some(x=>x.quality==='direct');const hasDirectTask=task?.quality==='direct';if(hasDirectQuestion||hasDirectTask)directEvidenceObjectives++;else issues.push({severity:'blocker',code:'OBJECTIVE_WITHOUT_DIRECT_EVIDENCE',objectiveId:objective.id,message:`الهدف الداخلي ${objective.id} لا يملك حتى الآن دليل تحقق مباشرًا بما يكفي.`})}
+ if(objectiveCount&&lesson.questions.length<objectiveCount&&directEvidenceObjectives<objectiveCount)issues.push({severity:'warning',code:'TOO_FEW_QUESTIONS',message:`عدد الأسئلة الخام (${lesson.questions.length}) أقل من عدد الأهداف (${objectiveCount})، وما زالت مهام الدليل لا تعوض كل النقص.`});
  const evidenceKinds=[...new Set(tasks.map(x=>x.kind))];const evidenceInteractions=[...new Set(tasks.map(x=>x.interaction))];const richInteractionCount=tasks.filter(x=>!['choice','short_text'].includes(x.interaction)).length;
  if(objectiveCount>=3&&evidenceKinds.length<2&&evidenceInteractions.length<2)issues.push({severity:'warning',code:'WEAK_EVIDENCE_VARIETY',message:'كل الأهداف تقريبًا تُقاس بالطريقة نفسها؛ يفضّل تنويع دليل الفهم بين تطبيق وتفسير ومطابقة/ترتيب/تجربة عندما تسمح طبيعة الدرس.'});
  const blockers=issues.filter(x=>x.severity==='blocker').length;const warnings=issues.filter(x=>x.severity==='warning').length;

@@ -1,6 +1,8 @@
 import {lessons} from '../lib/data';
 import {auditCurriculum} from '../lib/lessonQualityGate';
 import {validateMisconceptionLibrary} from '../lib/misconceptionLibrary';
+import {getDirectedTeachingScenes} from '../lib/lessonDirector';
+import {getTeachingVisual} from '../lib/teachingVisuals';
 
 const report=auditCurriculum(lessons);
 const misconceptionReport=validateMisconceptionLibrary();
@@ -8,6 +10,16 @@ const blocked=report.lessons.filter(x=>!x.ready);
 const warnings=report.lessons.flatMap(x=>x.issues.filter(i=>i.severity==='warning').map(i=>({lessonId:x.lessonId,score:x.score,...i})));
 const blockers=report.lessons.flatMap(x=>x.issues.filter(i=>i.severity==='blocker').map(i=>({lessonId:x.lessonId,score:x.score,...i})));
 const noInteractiveObjectives=report.lessons.filter(x=>x.kind==='learning'&&x.interactiveTeachingObjectives<x.objectiveCount).map(x=>({lessonId:x.lessonId,covered:x.interactiveTeachingObjectives,total:x.objectiveCount,percent:x.interactiveObjectivePercent}));
+const noFadedObjectives=lessons.filter(x=>x.kind!=='assessment').flatMap(lesson=>lesson.learningPoints.flatMap((objective,index)=>{
+  const scenes=getDirectedTeachingScenes(lesson,index)||[];
+  const visuals=scenes.map((_,sceneIndex)=>getTeachingVisual(lesson.id,index+1,sceneIndex+1));
+  const hasFaded=visuals.some(visual=>visual?.purpose==='guided_application'&&visual.scaffold==='faded');
+  return hasFaded?[]:[{lessonId:lesson.id,subject:lesson.subject,objectiveId:index+1,objective,sceneCount:scenes.length,visualCount:visuals.filter(Boolean).length}];
+}));
+const missingVisualScenes=lessons.filter(x=>x.kind!=='assessment').flatMap(lesson=>lesson.learningPoints.flatMap((objective,index)=>{
+  const scenes=getDirectedTeachingScenes(lesson,index)||[];
+  return scenes.flatMap((_,sceneIndex)=>getTeachingVisual(lesson.id,index+1,sceneIndex+1)?[]:[{lessonId:lesson.id,subject:lesson.subject,objectiveId:index+1,sceneNumber:sceneIndex+1,objective}]);
+}));
 
 console.log('\n=== SAMA & SALMA · CURRICULUM QUALITY ===');
 console.log(`Learning lessons: ${report.learningLessons}`);
@@ -24,6 +36,16 @@ console.log(`Lessons with rich evidence interactions: ${report.lessonsWithRichIn
 console.log(`Explicit misconception patterns: ${misconceptionReport.count}`);
 console.log('\nFADED APPLICATION BY SUBJECT');
 for(const row of report.fadedApplicationBySubject)console.log(`- ${row.subject}: ${row.fadedApplicationCoverage}% (${row.fadedApplicationObjectives}/${row.objectives}) · any interaction ${row.interactiveCoverage}%`);
+
+if(noFadedObjectives.length){
+  console.log('\nOBJECTIVES WITHOUT FADED APPLICATION');
+  for(const item of noFadedObjectives)console.log(`- ${item.lessonId} · ${item.subject} · objective ${item.objectiveId} · scenes ${item.sceneCount} · visuals ${item.visualCount} · ${item.objective}`);
+}else console.log('\nOBJECTIVES WITHOUT FADED APPLICATION: none');
+
+if(missingVisualScenes.length){
+  console.log('\nTEACHING SCENES WITHOUT A VISUAL');
+  for(const item of missingVisualScenes)console.log(`- ${item.lessonId} · ${item.subject} · objective ${item.objectiveId} · scene ${item.sceneNumber} · ${item.objective}`);
+}else console.log('\nTEACHING SCENES WITHOUT A VISUAL: none');
 
 if(noInteractiveObjectives.length){
   console.log('\nOBJECTIVES WITHOUT AN INTERACTIVE EXPERIENCE');

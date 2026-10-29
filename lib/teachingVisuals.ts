@@ -6,7 +6,9 @@ export type TeachingVisualKind=
  'arabic_pattern'|'hamza_lab'|'tense_timeline'|
  'material_properties'|'energy_flow'|'reading_lens'|'word_builder'|'punctuation_lab'|'comparison_scale';
 
-export type TeachingVisualSpec={kind:TeachingVisualKind;variant?:string};
+export type TeachingVisualPurpose='representation'|'exploration'|'guided_application';
+export type TeachingScaffoldLevel='full'|'guided'|'faded';
+export type TeachingVisualSpec={kind:TeachingVisualKind;variant?:string;purpose?:TeachingVisualPurpose;scaffold?:TeachingScaffoldLevel};
 
 const visuals:Record<string,TeachingVisualSpec>={
  'g5-science-cell-types:1:2':{kind:'cell_zoom'},
@@ -31,45 +33,54 @@ const visuals:Record<string,TeachingVisualSpec>={
  'g7-en-question-order:2:2':{kind:'do_does'}
 };
 
+function stageMeta(sceneNumber:number){
+ if(sceneNumber>=3)return {purpose:'guided_application' as const,scaffold:'faded' as const};
+ if(sceneNumber===2)return {purpose:'exploration' as const,scaffold:'guided' as const};
+ return {purpose:'representation' as const,scaffold:'full' as const};
+}
+function staged(kind:TeachingVisualKind,variant:string|undefined,sceneNumber:number):TeachingVisualSpec{return {kind,variant,...stageMeta(sceneNumber)}}
+
 function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):TeachingVisualSpec|null{
- if(sceneNumber<1||sceneNumber>2)return null;
+ if(sceneNumber<1||sceneNumber>3)return null;
  const variant=`${lessonId}|${objectiveId}|${sceneNumber}`;
 
- if(/prime|factor|gcf|lcm/.test(lessonId))return {kind:'factor_tree',variant};
- if(/fraction/.test(lessonId))return {kind:'fraction_bar',variant};
- if(/decimal/.test(lessonId))return sceneNumber===1?{kind:'decimal_grid',variant}:{kind:'fraction_bar',variant};
+ if(/prime|factor|gcf|lcm/.test(lessonId))return staged('factor_tree',variant,sceneNumber);
+ if(/fraction/.test(lessonId))return staged('fraction_bar',variant,sceneNumber);
+ if(/decimal/.test(lessonId))return staged(sceneNumber===2?'fraction_bar':'decimal_grid',variant,sceneNumber);
  if(/integer|absolute-value/.test(lessonId)){
-  if(/add-subtract|multiply-divide/.test(lessonId))return sceneNumber===1?{kind:'integer_motion',variant:'-3,+5'}:{kind:'number_line',variant};
-  return sceneNumber===1?{kind:'number_line',variant}:{kind:'integer_context',variant};
+  if(/add-subtract|multiply-divide/.test(lessonId))return sceneNumber===1?{kind:'integer_motion',variant:'-3,+5',...stageMeta(sceneNumber)}:staged('number_line',variant,sceneNumber);
+  return staged(sceneNumber===2?'integer_context':'number_line',variant,sceneNumber);
  }
- if(/triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation/.test(lessonId))return {kind:'geometry_lab',variant};
- if(/data|statistics|frequency|mean|median|mode|range|graph|chart/.test(lessonId))return {kind:'data_chart',variant};
- if(/proportion|ratio|scale/.test(lessonId))return {kind:'proportion_lab',variant};
+ if(/triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation/.test(lessonId))return staged('geometry_lab',variant,sceneNumber);
+ if(/data|statistics|frequency|mean|median|mode|range|graph|chart/.test(lessonId))return staged('data_chart',variant,sceneNumber);
+ if(/proportion|ratio|scale/.test(lessonId))return staged('proportion_lab',variant,sceneNumber);
 
+ if(sceneNumber>2)return null;
  if(/cell/.test(lessonId)){
-  if(sceneNumber===2)return {kind:objectiveId===1?'cell_zoom':objectiveId===2?'cell_parts':'cell_compare',variant};
-  return {kind:objectiveId%2===0?'cell_compare':'cell_zoom',variant};
+  if(sceneNumber===2)return staged(objectiveId===1?'cell_zoom':objectiveId===2?'cell_parts':'cell_compare',variant,sceneNumber);
+  return staged(objectiveId%2===0?'cell_compare':'cell_zoom',variant,sceneNumber);
  }
- if(/materials-properties/.test(lessonId))return {kind:'material_properties',variant};
- if(/energy-forms|energy-transformations|energy-environment/.test(lessonId))return {kind:'energy_flow',variant};
- if(/translational-motion|distance-displacement|average-speed|constant-acceleration/.test(lessonId))return {kind:'motion_lab',variant};
- if(/newton|force/.test(lessonId))return {kind:'force_lab',variant};
- if(/atom|element|compound/.test(lessonId))return {kind:'atom_builder',variant};
- if(/reaction|chemical-change|physical-chemical/.test(lessonId))return {kind:'reaction_lab',variant};
- if(/pressure/.test(lessonId))return {kind:'pressure_lab',variant};
+ if(/materials-properties/.test(lessonId))return staged('material_properties',variant,sceneNumber);
+ if(/energy-forms|energy-transformations|energy-environment/.test(lessonId))return staged('energy_flow',variant,sceneNumber);
+ if(/translational-motion|distance-displacement|average-speed|constant-acceleration/.test(lessonId))return staged('motion_lab',variant,sceneNumber);
+ if(/newton|force/.test(lessonId))return staged('force_lab',variant,sceneNumber);
+ if(/atom|element|compound/.test(lessonId))return staged('atom_builder',variant,sceneNumber);
+ if(/reaction|chemical-change|physical-chemical/.test(lessonId))return staged('reaction_lab',variant,sceneNumber);
+ if(/pressure/.test(lessonId))return staged('pressure_lab',variant,sceneNumber);
 
- if(/reading|poem|teacher-merit/.test(lessonId))return {kind:'reading_lens',variant};
- if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return sceneNumber===1?{kind:'hamza_lab',variant}:null;
- if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return sceneNumber===1?{kind:'arabic_pattern',variant}:{kind:'word_builder',variant};
+ if(/reading|poem|teacher-merit/.test(lessonId))return staged('reading_lens',variant,sceneNumber);
+ if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return sceneNumber===1?staged('hamza_lab',variant,sceneNumber):null;
+ if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return staged(sceneNumber===1?'arabic_pattern':'word_builder',variant,sceneNumber);
 
- if(/comparative/.test(lessonId))return sceneNumber===1?{kind:'comparison_scale',variant}:{kind:'word_builder',variant};
- if(/punctuation/.test(lessonId))return sceneNumber===1?{kind:'punctuation_lab',variant}:{kind:'word_builder',variant};
- if(/question-order|which-or/.test(lessonId))return sceneNumber===1?{kind:'question_blocks',variant:'does-base'}:{kind:'word_builder',variant};
- if(/present|past|future|perfect|continuous|adverbs-frequency|stative|just-already-yet/.test(lessonId))return sceneNumber===1?{kind:'tense_timeline',variant}:{kind:'word_builder',variant};
- if(/new-friends|mini-olympics|holidays|basketball|animal-magic|keep-in-touch|sport-report|directions|reflexive|message-friend/.test(lessonId))return sceneNumber===1?{kind:'word_builder',variant}:{kind:'reading_lens',variant};
+ if(/comparative/.test(lessonId))return staged(sceneNumber===1?'comparison_scale':'word_builder',variant,sceneNumber);
+ if(/punctuation/.test(lessonId))return staged(sceneNumber===1?'punctuation_lab':'word_builder',variant,sceneNumber);
+ if(/question-order|which-or/.test(lessonId))return sceneNumber===1?{kind:'question_blocks',variant:'does-base',...stageMeta(sceneNumber)}:staged('word_builder',variant,sceneNumber);
+ if(/present|past|future|perfect|continuous|adverbs-frequency|stative|just-already-yet/.test(lessonId))return staged(sceneNumber===1?'tense_timeline':'word_builder',variant,sceneNumber);
+ if(/new-friends|mini-olympics|holidays|basketball|animal-magic|keep-in-touch|sport-report|directions|reflexive|message-friend/.test(lessonId))return staged(sceneNumber===1?'word_builder':'reading_lens',variant,sceneNumber);
  return null;
 }
 
 export function getTeachingVisual(lessonId:string,objectiveId:number,sceneNumber:number){
- return visuals[`${lessonId}:${objectiveId}:${sceneNumber}`]||fallbackVisual(lessonId,objectiveId,sceneNumber);
+ const explicit=visuals[`${lessonId}:${objectiveId}:${sceneNumber}`];
+ return explicit?{...explicit,...stageMeta(sceneNumber)}:fallbackVisual(lessonId,objectiveId,sceneNumber);
 }

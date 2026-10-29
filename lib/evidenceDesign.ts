@@ -82,6 +82,16 @@ function deepPriority(kind:EvidenceKind){
  return 0;
 }
 
+function preferredStructuredInteraction(lesson:Lesson,objective:string,kind:EvidenceKind,deep:boolean,hasOptions:boolean):EvidenceInteraction{
+ if(deep||!hasOptions)return 'short_text';
+ const key=`${lesson.id} ${lesson.title} ${objective}`.toLowerCase();
+ if(kind==='correct_error')return 'error_fix';
+ if(lesson.subject==='العلوم والحياة'&&/سبب|نتيجة|تغير|تحول|قوة|ضغط|طاقة|تفاعل|حركة|سرعة|تسارع|استنتج|فسر|why|cause|effect|change|force|pressure|energy|reaction|motion|speed|acceleration/.test(key))return 'experiment_choice';
+ if(lesson.subject==='اللغة العربية'&&/همز|إملاء|تاء|لام شمس|لام قمر|اسم|فعل|ضمير|معرب|مبني|إعراب|قاعدة/.test(key))return 'error_fix';
+ if(lesson.subject==='English'&&/question|punctuation|present|past|perfect|continuous|adverb|stative|comparative|pronoun|tense|grammar/.test(key))return 'error_fix';
+ return 'choice';
+}
+
 function explicitTasks(lesson:Lesson):EvidenceTask[]|null{
  const specs=getExplicitEvidenceSpecs(lesson.id);if(!specs)return null;
  return specs.map(spec=>{
@@ -128,8 +138,17 @@ function generatedEvidenceTasks(lesson:Lesson):EvidenceTask[]{
    if(!directLink){
      return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction:'short_text',prompt:objectiveDirectPrompt(lesson,kind,objective),questionId:null,explanation:objective,quality:'direct',depth:'deep'};
    }
-   const mustWrite=!q?.options?.length;const deep=mustWrite||deepIndexes.has(index);const interaction:EvidenceInteraction=deep?'short_text':'choice';
-   return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),questionId:q?.id||null,options:interaction==='choice'?q?.options:undefined,correctIndex:interaction==='choice'?q?.correct:undefined,explanation:q?.explanation,quality:'direct',depth:deep?'deep':'quick'};
+   const mustWrite=!q?.options?.length;const deep=mustWrite||deepIndexes.has(index);const interaction=preferredStructuredInteraction(lesson,objective,kind,deep,Boolean(q?.options?.length));
+   if(interaction==='error_fix'&&q?.options?.length){
+     const wrongIndex=q.options.findIndex((_,i)=>i!==q.correct);const wrong=wrongIndex>=0?q.options[wrongIndex]:q.options[0];
+     const prompt=lesson.subject==='English'?`A learner chose an answer for this situation: ${q.text} Which option corrects the idea?`:`في هذا الموقف: ${q.text} أي اختيار يصحح الفكرة؟`;
+     const statement=lesson.subject==='English'?`The learner chose: ${wrong}`:`اختارت زميلة: ${wrong}`;
+     return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt,questionId:q.id,options:q.options,correctIndex:q.correct,explanation:q.explanation,quality:'direct',depth:'quick',statement};
+   }
+   if(interaction==='experiment_choice'&&q?.options?.length){
+     return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt:'بعد قراءة الموقف، أي اختيار يطابق الدليل أو يفسره أفضل؟',questionId:q.id,options:q.options,correctIndex:q.correct,explanation:q.explanation,quality:'direct',depth:'quick',observation:q.text};
+   }
+   return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),questionId:q?.id||null,options:interaction==='choice'?q?.options:undefined,correctIndex:interaction==='choice'?q?.correct:undefined,explanation:q?.explanation,quality:'direct',depth:interaction==='short_text'?'deep':'quick'};
  });
 }
 

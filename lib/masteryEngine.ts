@@ -14,6 +14,7 @@ export type TeacherEvidenceDecision={
  decision:'advance'|'review'|'targeted_reteach';
  reviewAt?:string;
  focus?:string;
+ weakObjectiveIds?:number[];
  reason:string;
  confidence:number;
  evidence:{quiz:number|null;understanding:number|null;concept:number|null;objective:number|null;transfer:number|null;mastery:number|null};
@@ -57,6 +58,12 @@ function allPrerequisites(lesson:Lesson){
 function readJson(key:string){if(typeof window==='undefined')return null;const raw=localStorage.getItem(key);if(!raw)return null;try{return JSON.parse(raw)}catch{return null}}
 function finite(v:unknown){if(v===null||v===undefined||v==='')return null;return Number.isFinite(Number(v))?Number(v):null}
 function clampScore(v:number|null){return v===null?null:Math.max(0,Math.min(100,Math.round(v)))}
+function shortLabel(text:string){const clean=String(text||'').trim();return clean.length>86?`${clean.slice(0,83)}…`:clean}
+function objectiveWeaknesses(lesson:Lesson){
+ const saved=readJson(`lessonEvidence:${lesson.id}`);const results=Array.isArray(saved?.results)?saved.results:[];const weakIds:number[]=[];
+ for(const item of results){if(item?.scope!=='objective')continue;const id=Number(item?.objectiveId);if(!Number.isInteger(id)||id<1||id>Math.max(1,lesson.learningPoints.length))continue;const weak=item?.correct===false||item?.outcome==='misconception'||item?.outcome==='partial';if(weak&&!weakIds.includes(id))weakIds.push(id)}
+ const labels=weakIds.map(id=>shortLabel(lesson.learningPoints[id-1]||`الهدف ${id}`));return {weakIds,labels};
+}
 
 function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidenceDecision|null{
  if(!report)return null;
@@ -66,27 +73,29 @@ function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidence
  const objective=clampScore(finite(report?.objectiveEvidenceScore));
  const transfer=clampScore(finite(report?.transferScore));
  const mastery=clampScore(finite(report?.mastery));
+ const objectiveDetail=objectiveWeaknesses(lesson);
  const available=[quiz,understanding,concept,objective,transfer].filter(x=>x!==null).length;
  const reportConfidence=clampScore(finite(report?.masteryConfidence));
  const confidence=reportConfidence??(available>=4?94:available===3?88:available===2?78:64);
  const generatedAt=new Date().toISOString();
- const base={confidence,evidence:{quiz,understanding,concept,objective,transfer,mastery},generatedAt,source:'combined_lesson_evidence' as const};
+ const base={confidence,weakObjectiveIds:objectiveDetail.weakIds,evidence:{quiz,understanding,concept,objective,transfer,mastery},generatedAt,source:'combined_lesson_evidence' as const};
  const misconception=understanding!==null&&understanding<=40;
  const weakConcept=concept!==null&&concept<70;
- const weakObjective=objective!==null&&objective<65;
+ const weakObjective=(objective!==null&&objective<65)||objectiveDetail.weakIds.length>0;
  const weakTransfer=transfer!==null&&transfer<65;
  const evidenceConflict=quiz!==null&&quiz>=80&&([understanding,concept,objective,transfer].some(x=>x!==null&&Number(x)<65));
  if(misconception||weakConcept||weakObjective||weakTransfer||evidenceConflict){
-   const focus=weakTransfer?`نقل فكرة ${lesson.title} إلى موقف جديد`:weakObjective?`مهارة محددة داخل ${lesson.title}`:misconception?`تفسير الفكرة في ${lesson.title}`:weakConcept?`فهم الفكرة عمليًا في ${lesson.title}`:`ربط الحل بالفهم في ${lesson.title}`;
-   const reason=weakTransfer?'الفهم الأساسي أفضل من أداء النقل؛ المطلوب مثال جديد يغيّر السياق ثم إعادة قياس قصيرة.':weakObjective?'أدلة المهارات المباشرة كشفت نقطة لم تثبت بعد؛ المطلوب تدخل قصير موجه لها فقط.':misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.';
+   const objectiveFocus=objectiveDetail.labels.length?`ثبتي هذا الهدف: ${objectiveDetail.labels.slice(0,2).join(' • ')}`:`مهارة محددة داخل ${lesson.title}`;
+   const focus=misconception?`تفسير الفكرة في ${lesson.title}`:weakObjective?objectiveFocus:weakTransfer?`نقل فكرة ${lesson.title} إلى موقف جديد`:weakConcept?`فهم الفكرة عمليًا في ${lesson.title}`:`ربط الحل بالفهم في ${lesson.title}`;
+   const reason=misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakObjective?'دليل هدف محدد لم يثبت بعد؛ المطلوب إعادة تمثيل هذا الهدف فقط ثم محاولة جديدة قصيرة.':weakTransfer?'الفهم الأساسي أفضل من أداء النقل؛ المطلوب مثال جديد يغيّر السياق ثم محاولة قصيرة.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.';
    return {decision:'targeted_reteach',focus,reason,...base};
  }
- const partial= [understanding,concept,objective,transfer].some(x=>x!==null&&Number(x)<80);
+ const partial=[understanding,concept,objective,transfer].some(x=>x!==null&&Number(x)<80);
  if(mastery!==null&&mastery>=80&&!partial){
    return {decision:'advance',reason:'الأدلة المتنوعة متوافقة: الاختبار والمهارات/التفاعل والنقل تدعم الانتقال إلى الخطوة التالية.',...base};
  }
  const reviewAt=String(report?.reviewDue||new Date(Date.now()+24*60*60*1000).toISOString());
- const reason=mastery!==null&&mastery>=80?'الإتقان جيد لكن إحدى قنوات الدليل ما زالت هشّة؛ نحتاج مراجعة قصيرة لاحقة للتأكد من الثبات.':'الإتقان الكلي لم يصل بعد إلى حد التقدم بثقة؛ نراجع نقطة قصيرة ثم نعيد القياس.';
+ const reason=mastery!==null&&mastery>=80?'الإتقان جيد لكن إحدى قنوات الدليل ما زالت هشّة؛ نحتاج مراجعة قصيرة لاحقة للتأكد من الثبات.':'الإتقان الكلي لم يصل بعد إلى حد التقدم بثقة؛ نراجع نقطة قصيرة ثم نعيد المحاولة.';
  return {decision:'review',reviewAt,reason,...base};
 }
 
@@ -111,7 +120,7 @@ function lessonEvidence(lesson:Lesson):MasteryEvidence[]{
  if(typeof window==='undefined')return [];
  const ev:MasteryEvidence[]=[];const report=readJson(`lesson:${lesson.id}:report`);const mastery=finite(report?.mastery);if(mastery!==null)ev.push({source:'lesson_mastery',score:mastery,weight:1,at:String(report?.completedAt||'')});
  const creative=readJson(`conceptStudio:${lesson.student}:${lesson.id}`)||readJson(`creativeProfile:${lesson.student}:${lesson.id}`);const c=finite(creative?.successRate);if(c!==null)ev.push({source:'concept_studio',score:c,weight:0.55,at:String(creative?.lastAt||creative?.at||'')});
- const decision=persistTeacherDecision(lesson,report)||readJson(`lesson:${lesson.id}:teacherDecision`)||readJson(`teacherDecision:${lesson.id}`);if(decision?.decision==='targeted_reteach')ev.push({source:'teacher_decision',score:55,weight:0.75,note:String(decision.focus||'')});else if(decision?.decision==='review')ev.push({source:'teacher_decision',score:78,weight:0.45,note:String(decision.reason||'')});else if(decision?.decision==='advance')ev.push({source:'teacher_decision',score:92,weight:0.35,note:String(decision.reason||'')});
+ persistTeacherDecision(lesson,report);
  return ev;
 }
 

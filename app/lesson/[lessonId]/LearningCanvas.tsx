@@ -38,11 +38,14 @@ function getSteps(lesson:Lesson,focus:number){const explicit=getTeachingScenes(l
 function appendUx(lessonId:string,event:Record<string,unknown>){try{const key=`lessonUx:${lessonId}`;const raw=localStorage.getItem(key);const old=raw?JSON.parse(raw):[];const next=Array.isArray(old)?old.slice(-199):[];next.push({at:new Date().toISOString(),...event});localStorage.setItem(key,JSON.stringify(next))}catch{}}
 
 export default function LearningCanvas({lesson}:{lesson:Lesson}){
- const [active,setActive]=useState(false);const [focus,setFocus]=useState(0);const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);
+ const [active,setActive]=useState(false);const [focus,setFocus]=useState(0);const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);const [speechAvailable,setSpeechAvailable]=useState(false);const [speaking,setSpeaking]=useState(false);
  const steps=useMemo(()=>getSteps(lesson,focus),[lesson,focus]);const current=steps[index];const internalCount=Math.max(1,lesson.learningPoints.length);const visual=getTeachingVisual(lesson.id,focus+1,index+1);const subjectIcon=lesson.subject==='العلوم والحياة'?'🔬':lesson.subject==='الرياضيات'?'➗':lesson.subject==='اللغة العربية'?'📚':'🌍';
  useEffect(()=>{function sync(){try{const raw=localStorage.getItem(`lessonUx:${lesson.id}`);const events=raw?JSON.parse(raw):[];if(!Array.isArray(events))return;const phaseEvents=events.filter((e:any)=>e?.event==='phase_view');const currentPhase=phaseEvents.at(-1)?.phase;setActive(currentPhase==='build');const progressed=events.filter((e:any)=>e?.event==='internal_target_taught'||e?.event==='objective_covered').at(-1);const rawFocus=progressed?Number(progressed.target??progressed.objective??0):0;const nextFocus=Math.min(internalCount-1,Math.max(0,rawFocus));setFocus(v=>{if(v!==nextFocus){setIndex(0);setReflected(false);setVisualTouched(false)}return nextFocus})}catch{}}sync();const timer=window.setInterval(sync,350);return()=>window.clearInterval(timer)},[lesson.id,internalCount]);
+ useEffect(()=>{setSpeechAvailable(typeof window!=='undefined'&&'speechSynthesis'in window&&typeof SpeechSynthesisUtterance!=='undefined');return()=>{try{window.speechSynthesis?.cancel()}catch{}}},[]);
  useEffect(()=>{setVisualTouched(false);if(active&&current)appendUx(lesson.id,{event:'teaching_scene_view',objectiveId:focus+1,scene:index+1,hasVisual:Boolean(visual),visualKind:visual?.kind||null})},[active,focus,index,current?.title,lesson.id,visual?.kind]);
- function move(next:number){const safe=Math.max(0,Math.min(steps.length-1,next));if(index===steps.length-1&&safe===index)appendUx(lesson.id,{event:'teaching_objective_experience_complete',objectiveId:focus+1});setIndex(safe);setReflected(false);setVisualTouched(false)}
+ function stopSpeech(){try{window.speechSynthesis?.cancel()}catch{}setSpeaking(false)}
+ function speakCurrent(){if(!speechAvailable||!current)return;if(speaking){stopSpeech();return}try{window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(`${current.title}. ${current.body}. ${current.prompt}`);utterance.lang=lesson.subject==='English'?'en-US':'ar';utterance.rate=lesson.subject==='English'?0.9:0.88;utterance.pitch=1;utterance.onend=()=>setSpeaking(false);utterance.onerror=()=>setSpeaking(false);setSpeaking(true);appendUx(lesson.id,{event:'scene_read_aloud',objectiveId:focus+1,scene:index+1});window.speechSynthesis.speak(utterance)}catch{setSpeaking(false)}}
+ function move(next:number){stopSpeech();const safe=Math.max(0,Math.min(steps.length-1,next));if(index===steps.length-1&&safe===index)appendUx(lesson.id,{event:'teaching_objective_experience_complete',objectiveId:focus+1});setIndex(safe);setReflected(false);setVisualTouched(false)}
  function visualInteraction(){if(!visual||visualTouched)return;setVisualTouched(true);appendUx(lesson.id,{event:'teaching_visual_interaction',objectiveId:focus+1,scene:index+1,visual:visual.kind})}
  if(!active||!current)return null;
  return <section className={styles.canvas} aria-label="جربي واكتشفي">
@@ -54,6 +57,7 @@ export default function LearningCanvas({lesson}:{lesson:Lesson}){
   <div className={styles.scene}>
    <h3>{current.title}</h3>
    <p>{current.body}</p>
+   {speechAvailable&&<button type="button" className={`${styles.listenButton} ${speaking?styles.speaking:''}`} onClick={speakCurrent} aria-pressed={speaking}>{speaking?'⏹ أوقفي الصوت':'🔊 اسمعي الفكرة'}</button>}
    {visual&&<div className={styles.visualStage} onClickCapture={visualInteraction}><TeachingSceneVisual spec={visual}/><CurriculumConceptVisual spec={visual}/></div>}
    <div className={styles.prompt}><span>💭</span><strong>{current.prompt}</strong></div>
   </div>

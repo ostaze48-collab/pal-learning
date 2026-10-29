@@ -43,7 +43,7 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
   return {kind:'number_line',variant};
  }
  if(/triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation/.test(lessonId))return {kind:'geometry_lab',variant};
- if(/data|statistics|mean|median|mode|range|graph|chart/.test(lessonId))return {kind:'data_chart',variant};
+ if(/data|statistics|frequency|mean|median|mode|range|graph|chart/.test(lessonId))return {kind:'data_chart',variant};
  if(/proportion|ratio|scale/.test(lessonId))return {kind:'proportion_lab',variant};
 
  if(/cell/.test(lessonId))return {kind:objectiveId%2===0?'cell_compare':'cell_zoom',variant};
@@ -57,12 +57,12 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
 
  if(/reading|poem|teacher-merit/.test(lessonId))return {kind:'reading_lens',variant};
  if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return {kind:'hamza_lab',variant};
- if(/noun|pronoun|verb|definite|indefinite|inflection|built/.test(lessonId))return {kind:'arabic_pattern',variant};
+ if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return {kind:'arabic_pattern',variant};
 
  if(/comparative/.test(lessonId))return {kind:'comparison_scale',variant};
  if(/punctuation/.test(lessonId))return {kind:'punctuation_lab',variant};
  if(/question-order|which-or/.test(lessonId))return {kind:'question_blocks',variant:'does-base'};
- if(/present|past|future|perfect|continuous|adverbs-frequency|stative/.test(lessonId))return {kind:'tense_timeline',variant};
+ if(/present|past|future|perfect|continuous|adverbs-frequency|stative|just-already-yet/.test(lessonId))return {kind:'tense_timeline',variant};
  if(/new-friends|mini-olympics|holidays|basketball|animal-magic|keep-in-touch|sport-report|directions|reflexive|message-friend/.test(lessonId))return {kind:'word_builder',variant};
  return null;
 }

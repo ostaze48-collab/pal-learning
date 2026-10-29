@@ -1,0 +1,38 @@
+/* Small, purposeful motion only. No streaks, points or attention traps. */
+.subjectPickCard,.focusTask,.kidProfileCard{transition:transform .16s var(--child-ease),box-shadow .16s var(--child-ease),filter .16s var(--child-ease)}
+.subjectPickCard .subjectPickIcon,.subjectPickCard .subjectWorldArrow,.focusTaskIcon,.kidProfileCard .kidAvatar{transition:transform .16s var(--child-ease)}
+.subjectPickCard:hover{transform:translateY(-3px);box-shadow:0 12px 28px color-mix(in srgb,var(--subject,#6c9b8f) 10%,transparent)!important}
+.subjectPickCard:hover .subjectPickIcon{transform:scale(1.05) rotate(-2deg)}
+.subjectPickCard:hover .subjectWorldArrow{transform:translateX(-3px)}
+.subjectPickCard:active{transform:translateY(2px) scale(.985);filter:saturate(1.04)}
+.subjectPickCard:active .subjectWorldArrow{transform:translateX(-5px)}
+.focusTask:hover{transform:translateY(-2px);box-shadow:0 15px 32px rgba(74,58,116,.10)}
+.focusTask:hover .focusTaskIcon{transform:scale(1.045)}
+.focusTaskAction b{display:inline-block;transition:transform .15s var(--child-ease)}
+.focusTaskAction:hover b{transform:translateX(-3px)}
+.kidProfileCard:hover{transform:translateY(-2px)}
+.kidProfileCard:hover .kidAvatar{transform:scale(1.035)}
+.subjectWorldPage .worldHeroIcon{transition:transform .18s var(--child-ease)}
+.subjectWorldPage .worldHero:hover .worldHeroIcon{transform:translateY(-2px) scale(1.025)}
+
+/* Gentle entrance hierarchy: action first, worlds second. */
+.studentJourney .welcomeQuest{animation:childEnter .24s var(--child-ease) both}
+.studentJourney .dailyPlan{animation:childEnter .28s .03s var(--child-ease) both}
+.studentJourney .subjectPickerSection{animation:childEnter .3s .07s var(--child-ease) both}
+.subjectWorldPage .worldHero{animation:childEnter .25s var(--child-ease) both}
+.subjectWorldPage .worldPath{animation:childEnter .3s .05s var(--child-ease) both}
+@keyframes childEnter{from{opacity:.35;transform:translateY(7px)}to{opacity:1;transform:none}}
+
+@media(max-width:700px){
+ .subjectPickCard:hover,.focusTask:hover,.kidProfileCard:hover{transform:none;box-shadow:none!important}
+ .subjectPickCard:active{transform:scale(.975)}
+ .subjectPickCard:active .subjectPickIcon{transform:scale(.96)}
+ .focusTaskAction:active b{transform:translateX(-3px)}
+}
+@media(hover:none){
+ .subjectPickCard:hover .subjectPickIcon,.subjectPickCard:hover .subjectWorldArrow,.focusTask:hover .focusTaskIcon,.kidProfileCard:hover .kidAvatar,.subjectWorldPage .worldHero:hover .worldHeroIcon{transform:none}
+}
+@media(prefers-reduced-motion:reduce){
+ .subjectPickCard,.subjectPickCard .subjectPickIcon,.subjectPickCard .subjectWorldArrow,.focusTask,.focusTaskIcon,.focusTaskAction b,.kidProfileCard,.kidProfileCard .kidAvatar,.subjectWorldPage .worldHeroIcon{transition:none!important;transform:none!important}
+ .studentJourney .welcomeQuest,.studentJourney .dailyPlan,.studentJourney .subjectPickerSection,.subjectWorldPage .worldHero,.subjectWorldPage .worldPath{animation:none!important}
+}

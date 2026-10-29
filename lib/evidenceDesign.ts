@@ -51,6 +51,22 @@ function textPrompt(lesson:Lesson,kind:EvidenceKind,qText?:string){
  return qText||'اختاري الإجابة التي تدل على فهم الفكرة.';
 }
 
+function objectiveDirectPrompt(lesson:Lesson,kind:EvidenceKind,objective:string){
+ if(lesson.subject==='English'){
+   if(kind==='compare')return `Show the difference in your own example: ${objective}`;
+   if(kind==='explain')return `Explain this idea in one or two sentences: ${objective}`;
+   if(kind==='construct')return `Write one new example that proves you can do this: ${objective}`;
+   if(kind==='correct_error')return `Write a common wrong example, then correct it: ${objective}`;
+   return `Use this skill in one new example and show your answer: ${objective}`;
+ }
+ if(kind==='compare')return `أظهري الفرق بمثال من عندك: ${objective}`;
+ if(kind==='explain')return `اشرحي هذه الفكرة بجملة أو جملتين من عندك: ${objective}`;
+ if(kind==='construct')return `اكتبي مثالًا جديدًا يثبت أنكِ تستطيعين هذا: ${objective}`;
+ if(kind==='correct_error')return `اكتبي مثالًا خاطئًا شائعًا ثم صححيه لتوضحي هذه الفكرة: ${objective}`;
+ if(kind==='recognize')return `اكتبي مثالًا واحدًا يدل مباشرة على فهمك لهذه الفكرة: ${objective}`;
+ return `طبقي هذه المهارة في مثال جديد من عندك، واكتبي طريقتك أو النتيجة: ${objective}`;
+}
+
 function transferPrompt(lesson:Lesson){
  if(lesson.subject==='العلوم والحياة')return `تخيلي موقفًا جديدًا يختلف عن مثال الدرس في ${lesson.title}. ماذا تتوقعين أن يحدث؟ اكتبي توقعك واذكري الدليل أو السبب الذي تعتمدين عليه.`;
  if(lesson.subject==='الرياضيات')return `اصنعي مسألة جديدة بأرقام أو سياق مختلف تستخدم نفس الفكرة في ${lesson.title}، ثم اكتبي الحل أو الطريقة التي ستستخدمينها.`;
@@ -100,15 +116,20 @@ function generatedEvidenceTasks(lesson:Lesson):EvidenceTask[]{
  const map=buildObjectiveQuestionMap(lesson);
  const prepared=objectives.map((objective,index)=>{
    const kind=kindFor(lesson.subject,objective);
-   const direct=map[index]?.links.find(x=>x.quality==='direct')||map[index]?.links[0];
-   const q=direct?lesson.questions.find(x=>x.id===direct.questionId):lesson.questions[index%Math.max(1,lesson.questions.length)];
-   return {objective,index,kind,direct,q,quality:direct?.quality==='direct'?'direct' as const:'inferred' as const};
+   const directLink=map[index]?.links.find(x=>x.quality==='direct');
+   const fallbackLink=map[index]?.links[0];
+   const selectedLink=directLink||fallbackLink;
+   const q=selectedLink?lesson.questions.find(x=>x.id===selectedLink.questionId):lesson.questions[index%Math.max(1,lesson.questions.length)];
+   return {objective,index,kind,directLink,q};
  });
  const openBudget=lesson.student==='salma'?1:2;
- const deepIndexes=new Set(prepared.map(x=>({index:x.index,priority:deepPriority(x.kind),hasQuestion:Boolean(x.q?.options?.length)})).sort((a,b)=>b.priority-a.priority||Number(a.hasQuestion)-Number(b.hasQuestion)||a.index-b.index).slice(0,openBudget).map(x=>x.index));
- return prepared.map(({index,kind,q,quality})=>{
+ const deepIndexes=new Set(prepared.filter(x=>Boolean(x.directLink)).map(x=>({index:x.index,priority:deepPriority(x.kind),hasQuestion:Boolean(x.q?.options?.length)})).sort((a,b)=>b.priority-a.priority||Number(a.hasQuestion)-Number(b.hasQuestion)||a.index-b.index).slice(0,openBudget).map(x=>x.index));
+ return prepared.map(({objective,index,kind,directLink,q})=>{
+   if(!directLink){
+     return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction:'short_text',prompt:objectiveDirectPrompt(lesson,kind,objective),questionId:null,explanation:objective,quality:'direct',depth:'deep'};
+   }
    const mustWrite=!q?.options?.length;const deep=mustWrite||deepIndexes.has(index);const interaction:EvidenceInteraction=deep?'short_text':'choice';
-   return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),questionId:q?.id||null,options:interaction==='choice'?q?.options:undefined,correctIndex:interaction==='choice'?q?.correct:undefined,explanation:q?.explanation,quality,depth:deep?'deep':'quick'};
+   return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt:interaction==='choice'?(q?.text||textPrompt(lesson,kind)):textPrompt(lesson,kind,q?.text),questionId:q?.id||null,options:interaction==='choice'?q?.options:undefined,correctIndex:interaction==='choice'?q?.correct:undefined,explanation:q?.explanation,quality:'direct',depth:deep?'deep':'quick'};
  });
 }
 

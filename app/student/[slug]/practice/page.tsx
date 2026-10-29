@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {getStudent,getStudentLessons} from '../../../../lib/data';
 import PracticeLab from './PracticeLab';
+import KidBottomNav from '../KidBottomNav';
 
 export default async function PracticePage({params}:{params:Promise<{slug:string}>}){
  const {slug}=await params;const student=getStudent(slug);if(!student)return <main className="wrap">الطالبة غير موجودة.</main>;
@@ -10,5 +11,5 @@ export default async function PracticePage({params}:{params:Promise<{slug:string
    <header className="kidTopbar studentTopbar"><Link className="backBubble" href={`/student/${slug}`}>→ رحلتي</Link><div className="journeyName"><span>🎯</span><strong>تحدٍ إضافي</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
    <section className="welcomeQuest practiceWelcome"><div className="welcomeCopy"><span className="questEyebrow">✨ اختاري عالمًا</span><h1>جولة أسئلة مرحة</h1><p>اختاري المادة وطول الجولة، ثم خذي سؤالًا واحدًا في كل مرة.</p></div></section>
    <PracticeLab slug={slug} bank={bank}/>
- </div></main>;
+ </div><KidBottomNav slug={slug} active="practice"/></main>;
 }

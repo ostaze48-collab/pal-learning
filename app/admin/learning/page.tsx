@@ -1,0 +1,37 @@
+'use client';
+import Link from 'next/link';
+import {useEffect,useState} from 'react';
+import {lessons,students} from '../../../lib/data';
+import {getInterventionEffectiveness} from '../../../lib/interventionAnalytics';
+import {buildStudentObjectiveMasteryMap,type ObjectiveMasteryRecord} from '../../../lib/objectiveMastery';
+import styles from './LearningDashboard.module.css';
+
+type InterventionRow={type:string;samples:number;successRate:number|null;bestFamily:string|null;familyRate:number|null};
+type StudentSummary={slug:string;name:string;emoji:string;grade:number;total:number;unknown:number;learning:number;needsSupport:number;mastered:number;secure:number;reviewDue:number;completedLessons:number;subjects:Array<{subject:string;needsSupport:number;reviewDue:number;secure:number}>;misconceptions:Array<{lessonId:string;objectiveId:number;text:string;id:string}>;interventions:InterventionRow[]};
+
+const interventionLabels:Record<string,string>={objective_reteach:'تقوية هدف',prerequisite_bridge:'جسر متطلب سابق',transfer_practice:'تدريب نقل التعلم',concept_rebuild:'إعادة بناء المفهوم',evidence_conflict:'حل تعارض الدليل',spaced_review:'مراجعة متباعدة',none:'لا تدخل'};
+const familyLabels:Record<string,string>={spatial:'مكاني/حركة',construct:'بناء وتركيب',compare:'مقارنة',experiment:'تجربة',context:'سياق',language:'لغة ونمط',data:'بيانات'};
+function count(rows:ObjectiveMasteryRecord[],status:ObjectiveMasteryRecord['status']){return rows.filter(x=>x.status===status).length}
+function subjectSummaries(rows:ObjectiveMasteryRecord[]){return [...new Set(rows.map(x=>x.subject))].map(subject=>{const items=rows.filter(x=>x.subject===subject);return {subject,needsSupport:count(items,'needs_support'),reviewDue:count(items,'review_due'),secure:count(items,'secure')}}).sort((a,b)=>b.needsSupport-a.needsSupport||b.reviewDue-a.reviewDue||a.subject.localeCompare(b.subject,'ar'))}
+function buildSummary(slug:string):StudentSummary{
+ const student=students.find(x=>x.slug===slug)!;const map=buildStudentObjectiveMasteryMap(slug);const rows=map.objectives;const interventions=getInterventionEffectiveness(slug).filter(x=>x.samples>0).map(x=>{const best=[...x.byFamily].filter(f=>f.samples>=3).sort((a,b)=>b.successRate-a.successRate||b.samples-a.samples)[0]||null;return {type:x.interventionType,samples:x.samples,successRate:x.successRate,bestFamily:best?.family||null,familyRate:best?.successRate??null}}).sort((a,b)=>b.samples-a.samples);
+ const misconceptions=rows.filter(x=>x.misconceptionId).map(x=>({lessonId:x.lessonId,objectiveId:x.objectiveId,text:x.objectiveText,id:String(x.misconceptionId)}));const completedLessons=lessons.filter(x=>x.student===slug&&typeof window!=='undefined'&&localStorage.getItem(`lesson:${x.id}`)==='done').length;
+ return {slug,name:student.name,emoji:student.emoji,grade:student.grade,total:rows.length,unknown:count(rows,'unknown'),learning:count(rows,'learning'),needsSupport:count(rows,'needs_support'),mastered:count(rows,'mastered'),secure:count(rows,'secure'),reviewDue:count(rows,'review_due'),completedLessons,subjects:subjectSummaries(rows),misconceptions,interventions};
+}
+
+export default function LearningDashboard(){
+ const [summaries,setSummaries]=useState<StudentSummary[]>([]);const [ready,setReady]=useState(false);
+ useEffect(()=>{setSummaries(students.map(s=>buildSummary(s.slug)));setReady(true)},[]);
+ return <main className={styles.page}><div className={styles.wrap}>
+  <header className={styles.head}><div><span className={styles.tag}>لوحة الإدارة · ذكاء التعلم</span><h1>ماذا ثبت؟ وأين يحتاج النظام أن يتدخل؟</h1><p>هذه اللوحة تقرأ دليل كل هدف، التثبيت عبر الزمن، الأخطاء الشائعة المفتوحة، ونتائج التدخلات. لا تعرض هذه التصنيفات لسما أو سلمى.</p></div><div><nav className={styles.nav}><Link href="/admin/quality">جودة المحتوى</Link><Link href="/admin/ux">تجربة الاستخدام</Link></nav><div className={styles.note} style={{marginTop:10}}>البيانات من هذا الجهاز فقط</div></div></header>
+  {!ready?<section className={styles.student}><div className={styles.empty}>أجمع أدلة التعلم من الجهاز…</div></section>:<section className={styles.studentGrid}>{summaries.map(summary=><article className={styles.student} key={summary.slug}>
+   <div className={styles.studentHead}><div><h2>{summary.emoji} {summary.name}</h2><p>الصف {summary.grade} · {summary.completedLessons} درس مكتمل على هذا الجهاز</p></div><span className={styles.pill}>{summary.total} هدفًا</span></div>
+   <div className={styles.metrics}><div className={`${styles.metric} ${styles.support}`}><strong>{summary.needsSupport}</strong><span>يحتاج دعمًا</span></div><div className={styles.metric}><strong>{summary.mastered}</strong><span>متقن الآن</span></div><div className={`${styles.metric} ${styles.secure}`}><strong>{summary.secure}</strong><span>مثبت عبر الزمن</span></div><div className={`${styles.metric} ${styles.due}`}><strong>{summary.reviewDue}</strong><span>مراجعة مستحقة</span></div></div>
+   <section className={styles.panel}><div className={styles.sectionTitle}><h3>حسب المادة</h3><span className={styles.note}>دعم مباشر / مراجعة / مثبت</span></div><div className={styles.subjectRows}>{summary.subjects.map(row=><div className={styles.subjectRow} key={row.subject}><strong>{row.subject}</strong><span>دعم {row.needsSupport}</span><span>مراجعة {row.reviewDue} · مثبت {row.secure}</span></div>)}</div></section>
+   <section className={styles.panel}><div className={styles.sectionTitle}><h3>أخطاء مفاهيمية مفتوحة</h3><span className={styles.pill}>{summary.misconceptions.length}</span></div>{summary.misconceptions.length?<div className={styles.alerts}>{summary.misconceptions.slice(0,5).map(item=><div className={styles.alert} key={`${item.lessonId}-${item.objectiveId}-${item.id}`}><strong>{item.text}</strong><small>{item.id} · <Link href={`/lesson/${item.lessonId}/reteach`}>فتح التقوية</Link></small></div>)}</div>:<div className={styles.empty}>لا يوجد حاليًا خطأ شائع مفتوح مسجل في أدلة الأهداف.</div>}</section>
+   <section className={styles.panel}><div className={styles.sectionTitle}><h3>فعالية التدخلات</h3><span className={styles.note}>لا نعتمد توصية قبل 3 عينات</span></div>{summary.interventions.length?<div className={styles.interventions}>{summary.interventions.map(row=><div className={styles.intervention} key={row.type}><div><strong>{interventionLabels[row.type]||row.type}</strong><div className={styles.note}>{row.samples} محاولات مقيمة{row.bestFamily?` · أفضل تمثيل: ${familyLabels[row.bestFamily]||row.bestFamily}`:''}</div></div><span>{row.successRate===null?'—':`${row.successRate}%`}{row.familyRate!==null&&row.bestFamily?` · ${row.familyRate}%`:''}</span></div>)}</div>:<div className={styles.empty}>لا توجد عينات كافية بعد لقياس فعالية التدخلات. ستظهر تلقائيًا بعد استخدام التقوية وإعادة الفحص.</div>}</section>
+   <div className={styles.note}>حالات أخرى: يتعلم الآن {summary.learning} · لم يبدأ/لا دليل بعد {summary.unknown}</div>
+  </article>)}</section>}
+  <div className={styles.footerNote}><strong>مهم:</strong> هذه اللوحة ليست ملفًا تشخيصيًا للطفلة ولا تستخدم تسميات ثابتة مثل «متعلمة بصرية». هي قراءة مؤقتة لأدلة المهام على هذا الجهاز، وتتغير مع الأداء الجديد. التخزين المركزي ما زال خطوة لاحقة؛ لذلك لا تعتبر هذه الشاشة سجلًا كاملاً إذا استُخدم أكثر من جهاز.</div>
+ </div></main>;
+}

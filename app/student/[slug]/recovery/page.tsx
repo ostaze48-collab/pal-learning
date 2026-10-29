@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import {getStudent} from '../../../../lib/data';
 import RecoveryScreening from './RecoveryScreening';
+import KidBottomNav from '../KidBottomNav';
 
 export default async function RecoveryPage({params}:{params:Promise<{slug:string}>}){
   const {slug}=await params;
@@ -15,5 +16,5 @@ export default async function RecoveryPage({params}:{params:Promise<{slug:string
     </section>
 
     <RecoveryScreening slug={slug}/>
-  </div></main>;
+  </div><KidBottomNav slug={slug}/></main>;
 }

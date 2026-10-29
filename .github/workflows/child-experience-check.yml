@@ -51,6 +51,7 @@ jobs:
             /student/sama \
             /lesson/g5-science-cell-types \
             /lesson/g5-science-cell-types/reteach \
+            '/lesson/g5-science-cell-types/refresh?objective=1' \
             /student/salma/practice \
             /student/salma/resources; do
             echo "Checking $path"

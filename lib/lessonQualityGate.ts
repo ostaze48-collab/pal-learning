@@ -34,6 +34,15 @@ export type LessonQualityResult={
  issues:LessonQualityIssue[];
 };
 
+export type SubjectApplicationCoverage={
+ subject:string;
+ objectives:number;
+ interactiveObjectives:number;
+ fadedApplicationObjectives:number;
+ interactiveCoverage:number;
+ fadedApplicationCoverage:number;
+};
+
 export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
  const issues:LessonQualityIssue[]=[];
  if(lesson.kind==='assessment'){
@@ -75,5 +84,6 @@ export function auditLessonQuality(lesson:Lesson):LessonQualityResult{
 export function auditCurriculum(lessons:Lesson[]){
  const results=lessons.map(auditLessonQuality);const learning=results.filter(x=>x.kind==='learning');const assessments=results.filter(x=>x.kind==='assessment');const interactions:Record<string,number>={};for(const result of learning)for(const interaction of result.evidenceInteractions)interactions[interaction]=(interactions[interaction]||0)+1;
  const totalObjectives=learning.reduce((s,x)=>s+x.objectiveCount,0);const blueprintObjectives=learning.reduce((s,x)=>s+x.teachingBlueprintObjectives,0);const totalTeachingScenes=learning.reduce((s,x)=>s+x.teachingSceneCount,0);const interactiveTeachingScenes=learning.reduce((s,x)=>s+x.interactiveTeachingScenes,0);const interactiveTeachingObjectives=learning.reduce((s,x)=>s+x.interactiveTeachingObjectives,0);const fadedApplicationScenes=learning.reduce((s,x)=>s+x.fadedApplicationScenes,0);const fadedApplicationObjectives=learning.reduce((s,x)=>s+x.fadedApplicationObjectives,0);
- return {lessons:results,learningLessons:learning.length,assessments:assessments.length,ready:results.filter(x=>x.ready).length,blocked:results.filter(x=>!x.ready).length,averageScore:learning.length?Math.round(learning.reduce((s,x)=>s+x.score,0)/learning.length):0,interactionCoverage:interactions,lessonsWithRichInteractions:learning.filter(x=>x.richInteractionCount>0).length,lessonsWithTeachingBlueprint:learning.filter(x=>x.teachingBlueprintObjectives>0).length,teachingBlueprintObjectiveCoverage:totalObjectives?Math.round(blueprintObjectives/totalObjectives*100):0,interactiveTeachingSceneCoverage:totalTeachingScenes?Math.round(interactiveTeachingScenes/totalTeachingScenes*100):0,interactiveTeachingObjectiveCoverage:totalObjectives?Math.round(interactiveTeachingObjectives/totalObjectives*100):0,fadedApplicationScenes,fadedApplicationObjectiveCoverage:totalObjectives?Math.round(fadedApplicationObjectives/totalObjectives*100):0,generatedAt:new Date().toISOString()};
+ const byId=new Map(results.map(x=>[x.lessonId,x]));const subjectNames=[...new Set(lessons.filter(x=>x.kind!=='assessment').map(x=>x.subject))];const fadedApplicationBySubject:SubjectApplicationCoverage[]=subjectNames.map(subject=>{const subjectLessons=lessons.filter(x=>x.kind!=='assessment'&&x.subject===subject);const subjectResults=subjectLessons.map(x=>byId.get(x.id)).filter(Boolean) as LessonQualityResult[];const objectives=subjectResults.reduce((s,x)=>s+x.objectiveCount,0);const interactiveObjectives=subjectResults.reduce((s,x)=>s+x.interactiveTeachingObjectives,0);const fadedObjectives=subjectResults.reduce((s,x)=>s+x.fadedApplicationObjectives,0);return {subject,objectives,interactiveObjectives,fadedApplicationObjectives:fadedObjectives,interactiveCoverage:objectives?Math.round(interactiveObjectives/objectives*100):0,fadedApplicationCoverage:objectives?Math.round(fadedObjectives/objectives*100):0}}).sort((a,b)=>a.fadedApplicationCoverage-b.fadedApplicationCoverage||a.subject.localeCompare(b.subject));
+ return {lessons:results,learningLessons:learning.length,assessments:assessments.length,ready:results.filter(x=>x.ready).length,blocked:results.filter(x=>!x.ready).length,averageScore:learning.length?Math.round(learning.reduce((s,x)=>s+x.score,0)/learning.length):0,interactionCoverage:interactions,lessonsWithRichInteractions:learning.filter(x=>x.richInteractionCount>0).length,lessonsWithTeachingBlueprint:learning.filter(x=>x.teachingBlueprintObjectives>0).length,teachingBlueprintObjectiveCoverage:totalObjectives?Math.round(blueprintObjectives/totalObjectives*100):0,interactiveTeachingSceneCoverage:totalTeachingScenes?Math.round(interactiveTeachingScenes/totalTeachingScenes*100):0,interactiveTeachingObjectiveCoverage:totalObjectives?Math.round(interactiveTeachingObjectives/totalObjectives*100):0,fadedApplicationScenes,fadedApplicationObjectiveCoverage:totalObjectives?Math.round(fadedApplicationObjectives/totalObjectives*100):0,fadedApplicationBySubject,generatedAt:new Date().toISOString()};
 }

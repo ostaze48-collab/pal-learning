@@ -1,4 +1,5 @@
 import {lessons,getLessonUnit,getStudent,type Lesson} from './data';
+import {getObservedPrerequisiteRisks} from './objectiveKnowledgeGraph';
 import {lessonPrerequisites} from './skillGraph';
 import {recoverySkills} from './recoverySkills';
 
@@ -15,6 +16,7 @@ export type TeacherEvidenceDecision={
  reviewAt?:string;
  focus?:string;
  weakObjectiveIds?:number[];
+ prerequisiteRisks?:Array<{id:string;title:string;kind:'objective'|'foundation';relation:string;confidence:number;reason:string}>;
  reason:string;
  confidence:number;
  evidence:{quiz:number|null;understanding:number|null;concept:number|null;objective:number|null;transfer:number|null;mastery:number|null};
@@ -64,6 +66,9 @@ function objectiveWeaknesses(lesson:Lesson){
  for(const item of results){if(item?.scope!=='objective')continue;const id=Number(item?.objectiveId);if(!Number.isInteger(id)||id<1||id>Math.max(1,lesson.learningPoints.length))continue;const weak=item?.correct===false||item?.outcome==='misconception'||item?.outcome==='partial';if(weak&&!weakIds.includes(id))weakIds.push(id)}
  const labels=weakIds.map(id=>shortLabel(lesson.learningPoints[id-1]||`الهدف ${id}`));return {weakIds,labels};
 }
+function prerequisiteRisksFor(lesson:Lesson,objectiveIds:number[]){
+ const all=objectiveIds.flatMap(id=>getObservedPrerequisiteRisks(lesson.student,lesson.id,id));const seen=new Set<string>();return all.filter(item=>{if(seen.has(item.id))return false;seen.add(item.id);return true}).sort((a,b)=>b.confidence-a.confidence).slice(0,3)
+}
 
 function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidenceDecision|null{
  if(!report)return null;
@@ -73,12 +78,12 @@ function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidence
  const objective=clampScore(finite(report?.objectiveEvidenceScore));
  const transfer=clampScore(finite(report?.transferScore));
  const mastery=clampScore(finite(report?.mastery));
- const objectiveDetail=objectiveWeaknesses(lesson);
+ const objectiveDetail=objectiveWeaknesses(lesson);const prerequisiteRisks=prerequisiteRisksFor(lesson,objectiveDetail.weakIds);
  const available=[quiz,understanding,concept,objective,transfer].filter(x=>x!==null).length;
  const reportConfidence=clampScore(finite(report?.masteryConfidence));
  const confidence=reportConfidence??(available>=4?94:available===3?88:available===2?78:64);
  const generatedAt=new Date().toISOString();
- const base={confidence,weakObjectiveIds:objectiveDetail.weakIds,evidence:{quiz,understanding,concept,objective,transfer,mastery},generatedAt,source:'combined_lesson_evidence' as const};
+ const base={confidence,weakObjectiveIds:objectiveDetail.weakIds,prerequisiteRisks,evidence:{quiz,understanding,concept,objective,transfer,mastery},generatedAt,source:'combined_lesson_evidence' as const};
  const misconception=understanding!==null&&understanding<=40;
  const weakConcept=concept!==null&&concept<70;
  const weakObjective=(objective!==null&&objective<65)||objectiveDetail.weakIds.length>0;
@@ -87,7 +92,8 @@ function deriveTeacherEvidenceDecision(lesson:Lesson,report:any):TeacherEvidence
  if(misconception||weakConcept||weakObjective||weakTransfer||evidenceConflict){
    const objectiveFocus=objectiveDetail.labels.length?`ثبتي هذا الهدف: ${objectiveDetail.labels.slice(0,2).join(' • ')}`:`مهارة محددة داخل ${lesson.title}`;
    const focus=misconception?`تفسير الفكرة في ${lesson.title}`:weakObjective?objectiveFocus:weakTransfer?`نقل فكرة ${lesson.title} إلى موقف جديد`:weakConcept?`فهم الفكرة عمليًا في ${lesson.title}`:`ربط الحل بالفهم في ${lesson.title}`;
-   const reason=misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakObjective?'دليل هدف محدد لم يثبت بعد؛ المطلوب إعادة تمثيل هذا الهدف فقط ثم محاولة جديدة قصيرة.':weakTransfer?'الفهم الأساسي أفضل من أداء النقل؛ المطلوب مثال جديد يغيّر السياق ثم محاولة قصيرة.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.';
+   const prereqNote=weakObjective&&prerequisiteRisks.length?` ويوجد متطلب سابق لديه دليل ضعف: ${prerequisiteRisks[0].title}.`:'';
+   const reason=(misconception?'تفسير الطالبة كشف سوء فهم رغم بقية الأداء؛ المطلوب تغيير طريقة التمثيل قبل التقدم.':weakObjective?'دليل هدف محدد لم يثبت بعد؛ المطلوب إعادة تمثيل هذا الهدف فقط ثم محاولة جديدة قصيرة.':weakTransfer?'الفهم الأساسي أفضل من أداء النقل؛ المطلوب مثال جديد يغيّر السياق ثم محاولة قصيرة.':weakConcept?'المختبر التفاعلي أظهر أن الفكرة لم تثبت عمليًا؛ المطلوب تمثيل مختلف وممارسة موجهة قصيرة.':'هناك تعارض بين الإجابة الصحيحة ودليل الفهم؛ نحتاج تثبيت المعنى بدل تكرار نفس الأسئلة.')+prereqNote;
    return {decision:'targeted_reteach',focus,reason,...base};
  }
  const partial=[understanding,concept,objective,transfer].some(x=>x!==null&&Number(x)<80);

@@ -5,7 +5,7 @@ import {evaluateObjectiveCoverage} from '../../../lib/objectiveCoverage';
 import {combineMasteryEvidence} from '../../../lib/masteryEvidence';
 import {refreshTeacherDecision} from '../../../lib/masteryEngine';
 import {recordObjectiveEvidenceForRetention} from '../../../lib/objectiveRetention';
-import {getTeachingScenes} from '../../../lib/teachingBlueprints';
+import {getDirectedTeachingScenes} from '../../../lib/lessonDirector';
 
 function readJson(key:string){try{const raw=localStorage.getItem(key);return raw?JSON.parse(raw):null}catch{return null}}
 
@@ -16,14 +16,14 @@ export default function ObjectiveCoverageBridge({lesson}:{lesson:Lesson}){
      const ux=readJson(`lessonUx:${lesson.id}`);const legacy=readJson(`lessonCoverage:${lesson.id}`);const report=readJson(`lesson:${lesson.id}:report`);const events=Array.isArray(ux)?ux:[];
      const objectiveCount=Math.max(1,lesson.learningPoints.length);
      const taught=Array.from({length:objectiveCount},(_,index)=>{
-       const explicit=Boolean(getTeachingScenes(lesson,index)?.length);
-       if(explicit)return events.some((e:any)=>e?.event==='teaching_objective_experience_complete'&&Number(e?.objectiveId)===index+1);
+       const directed=Boolean(getDirectedTeachingScenes(lesson,index)?.length);
+       if(directed)return events.some((e:any)=>e?.event==='teaching_objective_experience_complete'&&Number(e?.objectiveId)===index+1);
        if(Array.isArray(legacy?.objectives)&&legacy.objectives[index]?.taught===true)return true;
        if(events.some((e:any)=>e?.event==='coverage_complete'))return true;
        return events.some((e:any)=>e?.event==='objective_covered'&&Number(e?.objective)>=index+1);
      });
      const coverage=evaluateObjectiveCoverage(lesson,{taught,events});
-     const explicitMissing=coverage.objectives.filter((objective,index)=>Boolean(getTeachingScenes(lesson,index)?.length)&&!objective.taught).map(x=>x.id);
+     const explicitMissing=coverage.objectives.filter((objective,index)=>Boolean(getDirectedTeachingScenes(lesson,index)?.length)&&!objective.taught).map(x=>x.id);
      const transferEvent=[...events].reverse().find((e:any)=>e?.event==='transfer_evidence');
      const transferStatus=typeof transferEvent?.correct==='boolean'?(transferEvent.correct?'verified':'needs_support'):'unscored';
      const latestObjectiveEvidence=new Map<number,{correct:boolean;at:string}>();

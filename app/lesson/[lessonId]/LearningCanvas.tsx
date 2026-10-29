@@ -5,6 +5,7 @@ import {getTeachingScenes,type TeachingScene} from '../../../lib/teachingBluepri
 import {getTeachingVisual} from '../../../lib/teachingVisuals';
 import TeachingSceneVisual from './TeachingSceneVisual';
 import CurriculumConceptVisual from './CurriculumConceptVisual';
+import CurriculumExtraVisual from './CurriculumExtraVisual';
 import styles from './LearningCanvas.module.css';
 
 type CanvasStep=TeachingScene;
@@ -59,7 +60,7 @@ export default function LearningCanvas({lesson}:{lesson:Lesson}){
    <h3>{current.title}</h3>
    <p>{current.body}</p>
    {speechAvailable&&<button type="button" className={`${styles.listenButton} ${speaking?styles.speaking:''}`} onClick={speakCurrent} aria-pressed={speaking}>{speaking?'⏹ أوقفي الصوت':'🔊 اسمعي الفكرة'}</button>}
-   {visual&&<div className={styles.visualStage} onClickCapture={visualInteraction}><TeachingSceneVisual spec={visual}/><CurriculumConceptVisual spec={visual}/></div>}
+   {visual&&<div className={styles.visualStage} onClickCapture={visualInteraction}><TeachingSceneVisual spec={visual}/><CurriculumConceptVisual spec={visual}/><CurriculumExtraVisual spec={visual} lesson={lesson}/></div>}
    <div className={styles.prompt}><span>💭</span><strong>{current.prompt}</strong></div>
   </div>
 

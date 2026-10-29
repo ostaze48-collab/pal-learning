@@ -58,16 +58,15 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
  if(/reaction|chemical-change|physical-chemical/.test(lessonId))return {kind:'reaction_lab',variant};
  if(/pressure/.test(lessonId))return {kind:'pressure_lab',variant};
 
- if(sceneNumber!==1)return null;
  if(/reading|poem|teacher-merit/.test(lessonId))return {kind:'reading_lens',variant};
- if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return {kind:'hamza_lab',variant};
+ if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return sceneNumber===1?{kind:'hamza_lab',variant}:null;
  if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return {kind:'arabic_pattern',variant};
 
- if(/comparative/.test(lessonId))return {kind:'comparison_scale',variant};
- if(/punctuation/.test(lessonId))return {kind:'punctuation_lab',variant};
- if(/question-order|which-or/.test(lessonId))return {kind:'question_blocks',variant:'does-base'};
- if(/present|past|future|perfect|continuous|adverbs-frequency|stative|just-already-yet/.test(lessonId))return {kind:'tense_timeline',variant};
- if(/new-friends|mini-olympics|holidays|basketball|animal-magic|keep-in-touch|sport-report|directions|reflexive|message-friend/.test(lessonId))return {kind:'word_builder',variant};
+ if(/comparative/.test(lessonId))return sceneNumber===1?{kind:'comparison_scale',variant}:{kind:'word_builder',variant};
+ if(/punctuation/.test(lessonId))return sceneNumber===1?{kind:'punctuation_lab',variant}:{kind:'word_builder',variant};
+ if(/question-order|which-or/.test(lessonId))return sceneNumber===1?{kind:'question_blocks',variant:'does-base'}:{kind:'word_builder',variant};
+ if(/present|past|future|perfect|continuous|adverbs-frequency|stative|just-already-yet/.test(lessonId))return sceneNumber===1?{kind:'tense_timeline',variant}:{kind:'word_builder',variant};
+ if(/new-friends|mini-olympics|holidays|basketball|animal-magic|keep-in-touch|sport-report|directions|reflexive|message-friend/.test(lessonId))return sceneNumber===1?{kind:'word_builder',variant}:{kind:'reading_lens',variant};
  return null;
 }
 

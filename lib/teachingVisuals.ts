@@ -26,7 +26,7 @@ const visuals:Record<string,TeachingVisualSpec>={
  'g7-math-add-subtract-integers:2:1':{kind:'integer_motion',variant:'-7,-2'},
  'g7-math-add-subtract-integers:3:1':{kind:'integer_motion',variant:'4,+2'},
  'g5-ar-noun-types:2:1':{kind:'pronoun_swap'},
- 'g5-ar-noun-types:2:2':{kind:'pronoun_swap'},
+ 'g5-ar-noun-types:2:2':{kind:'word_builder',variant:'g5-ar-noun-types|2|2'},
  'g7-en-question-order:1:1':{kind:'question_blocks'},
  'g7-en-question-order:2:2':{kind:'do_does'}
 };
@@ -60,7 +60,7 @@ function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):T
 
  if(/reading|poem|teacher-merit/.test(lessonId))return {kind:'reading_lens',variant};
  if(/hamza|solar-lunar|ta-spelling|ta-marbuta|haa/.test(lessonId))return sceneNumber===1?{kind:'hamza_lab',variant}:null;
- if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return {kind:'arabic_pattern',variant};
+ if(/noun|pronoun|verb|definite|indefinite|inflection|built|building-signs/.test(lessonId))return sceneNumber===1?{kind:'arabic_pattern',variant}:{kind:'word_builder',variant};
 
  if(/comparative/.test(lessonId))return sceneNumber===1?{kind:'comparison_scale',variant}:{kind:'word_builder',variant};
  if(/punctuation/.test(lessonId))return sceneNumber===1?{kind:'punctuation_lab',variant}:{kind:'word_builder',variant};

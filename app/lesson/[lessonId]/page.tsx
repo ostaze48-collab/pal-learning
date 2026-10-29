@@ -3,7 +3,6 @@ import {getLesson,getStudent,getStudentLessons} from '../../../lib/data';
 import {getTeachingScenes} from '../../../lib/teachingBlueprints';
 import LessonRunner from './LessonRunner';
 import ObjectiveCoverageBridge from './ObjectiveCoverageBridge';
-import LearningCanvas from './LearningCanvas';
 import EvidenceStudio from './EvidenceStudio';
 
 const subjectIcons:Record<string,string>={'الرياضيات':'➗','العلوم والحياة':'🔬','اللغة العربية':'📚','English':'🌍'};
@@ -50,7 +49,7 @@ export default async function LessonPage({params}:{params:Promise<{lessonId:stri
   </section>
 
   <div className="kidLessonLayout">
-    <section className="lessonMainPane">{!isAssessment&&<LearningCanvas lesson={lesson}/>}<LessonRunner lesson={lesson}/></section>
+    <section className="lessonMainPane"><LessonRunner lesson={lesson}/></section>
   </div>
 
   <nav className="lessonNavKid" aria-label="التنقل بين الدروس">

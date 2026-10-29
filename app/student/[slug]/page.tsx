@@ -4,6 +4,7 @@ import StudentProgress from './StudentProgress';
 import SubjectProgressMini from './SubjectProgressMini';
 import DailyPlan from './DailyPlan';
 import SubjectUnitJourney from './SubjectUnitJourney';
+import KidBottomNav from './KidBottomNav';
 
 const subjectInfo:Record<string,{icon:string,label:string,desc:string,tone:string}>={
   'الرياضيات':{icon:'➗',label:'الرياضيات',desc:'ألغاز وأرقام وحركة',tone:'subjectColor1'},
@@ -40,5 +41,5 @@ export default async function StudentPage({params}:{params:Promise<{slug:string}
     <div className="kidUtilityRow"><Link href={`/student/${slug}/practice`}><span>🎯</span><strong>تحدٍ إضافي</strong><small>إذا أردتِ المزيد</small></Link><Link href={`/student/${slug}/resources`}><span>📖</span><strong>كتبي</strong><small>أفتح المصدر عند الحاجة</small></Link></div>
 
     <div className="learningMain kidLearningMain">{subjectEntries.map(([subject,subjectLessons],subjectIndex)=>{const units=subjectLessons.reduce<Record<string,typeof subjectLessons>>((acc,lesson)=>{const unit=getLessonUnit(lesson);(acc[unit]??=[]).push(lesson);return acc;},{});const unitEntries=Object.entries(units).map(([name,unitLessons])=>({name,lessons:unitLessons}));const meta=subjectInfo[subject]??{icon:'📘',label:subject,desc:'اكتشفي وتعلمي',tone:'subjectColor1'};return <section className={`subjectBlock kidSubjectBlock ${meta.tone}`} id={`subject-${subjectIndex}`} key={subject}><div className="subjectHeader kidSubjectHeader"><div><span className="subjectIcon">{meta.icon}</span><div><small>رحلة {meta.label}</small><h2>{meta.label}</h2></div></div><div className="subjectHeaderProgress"><SubjectProgressMini lessonIds={subjectLessons.map(x=>x.id)}/></div></div><SubjectUnitJourney units={unitEntries}/></section>})}</div>
-  </div></main>;
+  </div><KidBottomNav slug={slug} active="today"/></main>;
 }

@@ -1,6 +1,7 @@
 import type {Lesson} from './data';
 import {buildObjectiveQuestionMap} from './objectiveCoverage';
 import {getExplicitEvidenceSpecs} from './evidenceSpecs';
+import {getMisconceptions} from './misconceptionLibrary';
 
 export type EvidenceKind='recognize'|'apply'|'explain'|'construct'|'compare'|'correct_error'|'transfer';
 export type EvidenceInteraction='choice'|'short_text'|'match'|'order'|'error_fix'|'experiment_choice';
@@ -134,14 +135,16 @@ function generatedEvidenceTasks(lesson:Lesson):EvidenceTask[]{
  });
  const openBudget=lesson.student==='salma'?1:2;
  const deepIndexes=new Set(prepared.filter(x=>Boolean(x.directLink)).map(x=>({index:x.index,priority:deepPriority(x.kind),hasQuestion:Boolean(x.q?.options?.length)})).sort((a,b)=>b.priority-a.priority||Number(a.hasQuestion)-Number(b.hasQuestion)||a.index-b.index).slice(0,openBudget).map(x=>x.index));
- const richIndex=prepared.length>=3?([...prepared].reverse().find(x=>Boolean(x.directLink&&x.q?.options?.length)&&!deepIndexes.has(x.index))?.index??-1):-1;
  return prepared.map(({objective,index,kind,directLink,q})=>{
    if(!directLink){
      return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction:'short_text',prompt:objectiveDirectPrompt(lesson,kind,objective),questionId:null,explanation:objective,quality:'direct',depth:'deep'};
    }
-   const mustWrite=!q?.options?.length;const deep=mustWrite||deepIndexes.has(index);const naturalInteraction=preferredStructuredInteraction(lesson,objective,kind,deep,Boolean(q?.options?.length));const richInteraction=preferredStructuredInteraction(lesson,objective,kind,false,Boolean(q?.options?.length));const interaction=index===richIndex?(richInteraction==='choice'?'error_fix':richInteraction):naturalInteraction;
+   const mustWrite=!q?.options?.length;const deep=mustWrite||deepIndexes.has(index);const naturalInteraction=preferredStructuredInteraction(lesson,objective,kind,deep,Boolean(q?.options?.length));
+   const knownWrongChoice=q?getMisconceptions(lesson.id,index+1).flatMap(spec=>spec.detection).find(d=>d.signal==='wrong_choice'&&d.questionId===q.id&&Boolean(d.wrongOptionIndexes?.length)):undefined;
+   const interaction=naturalInteraction==='choice'&&knownWrongChoice?'error_fix':naturalInteraction;
    if(interaction==='error_fix'&&q?.options?.length){
-     const wrongIndex=q.options.findIndex((_,i)=>i!==q.correct);const wrong=wrongIndex>=0?q.options[wrongIndex]:q.options[0];
+     const mappedWrong=knownWrongChoice?.wrongOptionIndexes?.find(i=>i>=0&&i<q.options.length&&i!==q.correct);
+     const wrongIndex=mappedWrong??q.options.findIndex((_,i)=>i!==q.correct);const wrong=wrongIndex>=0?q.options[wrongIndex]:q.options[0];
      const prompt=lesson.subject==='English'?`A learner chose an answer for this situation: ${q.text} Which option corrects the idea?`:`في هذا الموقف: ${q.text} أي اختيار يصحح الفكرة؟`;
      const statement=lesson.subject==='English'?`The learner chose: ${wrong}`:`اختارت زميلة: ${wrong}`;
      return {id:`${lesson.id}:evidence:${index+1}`,objectiveId:index+1,scope:'objective',kind,interaction,prompt,questionId:q.id,options:q.options,correctIndex:q.correct,explanation:q.explanation,quality:'direct',depth:'quick',statement};

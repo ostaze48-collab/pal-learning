@@ -1,7 +1,7 @@
 'use client';
 import {useEffect,useMemo,useState} from 'react';
 import type {Lesson} from '../../../lib/data';
-import {getInterleavedConnection} from '../../../lib/interleavingEngine';
+import {getInterleavedConnection,type InterleavedConnection} from '../../../lib/interleavingEngine';
 import {getDirectedTeachingScenes} from '../../../lib/lessonDirector';
 import {buildLearningPatternRecommendation,learningCue,type RepresentationFamily} from '../../../lib/learningPatternModel';
 import {getPrimaryMisconception} from '../../../lib/misconceptionLibrary';
@@ -40,15 +40,15 @@ function englishSteps(lesson:Lesson,focus:number):CanvasStep[]{return [
  {icon:'🧩',label:'Build',title:'Build it yourself',body:evidenceText(lesson,focus),prompt:'How would you explain the pattern simply?'},
  {icon:'💬',label:'Use',title:'Try a new situation',body:'Make a new sentence with the same idea.',prompt:'What changed and what stayed the same?'}
 ]}
-function withInterleavedConnection(lesson:Lesson,focus:number,base:CanvasStep[]){
- if(focus!==0||!base.length)return base;const connection=getInterleavedConnection(lesson,focus+1);if(!connection)return base;const english=lesson.subject==='English';const step:CanvasStep={icon:'🔗',label:english?'Recall':'أربط',title:english?'Bring back an earlier idea':'استرجعي فكرة سابقة',body:english?`Before we go further, bring this idea back from memory: ${connection.sourceText}`:`قبل أن نكمل، استرجعي من ذاكرتك هذه الفكرة السابقة: ${connection.sourceText}`,prompt:`${connection.prompt} ${connection.bridge}`,connectionId:`${connection.sourceLessonId}:${connection.sourceObjectiveId}`,suppressVisual:true};return[base[0],step,...base.slice(1)];
+function withInterleavedConnection(lesson:Lesson,focus:number,base:CanvasStep[],connection:InterleavedConnection|null){
+ if(focus!==0||!base.length||!connection)return base;const english=lesson.subject==='English';const step:CanvasStep={icon:'🔗',label:english?'Recall':'أربط',title:english?'Bring back an earlier idea':'استرجعي فكرة سابقة',body:english?`Before we go further, bring this idea back from memory: ${connection.sourceText}`:`قبل أن نكمل، استرجعي من ذاكرتك هذه الفكرة السابقة: ${connection.sourceText}`,prompt:`${connection.prompt} ${connection.bridge}`,connectionId:`${connection.sourceLessonId}:${connection.sourceObjectiveId}`,suppressVisual:true};return[base[0],step,...base.slice(1)];
 }
 function withMisconceptionPrevention(lesson:Lesson,focus:number,base:CanvasStep[]){
  const misconception=getPrimaryMisconception(lesson.id,focus+1);if(!misconception||!base.length)return base;
  const p=misconception.prevention;const prevention:CanvasStep={icon:'🧭',label:lesson.subject==='English'?'Check':'أتحقق',title:p.title,body:p.body,prompt:p.prompt,misconceptionId:misconception.id,misconceptionVisualKind:p.visualKind};
  if(base.length===1)return[prevention,...base];return[...base.slice(0,-1),prevention,base[base.length-1]];
 }
-function getSteps(lesson:Lesson,focus:number){
+function getSteps(lesson:Lesson,focus:number,connection:InterleavedConnection|null){
  const directed=getDirectedTeachingScenes(lesson,focus);let base:CanvasStep[];
  if(directed?.length)base=directed;
  else if(lesson.subject==='العلوم والحياة')base=scienceSteps(lesson,focus);
@@ -56,15 +56,16 @@ function getSteps(lesson:Lesson,focus:number){
  else if(lesson.subject==='اللغة العربية')base=arabicSteps(lesson,focus);
  else if(lesson.subject==='English')base=englishSteps(lesson,focus);
  else base=mathSteps(lesson,focus);
- return withMisconceptionPrevention(lesson,focus,withInterleavedConnection(lesson,focus,base));
+ return withMisconceptionPrevention(lesson,focus,withInterleavedConnection(lesson,focus,base,connection));
 }
 function appendUx(lessonId:string,event:Record<string,unknown>={}){try{const key=`lessonUx:${lessonId}`;const raw=localStorage.getItem(key);const old=raw?JSON.parse(raw):[];const next=Array.isArray(old)?old.slice(-199):[];next.push({at:new Date().toISOString(),...event});localStorage.setItem(key,JSON.stringify(next))}catch{}}
 function englishCue(family:RepresentationFamily|null){if(family==='spatial')return 'Start by looking at position, order, or movement.';if(family==='construct')return 'Build the idea piece by piece and notice the pattern.';if(family==='compare')return 'Compare two cases side by side and look for the key difference.';if(family==='experiment')return 'Change one thing and watch what happens before you explain it.';if(family==='context')return 'Start from a meaningful situation, then return to the rule or word.';if(family==='data')return 'Start from the values or model, then find the relationship.';if(family==='language')return 'Start from meaning, then notice the repeated pattern.';return null}
 
 export default function LearningCanvas({lesson,objectiveIndex}:{lesson:Lesson;objectiveIndex:number}){
  const maxFocus=Math.max(0,(lesson.learningPoints.length||1)-1);const focus=Math.min(maxFocus,Math.max(0,objectiveIndex));
- const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);const [speechAvailable,setSpeechAvailable]=useState(false);const [speaking,setSpeaking]=useState(false);const [completing,setCompleting]=useState(false);const [resumeReady,setResumeReady]=useState(false);const [adaptiveFamily,setAdaptiveFamily]=useState<RepresentationFamily|null>(null);
- const steps=useMemo(()=>getSteps(lesson,focus),[lesson,focus]);const safeIndex=Math.min(Math.max(0,index),Math.max(0,steps.length-1));const current=steps[safeIndex];const visual=current?.suppressVisual?null:current?.misconceptionVisualKind?{kind:current.misconceptionVisualKind}:getTeachingVisual(lesson.id,focus+1,safeIndex+1);const subjectIcon=lesson.subject==='العلوم والحياة'?'🔬':lesson.subject==='الرياضيات'?'➗':lesson.subject==='اللغة العربية'?'📚':'🌍';
+ const [index,setIndex]=useState(0);const [reflected,setReflected]=useState(false);const [visualTouched,setVisualTouched]=useState(false);const [speechAvailable,setSpeechAvailable]=useState(false);const [speaking,setSpeaking]=useState(false);const [completing,setCompleting]=useState(false);const [resumeReady,setResumeReady]=useState(false);const [adaptiveFamily,setAdaptiveFamily]=useState<RepresentationFamily|null>(null);const [connection,setConnection]=useState<InterleavedConnection|null>(null);
+ const steps=useMemo(()=>getSteps(lesson,focus,connection),[lesson,focus,connection]);const safeIndex=Math.min(Math.max(0,index),Math.max(0,steps.length-1));const current=steps[safeIndex];const visual=current?.suppressVisual?null:current?.misconceptionVisualKind?{kind:current.misconceptionVisualKind}:getTeachingVisual(lesson.id,focus+1,safeIndex+1);const subjectIcon=lesson.subject==='العلوم والحياة'?'🔬':lesson.subject==='الرياضيات'?'➗':lesson.subject==='اللغة العربية'?'📚':'🌍';
+ useEffect(()=>{setConnection(focus===0?getInterleavedConnection(lesson,focus+1):null)},[lesson.id,lesson.student,lesson.subject,focus]);
  useEffect(()=>{setResumeReady(false);setReflected(false);setVisualTouched(false);setCompleting(false);let restored=0;try{const raw=localStorage.getItem(`lesson:${lesson.id}:canvasSession`);if(raw){const saved=JSON.parse(raw) as CanvasResume;if(saved?.version===1&&saved.objectiveIndex===focus&&saved.sceneCount===steps.length&&Number.isInteger(saved.sceneIndex)&&saved.sceneIndex>=0&&saved.sceneIndex<steps.length)restored=saved.sceneIndex}}catch{}setIndex(restored);setResumeReady(true)},[lesson.id,focus,steps.length]);
  useEffect(()=>{if(!resumeReady||!steps.length)return;try{const data:CanvasResume={version:1,objectiveIndex:focus,sceneIndex:safeIndex,sceneCount:steps.length,updatedAt:new Date().toISOString()};localStorage.setItem(`lesson:${lesson.id}:canvasSession`,JSON.stringify(data))}catch{}},[resumeReady,lesson.id,focus,safeIndex,steps.length]);
  useEffect(()=>{setSpeechAvailable(typeof window!=='undefined'&&'speechSynthesis'in window&&typeof SpeechSynthesisUtterance!=='undefined');return()=>{try{window.speechSynthesis?.cancel()}catch{}}},[]);

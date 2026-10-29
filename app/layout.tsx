@@ -27,6 +27,7 @@ import './recovery-practice-child-v3.css';
 import './subject-worlds-v3.css';
 import './kid-bottom-nav-v3.css';
 import './progress-child-v3.css';
+import './age-experience-v3.css';
 import PwaClient from './PwaClient';
 
 export const metadata:Metadata={title:'تعلم سلمى وسما',description:'منصة تعليم منزلية ذكية تعتمد كتب المنهاج الفلسطيني الرسمية — الفصل الأول',manifest:'/manifest.webmanifest',icons:{icon:'/icon-192.svg'}};

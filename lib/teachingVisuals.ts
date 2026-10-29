@@ -40,11 +40,12 @@ function stageMeta(sceneNumber:number){
 function staged(kind:TeachingVisualKind,variant:string|undefined,sceneNumber:number):TeachingVisualSpec{return {kind,variant,...stageMeta(sceneNumber)}}
 function isMathFadedLesson(lessonId:string){return /prime|factor|gcf|lcm|fraction|decimal|integer|absolute-value|triangle|area|rectangle|square|net|prism|cube|quadrilateral|pyramid|cartesian|reflection|translation|data|statistics|frequency|mean|median|mode|range|graph|chart|proportion|ratio|scale/.test(lessonId)}
 function isScienceFadedLesson(lessonId:string){return /cell-types|materials-properties|separation-methods|physical-chemical-changes|energy-forms|energy-transformations|energy-environment|translational-motion|distance-displacement|average-speed|constant-acceleration|newton|force|atom-structure|element-compound|important-compounds|chemical-reactions|atmospheric-pressure/.test(lessonId)}
+function isEnglishFadedLesson(lessonId:string){return /^g[57]-en-/.test(lessonId)&&!/-check$/.test(lessonId)}
 
 function fallbackVisual(lessonId:string,objectiveId:number,sceneNumber:number):TeachingVisualSpec|null{
  if(sceneNumber<1||sceneNumber>3)return null;
  const variant=`${lessonId}|${objectiveId}|${sceneNumber}`;
- if(sceneNumber===3){if(isMathFadedLesson(lessonId))return staged('faded_math',variant,sceneNumber);if(isScienceFadedLesson(lessonId))return staged('faded_math',variant,sceneNumber);return null}
+ if(sceneNumber===3){if(isMathFadedLesson(lessonId)||isScienceFadedLesson(lessonId)||isEnglishFadedLesson(lessonId))return staged('faded_math',variant,sceneNumber);return null}
 
  if(/prime|factor|gcf|lcm/.test(lessonId))return staged('factor_tree',variant,sceneNumber);
  if(/fraction/.test(lessonId))return staged('fraction_bar',variant,sceneNumber);

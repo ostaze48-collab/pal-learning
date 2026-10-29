@@ -3,6 +3,7 @@ import {useMemo,useState} from 'react';
 import type {TeachingVisualSpec} from '../../../lib/teachingVisuals';
 import FadedScienceVisual from './FadedScienceVisual';
 import FadedEnglishVisual from './FadedEnglishVisual';
+import FadedArabicVisual from './FadedArabicVisual';
 import styles from './TeachingSceneVisual.module.css';
 
 type Challenge={title:string;prompt:string;options:string[];correct:number;success:string};
@@ -34,5 +35,6 @@ export default function FadedMathVisual({spec}:{spec:TeachingVisualSpec}){
  const id=lessonId(spec.variant);
  if(/-science-/.test(id))return <FadedScienceVisual spec={spec}/>;
  if(/-en-/.test(id))return <FadedEnglishVisual spec={spec}/>;
+ if(/-ar-/.test(id))return <FadedArabicVisual spec={spec}/>;
  return <MathChallenge spec={spec}/>;
 }

@@ -1,14 +1,16 @@
 import Link from 'next/link';
 import {getStudent} from '../../../../lib/data';
-import {getResourceBank,resourceUsePolicy} from '../../../../lib/resourceBank';
+import {getResourceBank} from '../../../../lib/resourceBank';
+
+function resourceIcon(kind:string){return kind==='worksheet'?'✏️':kind==='summary'?'📝':'📘'}
 
 export default async function ResourcesPage({params}:{params:Promise<{slug:string}>}){
  const {slug}=await params;const student=getStudent(slug);if(!student)return <main className="wrap">الطالبة غير موجودة.</main>;
- const resources=getResourceBank(student.grade);
- const groups=[['current','كتب ومنهج الصف الحالي'],['recovery','كتب ومراجع الصفوف السابقة'],['guide','أدلة المعلم'],['worksheet','أوراق العمل الرسمية'],['summary','الرزم التعليمية للطوارئ — ملخص فقط'],['framework','الإطار والوثائق الوطنية'],['external','اختبارات وشروح وحلول خارجية مساندة']] as const;
- return <main className="shell"><div className="wrap">
-  <div className="top"><Link className="btn secondary" href={`/student/${slug}`}>← العودة إلى {student.name}</Link><div className="brand">بنك الموارد المنهجية</div></div>
-  <section className="card"><span className="tag">الكتاب الوزاري أولًا</span><h1>مراجع {student.name} التعليمية</h1><p className="muted">الشرح والتعلم الموسع يعتمدان على كتاب الوزارة الرسمي. دليل المعلم يساعد في طريقة التدريس، وأوراق العمل والاختبارات للتدريب، أما الرزم التعليمية للطوارئ فهي ملخص حد أدنى للمراجعة فقط وليست أساس الشرح.</p><div className="resourcePolicy">{resourceUsePolicy.map(x=><div key={x.label}><strong>{x.label}</strong><span>{x.description}</span></div>)}</div></section>
-  <div className="resourceGroups">{groups.map(([kind,title])=>{const items=resources.filter(r=>r.kind===kind);if(!items.length)return null;return <section className={`subjectBlock ${kind==='external'?'externalResourceBlock':''}`} key={kind}><div className="subjectHeader"><div><span className="subjectIcon">{kind==='external'?'🧪':kind==='summary'?'📝':'📚'}</span><h2>{title}</h2></div><span className="tag">{items.length} مصادر</span></div>{kind==='summary'&&<p className="muted">هذه الرزم مفيدة للمراجعة السريعة والحد الأدنى في ظروف الطوارئ، لكنها لا تستبدل كتاب الوزارة ولا تحدد عمق الشرح.</p>}{kind==='external'&&<p className="muted">هذه المصادر مساندة فقط. لا تُنسخ موادها تلقائيًا إلى قاعدة المعرفة الرسمية ولا ننسب إجاباتها للوزارة.</p>}<div className="resourceGrid">{items.map(item=><a className="resourceCard" href={item.url} target="_blank" rel="noreferrer" key={item.id}><div className="resourceCardTop"><strong>{item.title}</strong><span>{item.trust}</span></div><p>{item.description}</p><small>{item.gradeLabel}</small><b>فتح المصدر ↗</b></a>)}</div></section>})}</div>
+ const resources=getResourceBank(student.grade).filter(r=>['current','worksheet','summary'].includes(r.kind));
+ const groups=[['current','كتبي'],['worksheet','أوراق ألعب بها'],['summary','مراجعة سريعة']] as const;
+ return <main className={`studentJourney ${student.slug==='salma'?'themeSalma':'themeSama'}`}><div className="wrap journeyWrap">
+  <header className="kidTopbar studentTopbar"><Link className="backBubble" href={`/student/${slug}`}>→ رحلتي</Link><div className="journeyName"><span>📚</span><strong>مكتبتي</strong></div><div className="studentMini">{student.emoji} {student.name}</div></header>
+  <section className="welcomeQuest libraryWelcome"><div className="welcomeCopy"><span className="questEyebrow">📖 عندما تحتاجين المصدر</span><h1>كتبي ومواد المراجعة</h1><p>افتحي الكتاب أو ورقة المراجعة عندما تريدين رؤية المصدر بنفسك.</p></div></section>
+  <div className="childLibrary">{groups.map(([kind,title])=>{const items=resources.filter(r=>r.kind===kind);if(!items.length)return null;return <section className="libraryShelf" key={kind}><div className="libraryShelfTitle"><span>{resourceIcon(kind)}</span><h2>{title}</h2></div><div className="libraryGrid">{items.map(item=><a className="libraryBook" href={item.url} target="_blank" rel="noreferrer" key={item.id}><span className="libraryBookIcon">{resourceIcon(kind)}</span><div><strong>{item.title}</strong><p>{item.description}</p></div><b>↗</b></a>)}</div></section>})}</div>
  </div></main>;
 }

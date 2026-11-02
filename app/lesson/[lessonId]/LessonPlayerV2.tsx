@@ -12,16 +12,16 @@ import LearningCanvas from './LearningCanvas';
 import GapCoach from './GapCoach';
 import styles from './LessonPlayerV2.module.css';
 
-type Phase='discover'|'build'|'practice'|'quiz'|'gap'|'remediate'|'retest'|'done';
+type Phase='diagnostic'|'discover'|'build'|'practice'|'quiz'|'gap'|'remediate'|'retest'|'done';
 type Report={diagnosticCorrect:boolean;firstPassScore:number;finalScore:number;quizMastery?:number;understandingScore?:number|null;conceptScore?:number|null;objectiveEvidenceScore?:number|null;transferScore?:number|null;masteryConfidence?:number;evidenceReason?:string;mastery:number;wrongQuestionIds:string[];status:'mastered'|'review_needed';completedAt:string;reviewDue?:string;timeSeconds?:number;gapId?:string|null};
 type ReviewMeta={level:number;dueAt:string};
 type CanvasCompleteDetail={lessonId:string;objectiveId:number};
 type SavedEvidenceResult={scope?:'objective'|'transfer';correct?:boolean|null};
-type LessonSession={version:1;questionCount:number;objectiveCount:number;phase:Exclude<Phase,'done'>;conceptStep:number;practiceReveal:boolean;step:number;score:number;wrong:number[];retestStep:number;retestCorrect:number;retestMissed:number[];updatedAt:string};
+type LessonSession={version:1;questionCount:number;objectiveCount:number;phase:Exclude<Phase,'done'>;conceptStep:number;practiceReveal:boolean;step:number;score:number;wrong:number[];retestStep:number;retestCorrect:number;retestMissed:number[];diagnosticSelected?:number|null;diagnosticCorrect?:boolean|null;updatedAt:string};
 
-const phaseIndex:Record<Phase,number>={discover:0,build:1,practice:2,quiz:3,gap:3,remediate:3,retest:3,done:4};
+const phaseIndex:Record<Phase,number>={diagnostic:0,discover:0,build:1,practice:2,quiz:3,gap:3,remediate:3,retest:3,done:4};
 const phaseLabels=[['✨','اكتشف'],['🧩','ابنِ الفكرة'],['🎮','جرّب'],['🎯','تحدي']];
-const resumablePhases:Exclude<Phase,'done'>[]=['discover','build','practice','quiz','gap','remediate','retest'];
+const resumablePhases:Exclude<Phase,'done'>[]=['diagnostic','discover','build','practice','quiz','gap','remediate','retest'];
 
 function hookFor(lesson:Lesson){
  if(lesson.subject==='العلوم والحياة')return 'شاهدي الظاهرة أولًا، كوّني توقعًا، ثم ابحثي عن دليل يفسر ما حدث.';
@@ -61,11 +61,14 @@ function readStructuredEvidence(lessonId:string){
 }
 
 export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
- const [phase,setPhase]=useState<Phase>('discover');
+ const hasDiagnostic=Boolean(lesson.diagnostic?.length);
+ const [phase,setPhase]=useState<Phase>(hasDiagnostic?'diagnostic':'discover');
  const [conceptStep,setConceptStep]=useState(0);
  const [practiceReveal,setPracticeReveal]=useState(false);
  const [step,setStep]=useState(0);
  const [selected,setSelected]=useState<number|null>(null);
+ const [diagnosticSelected,setDiagnosticSelected]=useState<number|null>(null);
+ const [diagnosticCorrect,setDiagnosticCorrect]=useState<boolean|null>(null);
  const [score,setScore]=useState(0);
  const [wrong,setWrong]=useState<number[]>([]);
  const [retestStep,setRetestStep]=useState(0);
@@ -83,7 +86,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
  }
 
  useEffect(()=>{
-   setSessionReady(false);setSelected(null);setCurrentGap(null);
+   setSessionReady(false);setSelected(null);setDiagnosticSelected(null);setDiagnosticCorrect(null);setCurrentGap(null);
    const raw=localStorage.getItem(`lesson:${lesson.id}:report`);
    if(raw){try{setReport(JSON.parse(raw))}catch{}}
    const reviewMode=localStorage.getItem(`lesson:${lesson.id}:reviewMode`)==='1';
@@ -101,7 +104,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
          const safeStep=Math.min(Math.max(0,Number(saved.step)||0),Math.max(0,lesson.questions.length-1));
          const safeRetest=Math.min(Math.max(0,Number(saved.retestStep)||0),Math.max(0,validWrong.length-1));
          let resumePhase:Exclude<Phase,'done'>=saved.phase;
-         setConceptStep(safeConcept);setPracticeReveal(Boolean(saved.practiceReveal));setStep(safeStep);setScore(Math.min(Math.max(0,Number(saved.score)||0),lesson.questions.length));setWrong(validWrong);setRetestStep(safeRetest);setRetestCorrect(Math.min(Math.max(0,Number(saved.retestCorrect)||0),validWrong.length));setRetestMissed(validRetestMissed);
+         setConceptStep(safeConcept);setPracticeReveal(Boolean(saved.practiceReveal));setStep(safeStep);setScore(Math.min(Math.max(0,Number(saved.score)||0),lesson.questions.length));setWrong(validWrong);setRetestStep(safeRetest);setRetestCorrect(Math.min(Math.max(0,Number(saved.retestCorrect)||0),validWrong.length));setRetestMissed(validRetestMissed);setDiagnosticSelected(Number.isInteger(saved.diagnosticSelected)?saved.diagnosticSelected!:null);setDiagnosticCorrect(typeof saved.diagnosticCorrect==='boolean'?saved.diagnosticCorrect:null);
          if(resumePhase==='gap'){
            const ids=validWrong.map(i=>lesson.questions[i]?.id).filter(Boolean);const gap=detectLikelyGap(lesson.id,ids,true);
            if(gap)setCurrentGap(gap);else resumePhase=validWrong.length?'remediate':'quiz';
@@ -111,13 +114,13 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
        }
      }
    }catch{}
-   localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setSessionReady(true);
- },[lesson.id,lesson.questions.length,internalObjectives.length]);
+   localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);setPhase(hasDiagnostic?'diagnostic':'discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setDiagnosticSelected(null);setDiagnosticCorrect(null);setSessionReady(true);
+ },[lesson.id,lesson.questions.length,internalObjectives.length,hasDiagnostic]);
 
  useEffect(()=>{
    if(!sessionReady||phase==='done')return;
-   try{const data:LessonSession={version:1,questionCount:lesson.questions.length,objectiveCount:internalObjectives.length,phase,conceptStep,practiceReveal,step,score,wrong,retestStep,retestCorrect,retestMissed,updatedAt:new Date().toISOString()};localStorage.setItem(`lesson:${lesson.id}:session`,JSON.stringify(data))}catch{}
- },[sessionReady,phase,conceptStep,practiceReveal,step,score,wrong,retestStep,retestCorrect,retestMissed,lesson.id,lesson.questions.length,internalObjectives.length]);
+   try{const data:LessonSession={version:1,questionCount:lesson.questions.length,objectiveCount:internalObjectives.length,phase,conceptStep,practiceReveal,step,score,wrong,retestStep,retestCorrect,retestMissed,diagnosticSelected,diagnosticCorrect,updatedAt:new Date().toISOString()};localStorage.setItem(`lesson:${lesson.id}:session`,JSON.stringify(data))}catch{}
+ },[sessionReady,phase,conceptStep,practiceReveal,step,score,wrong,retestStep,retestCorrect,retestMissed,diagnosticSelected,diagnosticCorrect,lesson.id,lesson.questions.length,internalObjectives.length]);
 
  useEffect(()=>{if(sessionReady)track('phase_view',{phase})},[phase,sessionReady]);
 
@@ -143,7 +146,7 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
 
  function reset(){
    localStorage.removeItem(`lesson:${lesson.id}`);localStorage.removeItem(`lesson:${lesson.id}:score`);localStorage.removeItem(`lesson:${lesson.id}:report`);localStorage.removeItem(`lesson:${lesson.id}:review`);localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);localStorage.removeItem(`lessonCoverage:${lesson.id}`);localStorage.removeItem(`lessonEvidence:${lesson.id}`);localStorage.removeItem(`lessonUx:${lesson.id}`);
-   setReport(null);setPhase('discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setSelected(null);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setCurrentGap(null);
+   setReport(null);setPhase(hasDiagnostic?'diagnostic':'discover');setConceptStep(0);setPracticeReveal(false);setStep(0);setSelected(null);setDiagnosticSelected(null);setDiagnosticCorrect(null);setScore(0);setWrong([]);setRetestStep(0);setRetestCorrect(0);setRetestMissed([]);setCurrentGap(null);
  }
 
  function saveFoundationSignal(wrongIds:string[]){if(!wrongIds.length)return null;const likely=detectLikelyGap(lesson.id,wrongIds,true);if(likely)recordFoundationSignal(lesson.student,likely.id,lesson.id,wrongIds);return likely}
@@ -158,13 +161,15 @@ export default function LessonPlayerV2({lesson}:{lesson:Lesson}){
    const level=Math.min((oldReview?.level??0)+1,5);const intervals=[1,3,7,14,30];const days=status==='review_needed'?1:intervals[level-1];const due=new Date(Date.now()+days*86400000).toISOString();
    const elapsed=Math.max(1,Math.round((Date.now()-startedAt)/1000));const oldTime=Number(localStorage.getItem(`lesson:${lesson.id}:timeSeconds`)||0);localStorage.setItem(`lesson:${lesson.id}:timeSeconds`,String(oldTime+elapsed));
    const gap=saveFoundationSignal(wrongIds);saveCoverageVerified(wrongIds);
-   const data:Report={diagnosticCorrect:true,firstPassScore:firstPassCorrect,finalScore:finalCorrect,quizMastery:evidence.quizScore,understandingScore:evidence.understandingScore,conceptScore:evidence.conceptScore,objectiveEvidenceScore:evidence.objectiveEvidenceScore,transferScore:evidence.transferScore,masteryConfidence:evidence.confidence,evidenceReason:evidence.reason,mastery,wrongQuestionIds:wrongIds,status,completedAt:new Date().toISOString(),reviewDue:due,timeSeconds:elapsed,gapId:gap?.id||null};
+   const data:Report={diagnosticCorrect:diagnosticCorrect??true,firstPassScore:firstPassCorrect,finalScore:finalCorrect,quizMastery:evidence.quizScore,understandingScore:evidence.understandingScore,conceptScore:evidence.conceptScore,objectiveEvidenceScore:evidence.objectiveEvidenceScore,transferScore:evidence.transferScore,masteryConfidence:evidence.confidence,evidenceReason:evidence.reason,mastery,wrongQuestionIds:wrongIds,status,completedAt:new Date().toISOString(),reviewDue:due,timeSeconds:elapsed,gapId:gap?.id||null};
    localStorage.setItem(`lesson:${lesson.id}`,'done');localStorage.setItem(`lesson:${lesson.id}:score`,String(finalCorrect));localStorage.setItem(`lesson:${lesson.id}:report`,JSON.stringify(data));localStorage.setItem(`lesson:${lesson.id}:review`,JSON.stringify({level,dueAt:due}));localStorage.removeItem(`lesson:${lesson.id}:session`);localStorage.removeItem(`lesson:${lesson.id}:canvasSession`);localStorage.removeItem(`lesson:${lesson.id}:activitySession`);setReport(data);setPhase('done');track('lesson_complete',{mastery,status,confidence:evidence.confidence,objectiveEvidence:evidence.objectiveEvidenceScore,transfer:evidence.transferScore});
  }
 
  const journey=<div className={styles.journey} aria-label="رحلة الدرس">{phaseLabels.map(([icon,label],i)=><div key={label} className={`${styles.journeyStep} ${journeyStep===i?styles.active:''} ${journeyStep>i?styles.done:''}`}><span>{journeyStep>i?'✓':icon}</span><div><strong>{label}</strong></div></div>)}</div>;
 
  if(phase==='done')return <div className={styles.shell}>{journey}<section className={`card ${styles.celebration}`}><div className={styles.celebrationIcon}>🏆</div><span className={styles.eyebrow}>أكملتِ الرحلة ✨</span><h2>{report?.status==='review_needed'?'أحسنتِ — سنلعب بهذه الفكرة مرة أخرى لاحقًا':'رائعة! استخدمتِ الفكرة بنجاح'}</h2><p>{report?'أنجزتِ الدرس خطوة خطوة، والآن يمكنكِ الانتقال للمهمة التالية.':'اكتملت المهمة.'}</p><div className={styles.actionRow}><Link className={`btn ${styles.primary}`} href={`/student/${lesson.student}`}>أكمل رحلتي ←</Link><button className="btn secondary" onClick={reset}>🔁 ألعب الدرس من جديد</button></div></section></div>;
+ const diagnostic=lesson.diagnostic?.[0];
+ if(phase==='diagnostic'&&diagnostic)return <div className={styles.shell}>{journey}<section className={`card ${styles.quizCard}`}><span className={styles.eyebrow}>🔎 نعرف نقطة البداية</span><h2 className={styles.question}>سؤال تمهيدي سريع</h2><p className={styles.lead}>اختاري الإجابة الأقرب إلى فهمك الحالي. لا توجد درجة هنا؛ نريد فقط أن نعرف من أين نبدأ.</p><div className={styles.choices}>{diagnostic.options.map((option,index)=><button key={option} className={`${styles.choice} ${diagnosticSelected===index?styles.correct:''}`} aria-pressed={diagnosticSelected===index} onClick={()=>setDiagnosticSelected(index)}>{option}</button>)}</div><div className={styles.actionRow}><button className={`btn ${styles.primary}`} disabled={diagnosticSelected===null} onClick={()=>{const correct=diagnosticSelected===diagnostic.correct;setDiagnosticCorrect(correct);track('diagnostic_complete',{question:diagnostic.id,correct,selected:diagnosticSelected});setPhase('discover')}}>ابدئي الدرس ←</button></div></section></div>;
  if(phase==='discover')return <div className={styles.shell}>{journey}<section className={`card ${styles.heroCard} ${styles.stage}`}><span className={styles.eyebrow}>✨ اكتشفي</span><h2>نبدأ بالفكرة، لا بالحفظ</h2><p className={styles.lead}>{lesson.summary}</p><div className={styles.hook}><div className={styles.hookIcon}>🔎</div><div><strong>ابدئي من هنا</strong><p>{hookFor(lesson)}</p></div></div><LessonVisual lesson={lesson}/><div className={styles.missionGrid}>{learningMovesFor(lesson).map((move,i)=><div className={styles.mission} key={move}><span>{['👀','🧩','🚀'][i]}</span><span>{move}</span></div>)}</div><div className={styles.actionRow}><button className={`btn ${styles.primary}`} onClick={()=>{track('discover_complete');setPhase('build')}}>ابدئي الاكتشاف ←</button></div></section></div>;
  if(phase==='build')return <div className={styles.shell}>{journey}<LearningCanvas lesson={lesson} objectiveIndex={conceptStep}/></div>;
  if(phase==='practice')return <div className={styles.shell}>{journey}<section className={`card ${styles.practiceCard}`}><span className={styles.eyebrow}>🎮 جربيها</span><h2>الآن دورك</h2><p className={styles.lead}>جربي ما شاهدتِه. لا توجد درجات هنا.</p>{hasInteractiveActivity(lesson.id)?<InteractiveActivity lesson={lesson} onComplete={()=>{track('practice_complete',{interactive:true});setPhase('quiz')}}/>:<><div className={styles.exampleBox}><strong>مثال نراه معًا</strong><div>{lesson.example}</div></div>{practiceReveal&&<div className={styles.helpCard}><strong>خطوة البداية</strong><div>{practiceHintFor(lesson)}</div></div>}<div className={styles.actionRow}><button className={styles.smartHelp} onClick={()=>{setPracticeReveal(v=>!v);track('practice_hint')}}>{practiceReveal?'أخفي التلميح':'💡 أرني خطوة البداية'}</button><button className={`btn ${styles.primary}`} onClick={()=>{track('practice_complete',{interactive:false});setPhase('quiz')}}>جربت — نكمل ←</button></div></>}</section></div>;

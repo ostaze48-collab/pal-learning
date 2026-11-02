@@ -39,12 +39,49 @@ function TriangleVisual({lessonId,onComplete}:{lessonId:string;onComplete:()=>vo
  return <div className="interactiveCard"><div className="visualTitle"><span>📐</span><div><strong>تعرفي إلى المثلث</strong><p>أي شكل يمثل مثلثًا قائم الزاوية؟</p></div></div><div className="shapeGrid"><button className={`shapeButton ${selected==='right'?'ok':''}`} onClick={()=>setSelected('right')}><svg viewBox="0 0 120 90" role="img" aria-label="مثلث قائم"><polygon points="20,70 20,20 100,70" fill="none" stroke="currentColor" strokeWidth="5"/><path d="M20 58 L32 58 L32 70" fill="none" stroke="currentColor" strokeWidth="3"/></svg><span>أ</span></button><button className={`shapeButton ${selected==='acute'?'bad':''}`} onClick={()=>setSelected('acute')}><svg viewBox="0 0 120 90" role="img" aria-label="مثلث حاد"><polygon points="60,15 15,75 105,75" fill="none" stroke="currentColor" strokeWidth="5"/></svg><span>ب</span></button><button className={`shapeButton ${selected==='obtuse'?'bad':''}`} onClick={()=>setSelected('obtuse')}><svg viewBox="0 0 120 90" role="img" aria-label="مثلث منفرج"><polygon points="20,70 55,25 110,70" fill="none" stroke="currentColor" strokeWidth="5"/></svg><span>ج</span></button></div>{selected&&<div className={selected==='right'?'activitySuccess':'activityHint'}>{selected==='right'?<><strong>صحيح ✅</strong><p>الشكل أ يحتوي زاوية مقدارها 90°.</p><button className="btn" onClick={()=>finishActivity(lessonId,onComplete)}>متابعة</button></>:<><strong>ابحثي عن علامة الزاوية القائمة.</strong><p>الزاوية القائمة مقدارها 90°.</p></>}</div>}</div>
 }
 
-export function hasInteractiveActivity(lessonId:string){return ['g5-math-prime-numbers','g5-math-prime-factorization','g7-math-integers','g7-math-integer-order','g5-math-triangles'].includes(lessonId)}
+
+type WalkLabState={stage:number;distanceChoice:number|null;displacementChoice:number|null;checked:boolean};
+function DistanceDisplacementLab({lessonId,onComplete}:{lessonId:string;onComplete:()=>void}){
+ const [state,setState]=useActivitySession<WalkLabState>(lessonId,'distance-displacement-lab',{stage:0,distanceChoice:null,displacementChoice:null,checked:false});
+ const position=state.stage===1?3:0;
+ const allAnswered=state.distanceChoice!==null&&state.displacementChoice!==null;
+ const correct=state.distanceChoice===6&&state.displacementChoice===0;
+ const choices=[0,3,6];
+ return <div className="interactiveCard">
+  <div className="visualTitle"><span>🧭</span><div><strong>مختبر المسافة والإزاحة</strong><p>نفّذي الرحلة بنفسك، ثم احسبي ما قطعته الطالبة.</p></div></div>
+  <div style={{display:'grid',gridTemplateColumns:'1fr auto 1fr',alignItems:'center',gap:10,padding:'18px 8px',borderRadius:16,background:'#f1f8f7',margin:'12px 0'}}>
+   <div style={{textAlign:'center'}}><strong>🏠 البيت</strong><div style={{fontSize:12,color:'#52636a'}}>نقطة البداية</div></div>
+   <div style={{textAlign:'center',fontSize:24}}>⇄</div>
+   <div style={{textAlign:'center'}}><strong>📍 شرقًا</strong><div style={{fontSize:12,color:'#52636a'}}>3 أمتار</div></div>
+  </div>
+  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+   <span><strong>موضع الطالبة الآن:</strong> {position===3?'3 أمتار شرق البيت':'عند البيت (0 متر)'}</span>
+   <span style={{fontSize:12,color:'#52636a'}}>المرحلة {Math.min(state.stage+1,3)} من 3</span>
+  </div>
+  {state.stage===0&&<button className="btn" onClick={()=>setState(v=>({...v,stage:1,checked:false}))}>ابدئي: امشي 3 أمتار شرقًا ←</button>}
+  {state.stage===1&&<button className="btn" onClick={()=>setState(v=>({...v,stage:2,checked:false}))}>الآن عودي 3 أمتار غربًا ←</button>}
+  {state.stage===2&&<>
+   <p style={{marginTop:14}}><strong>1. كم مترًا قطعت الطالبة في الطريق كله؟</strong></p>
+   <div className="choices">{choices.map(n=><button key={'d'+n} className={`option ${state.distanceChoice===n?'ok':''}`} onClick={()=>setState(v=>({...v,distanceChoice:n,checked:false}))}>{n} أمتار</button>)}</div>
+   <p><strong>2. كم تبعد نقطة النهاية عن نقطة البداية؟</strong></p>
+   <div className="choices">{choices.map(n=><button key={'s'+n} className={`option ${state.displacementChoice===n?'ok':''}`} onClick={()=>setState(v=>({...v,displacementChoice:n,checked:false}))}>{n} أمتار</button>)}</div>
+   <button className="btn" disabled={!allAnswered} onClick={()=>setState(v=>({...v,checked:true}))}>تحققي من استنتاجك</button>
+   {state.checked&&<div className={correct?'activitySuccess':'activityHint'}>
+    <strong>{correct?'أحسنتِ! اكتشفتِ الفرق 🎉':'لنراجع الدليل ثم نحاول مجددًا'}</strong>
+    <p>{correct?'المسافة 6 أمتار لأننا جمعنا الذهاب والعودة. الإزاحة صفر لأن الطالبة انتهت عند نقطة البداية.':'تتبعي الطريق كاملًا لحساب المسافة، ثم قارني موضع النهاية بموضع البداية لحساب الإزاحة.'}</p>
+    {correct?<button className="btn" onClick={()=>finishActivity(lessonId,onComplete)}>أنهي التجربة وتابعي</button>:<button className="btn secondary" onClick={()=>setState(v=>({...v,checked:false}))}>أعيد المحاولة</button>}
+   </div>}
+  </>}
+ </div>
+}
+
+export function hasInteractiveActivity(lessonId:string){return ['g5-math-prime-numbers','g5-math-prime-factorization','g7-math-integers','g7-math-integer-order','g5-math-triangles','g7-science-distance-displacement'].includes(lessonId)}
 
 export default function InteractiveActivity({lesson,onComplete}:Props){
  if(lesson.id==='g5-math-prime-numbers')return <PrimeSort lessonId={lesson.id} onComplete={onComplete}/>;
  if(lesson.id==='g5-math-prime-factorization')return <FactorTree lessonId={lesson.id} onComplete={onComplete}/>;
  if(lesson.id==='g7-math-integers'||lesson.id==='g7-math-integer-order')return <NumberLine lessonId={lesson.id} onComplete={onComplete}/>;
  if(lesson.id==='g5-math-triangles')return <TriangleVisual lessonId={lesson.id} onComplete={onComplete}/>;
+ if(lesson.id==='g7-science-distance-displacement')return <DistanceDisplacementLab lessonId={lesson.id} onComplete={onComplete}/>;
  return null;
 }
